@@ -92,6 +92,9 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
+	if frameCount == 0 {
+		return fmt.Errorf("source pixel data is empty (no frames)")
+	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
 		frameData, err := oldPixelData.GetFrame(frameIndex)
@@ -144,6 +147,9 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
+	if frameCount == 0 {
+		return fmt.Errorf("source pixel data is empty (no frames)")
+	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
 		frameData, err := oldPixelData.GetFrame(frameIndex)

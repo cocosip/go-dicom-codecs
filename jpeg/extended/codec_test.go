@@ -572,3 +572,49 @@ func TestExtendedCodecRejects16Bit(t *testing.T) {
 		t.Fatalf("expected error when encoding 16-bit data with JPEG Extended")
 	}
 }
+
+func TestExtendedCodecRejectsNilInputs(t *testing.T) {
+	extCodec := NewExtendedCodec(12, 85)
+	frameInfo := &imagetypes.FrameInfo{
+		Width:           8,
+		Height:          8,
+		BitsAllocated:   8,
+		BitsStored:      8,
+		HighBit:         7,
+		SamplesPerPixel: 1,
+	}
+
+	if err := extCodec.Encode(nil, codecHelpers.NewTestPixelData(frameInfo), nil); err == nil {
+		t.Fatal("expected Encode to reject nil source")
+	}
+	if err := extCodec.Encode(codecHelpers.NewTestPixelData(frameInfo), nil, nil); err == nil {
+		t.Fatal("expected Encode to reject nil destination")
+	}
+	if err := extCodec.Decode(nil, codecHelpers.NewTestPixelData(frameInfo), nil); err == nil {
+		t.Fatal("expected Decode to reject nil source")
+	}
+	if err := extCodec.Decode(codecHelpers.NewTestPixelData(frameInfo), nil, nil); err == nil {
+		t.Fatal("expected Decode to reject nil destination")
+	}
+}
+
+func TestExtendedCodecRejectsNoFrames(t *testing.T) {
+	extCodec := NewExtendedCodec(12, 85)
+	frameInfo := &imagetypes.FrameInfo{
+		Width:           8,
+		Height:          8,
+		BitsAllocated:   8,
+		BitsStored:      8,
+		HighBit:         7,
+		SamplesPerPixel: 1,
+	}
+	src := codecHelpers.NewTestPixelData(frameInfo)
+	dst := codecHelpers.NewTestPixelData(frameInfo)
+
+	if err := extCodec.Encode(src, dst, nil); err == nil {
+		t.Fatal("expected Encode to reject source with no frames")
+	}
+	if err := extCodec.Decode(src, dst, nil); err == nil {
+		t.Fatal("expected Decode to reject source with no frames")
+	}
+}

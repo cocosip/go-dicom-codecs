@@ -53,6 +53,10 @@ func (c *Codec) GetDefaultParameters() codec.Parameters {
 
 // Encode encodes pixel data using JPEG Extended
 func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+	if oldPixelData == nil || newPixelData == nil {
+		return fmt.Errorf("source and destination PixelData cannot be nil")
+	}
+
 	// Get frame info
 	frameInfo := oldPixelData.GetFrameInfo()
 	if frameInfo == nil {
@@ -111,11 +115,17 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
+	if frameCount == 0 {
+		return fmt.Errorf("source pixel data is empty (no frames)")
+	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
 		frameData, err := oldPixelData.GetFrame(frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
+		}
+		if len(frameData) == 0 {
+			return fmt.Errorf("frame %d pixel data is empty", frameIndex)
 		}
 
 		// Encode
@@ -135,13 +145,23 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 // Decode decodes JPEG Extended data
 func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+	if oldPixelData == nil || newPixelData == nil {
+		return fmt.Errorf("source and destination PixelData cannot be nil")
+	}
+
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
+	if frameCount == 0 {
+		return fmt.Errorf("source pixel data is empty (no frames)")
+	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
 		frameData, err := oldPixelData.GetFrame(frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
+		}
+		if len(frameData) == 0 {
+			return fmt.Errorf("frame %d pixel data is empty", frameIndex)
 		}
 
 		// Decode

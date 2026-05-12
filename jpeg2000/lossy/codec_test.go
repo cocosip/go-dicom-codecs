@@ -17,6 +17,17 @@ func TestCodecName(t *testing.T) {
 	}
 }
 
+func TestGetDefaultParametersUsesCodecRate(t *testing.T) {
+	c := NewCodecWithRate(80)
+	params, ok := c.GetDefaultParameters().(*JPEG2000LossyParameters)
+	if !ok {
+		t.Fatalf("GetDefaultParameters returned %T, want *JPEG2000LossyParameters", c.GetDefaultParameters())
+	}
+	if params.Rate != 80 {
+		t.Fatalf("default parameter Rate = %d, want 80", params.Rate)
+	}
+}
+
 // TestCodecTransferSyntax tests the transfer syntax UID
 func TestCodecTransferSyntax(t *testing.T) {
 	c := NewCodecWithRate(80)
@@ -373,5 +384,26 @@ func TestRateControlAndLayers(t *testing.T) {
 	if decoded.GetFrameInfo().Width != src.GetFrameInfo().Width || decoded.GetFrameInfo().Height != src.GetFrameInfo().Height {
 		t.Fatalf("Dim mismatch after decode: got %dx%d, want %dx%d",
 			decoded.GetFrameInfo().Width, decoded.GetFrameInfo().Height, src.GetFrameInfo().Width, src.GetFrameInfo().Height)
+	}
+}
+
+func TestCodecRejectsNoFrames(t *testing.T) {
+	frameInfo := &imagetypes.FrameInfo{
+		Width:           8,
+		Height:          8,
+		BitsAllocated:   8,
+		BitsStored:      8,
+		HighBit:         7,
+		SamplesPerPixel: 1,
+	}
+	c := NewCodecWithRate(80)
+	src := codecHelpers.NewTestPixelData(frameInfo)
+	dst := codecHelpers.NewTestPixelData(frameInfo)
+
+	if err := c.Encode(src, dst, nil); err == nil {
+		t.Fatal("expected Encode to reject source with no frames")
+	}
+	if err := c.Decode(src, dst, nil); err == nil {
+		t.Fatal("expected Decode to reject source with no frames")
 	}
 }

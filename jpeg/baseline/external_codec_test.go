@@ -428,3 +428,24 @@ func TestBaselineQualityLevels(t *testing.T) {
 		})
 	}
 }
+
+func TestBaselineCodecRejectsNoFrames(t *testing.T) {
+	frameInfo := &imagetypes.FrameInfo{
+		Width:           8,
+		Height:          8,
+		BitsAllocated:   8,
+		BitsStored:      8,
+		HighBit:         7,
+		SamplesPerPixel: 1,
+	}
+	baselineCodec := NewBaselineCodec(85)
+	src := codecHelpers.NewTestPixelData(frameInfo)
+	dst := codecHelpers.NewTestPixelData(frameInfo)
+
+	if err := baselineCodec.Encode(src, dst, nil); err == nil {
+		t.Fatal("expected Encode to reject source with no frames")
+	}
+	if err := baselineCodec.Decode(src, dst, nil); err == nil {
+		t.Fatal("expected Decode to reject source with no frames")
+	}
+}

@@ -222,6 +222,12 @@ func TestHTJ2KCodec_InvalidInput(t *testing.T) {
 			dst:     codecHelpers.NewTestPixelData(frameInfo),
 			wantErr: true,
 		},
+		{
+			name:    "No frames",
+			src:     codecHelpers.NewTestPixelData(frameInfo),
+			dst:     codecHelpers.NewTestPixelData(frameInfo),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -231,6 +237,27 @@ func TestHTJ2KCodec_InvalidInput(t *testing.T) {
 				t.Errorf("Encode() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestHTJ2KCodec_DecodeRejectsNoFrames(t *testing.T) {
+	htj2kCodec := NewLosslessCodec()
+	frameInfo := &imagetypes.FrameInfo{
+		Width:           8,
+		Height:          8,
+		BitsAllocated:   8,
+		BitsStored:      8,
+		HighBit:         7,
+		SamplesPerPixel: 1,
+	}
+
+	err := htj2kCodec.Decode(
+		codecHelpers.NewTestPixelData(frameInfo),
+		codecHelpers.NewTestPixelData(frameInfo),
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected Decode to reject source with no frames")
 	}
 }
 
