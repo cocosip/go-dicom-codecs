@@ -1,219 +1,95 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Commands
 
-**go-dicom-codec** is a Go library providing image compression/decompression codecs for medical imaging (DICOM). It supports multiple codec families:
-- JPEG (Baseline, Extended, Lossless)
-- JPEG-LS (planned)
-- JPEG 2000 (planned)
-
-**Important**: This library focuses solely on codec implementation (encoding/decoding). DICOM-specific concerns (encapsulation, fragmentation, metadata, transfer syntax management) are handled by external DICOM libraries.
-
-## Common Commands
-
-### Building
-```bash
-go build ./...
-```
-
-### Testing
 ```bash
 # Run all tests
 go test ./...
 
-# Run tests with coverage
-go test -cover ./...
+# Run a single package's tests
+go test ./jpeg/baseline/...
 
-# Run tests with verbose output
+# Run a specific test
+go test -run TestName ./jpeg/baseline/...
+
+# Run with verbose output
 go test -v ./...
-
-# Run specific package tests
-go test ./jpeg/baseline
-go test ./jpeg/lossless14sv1
 
 # Run benchmarks
 go test -bench=. ./...
-```
 
-### Development
-```bash
-# Format code
-go fmt ./...
-
-# Run linter (requires golangci-lint)
-golangci-lint run
-
-# Tidy dependencies
-go mod tidy
-
-# Verify dependencies
-go mod verify
+# Build (verify compilation)
+go build ./...
 ```
 
 ## Architecture
 
-### Directory Structure
+This is a pure-Go DICOM image codec library (`github.com/cocosip/go-dicom-codec`). It implements encode/decode for JPEG, JPEG-LS, and JPEG 2000 families as required for DICOM transfer syntaxes. The library handles only codec logic — DICOM encapsulation and metadata are handled externally by `github.com/cocosip/go-dicom`.
+
+### Package Layout
+
 ```
-codec/              # Core codec interfaces and registry
-jpeg/               # JPEG family codecs
-  common/           # Shared JPEG utilities (Huffman, DCT, markers)
-  baseline/         # JPEG Baseline (Process 1) - Lossy 8-bit
-  lossless14sv1/    # JPEG Lossless SV1 (Process 14, Predictor 1)
-jpegls/             # JPEG-LS codecs (planned)
-jpeg2000/           # JPEG 2000 codecs (planned)
+codec/          - Shared errors (ErrCodecNotFound, ErrInvalidParameter, etc.)
+                  and TestPixelData helper for tests
+
+jpeg/
+  standard/     - Shared low-level primitives: DCT, IDCT, Huffman tables/encoder/
+                  decoder, JPEG markers, bit reader/writer. All JPEG family codecs
+                  depend on this.
+  baseline/     - JPEG Baseline (UID .50), 8-bit only
+  extended/     - JPEG Extended (UID .51), 8/12-bit
+  lossless/     - JPEG Lossless (UID .57), all 7 predictors
+  lossless14sv1/- JPEG Lossless SV1 (UID .70), predictor 1 only
+
+jpegls/
+  runmode/      - Shared run-mode coding utilities (run interrupt, run encoding)
+  lossless/     - JPEG-LS Lossless (UID .80), LOCO-I + Golomb-Rice coding
+  nearlossless/ - JPEG-LS Near-Lossless (UID .81), configurable NEAR error bound
+
+jpeg2000/       - JPEG 2000 top-level encoder (encoder.go) and decoder (decoder.go)
+  codestream/   - Codestream marker parser (SIZ, COD, QCD, SOT, MCT, MCC, MCO, etc.)
+  colorspace/   - RGB/YCbCr colorspace conversion
+  mqc/          - MQ arithmetic coder/decoder (47-state machine)
+  t1/           - Tier-1: EBCOT block coder (bit-plane coding, coding passes)
+  t2/           - Tier-2: packet builder/parser, tag trees, progression orders
+  wavelet/      - 5/3 (lossless) and 9/7 (lossy) DWT implementations
+  htj2k/        - HTJ2K (UIDs .201-.203) — EXPERIMENTAL: MEL, MagSgn, VLC tables
+  testdata/     - Synthetic image generators used across JPEG 2000 tests
+  validation/   - Reference/OpenJPEG comparison tests
 ```
 
-### Core Concepts
+### Codec Interface Pattern
 
-**Codec Interface** (`codec/codec.go`):
-- All codecs implement the `Codec` interface
-- Each codec has a unique UID (typically DICOM Transfer Syntax UID)
-- Codecs are registered in a global registry
-- Can be accessed by name or UID
+Each codec package follows this structure:
 
-**Codec Registry** (`codec/registry.go`):
-- Thread-safe codec registration and retrieval
-- Codecs auto-register on package import
-- Supports lookup by name or UID
+1. **Low-level functions** (`encoder.go`, `decoder.go`): `Encode(pixelBytes, width, height, components, ...) ([]byte, error)` and `Decode(data []byte) ([]byte, width, height, components, ...)`. These work with raw `[]byte` pixel data.
 
-**Encoding Parameters** (`codec.EncodeParams`):
-- PixelData: Raw pixel data (byte array)
-- Width, Height: Image dimensions
-- Components: 1=grayscale, 3=RGB
-- BitDepth: Bits per sample (8, 12, 16, etc.)
-- Options: Codec-specific options (quality, etc.)
+2. **`codec.go`**: Implements the `go-dicom` `codec.Codec` interface with `Encode(oldPixelData, newPixelData, parameters)` and `Decode(...)` that iterate over frames. Includes an `init()` that auto-registers the codec with the global go-dicom registry using its DICOM transfer syntax UID.
 
-**Decoding Result** (`codec.DecodeResult`):
-- Returns decoded pixel data and metadata
-- Includes dimensions, components, bit depth
+3. **`parameters.go`**: Codec-specific `Parameters` struct (e.g., `JPEGBaselineParameters` with `Quality int`).
 
-### JPEG Implementation Details
+Auto-registration happens via blank imports. Including any codec package side-effect registers it:
+```go
+import _ "github.com/cocosip/go-dicom-codec/jpeg/baseline"
+```
 
-**JPEG Baseline** (`jpeg/baseline/`):
-- UID: 1.2.840.10008.1.2.4.50
-- 8-bit lossy DCT-based compression
-- Supports grayscale and RGB (converted to YCbCr)
-- Quality parameter: 1-100
-- Uses standard Huffman and quantization tables
+### JPEG 2000 Internals
 
-**JPEG Lossless SV1** (`jpeg/lossless14sv1/`):
-- UID: 1.2.840.10008.1.2.4.70
-- Lossless prediction-based (Predictor 1: left pixel)
-- Supports 2-16 bit depth
-- Perfect reconstruction (0 errors)
-- Uses standard DC Huffman tables
+The JPEG 2000 encoder (`jpeg2000/encoder.go`) uses `EncodeParams` which controls:
+- `Lossless bool` — selects 5/3 (lossless) vs 9/7 (lossy) wavelet
+- `Quality int` — quantization quality for lossy (1–100)
+- `NumLevels int` — wavelet decomposition levels (0–6)
+- `NumLayers int` + `TargetRatio float64` + `UsePCRDOpt bool` — multi-layer R-D optimization (PCRD-opt per ISO/IEC 15444-1 Annex J)
+- `ProgressionOrder uint8` — LRCP/RLCP/RPCL/PCRL/CPRL
+- Multi-component (Part 2): MCT/MCC/MCO marker support via `mct_builder.go`
 
-**Common Utilities** (`jpeg/common/`):
-- `markers.go`: JPEG marker constants
-- `reader.go/writer.go`: Bitstream I/O
-- `huffman.go/huffman_encoder.go`: Huffman coding
-- `dct.go/idct.go`: Fast integer DCT/IDCT
-- `tables.go`: Standard quantization and Huffman tables
-- `errors.go`: Common error definitions
+HTJ2K (`jpeg2000/htj2k/`) is experimental — core MEL/MagSgn/VLC components work but end-to-end encode/decode is not production-ready.
 
-### Key Implementation Notes
+### Testing Conventions
 
-**JPEG Byte Stuffing**:
-- Any 0xFF byte in scan data must be followed by 0x00
-- Decoder must handle stuffed bytes correctly
-
-**Color Space Conversion**:
-- RGB → YCbCr for baseline (with 4:2:0 subsampling)
-- Proper scaling formulas for subsampled components
-
-**Huffman Coding**:
-- Standard tables defined in `jpeg/common/tables.go`
-- Category-based encoding for DC/AC coefficients
-- Bit packing with byte stuffing
-
-**DCT/IDCT**:
-- Fast integer implementation (no floating point)
-- 8x8 block processing
-- Proper rounding and clamping
-
-## Testing Strategy
-
-### Unit Tests
-- Test each codec's encode/decode separately
-- Test with various image sizes and bit depths
-- Test edge cases (1x1 images, max dimensions, etc.)
-- Validate error handling for invalid parameters
-
-### Round-Trip Tests
-- **Lossless codecs**: Perfect reconstruction (0 errors)
-- **Lossy codecs**: Acceptable error bounds for given quality
-
-### Integration Tests
-- Verify compatibility with Go standard library `image/jpeg`
-- Test interoperability with other JPEG implementations
-- Validate against reference test images
-
-### Benchmarks
-- Measure encoding/decoding performance
-- Track performance across different image sizes
-- Identify optimization opportunities
-
-### Test Data
-- Grayscale: Gradient patterns, uniform values, random noise
-- RGB: Color gradients, edges, medical imaging patterns
-- Various dimensions: 64x64, 512x512, 1024x1024, etc.
-
-## Adding New Codecs
-
-To add a new codec (e.g., JPEG-LS):
-
-1. **Create package structure**:
-   ```
-   jpegls/
-     lossless/
-       encoder.go
-       decoder.go
-       codec.go       # Implements codec.Codec interface
-       options.go     # Codec-specific options
-       lossless_test.go
-   ```
-
-2. **Implement codec.Codec interface**:
-   ```go
-   type Codec struct {}
-
-   func (c *Codec) Encode(params codec.EncodeParams) ([]byte, error) { ... }
-   func (c *Codec) Decode(data []byte) (*codec.DecodeResult, error) { ... }
-   func (c *Codec) UID() string { return "1.2.840.10008.1.2.4.80" }
-   func (c *Codec) Name() string { return "jpeg-ls-lossless" }
-   ```
-
-3. **Auto-register in init()**:
-   ```go
-   func init() {
-       codec.Register(&Codec{})
-   }
-   ```
-
-4. **Create comprehensive tests**:
-   - Basic encode/decode round-trip
-   - Various image formats and sizes
-   - Edge cases and error handling
-   - Benchmarks
-
-## Development Guidelines
-
-- **Pure Go**: No CGO dependencies
-- **Performance**: Optimize hot paths, use benchmarks
-- **Error Handling**: Return descriptive errors
-- **Documentation**: Document public APIs
-- **Testing**: Maintain high test coverage
-- **Compatibility**: Follow DICOM standards strictly
-- **Code Quality**: All code must pass golangci-lint without errors. Run `golangci-lint run` before committing changes
-
-## Roadmap
-
-See [TODO.md](TODO.md) for current development priorities and planned features.
-
-## 源码目录
-
-- OpenJPEG的源码在当前根目录下的 fo-dicom-codec-code/Native/Common/OpenJPEG
-
-- OpenJPH的源码在当前根目录下的 fo-dicom-codec-code/Native/Common/OpenJPH
+- Tests generate synthetic pixel data (gradients, patterns) rather than loading external files, except for `test-data/CT1_J2KI` used in validation.
+- Lossless codecs verify **perfect reconstruction** (0-error pixel comparison).
+- Lossy codecs verify error bounds (e.g., max pixel error ≤ N).
+- `codec/test_helpers.go` provides `TestPixelData` — use it in any package's tests instead of implementing `imagetypes.PixelData` from scratch.
