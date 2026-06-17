@@ -3038,75 +3038,23 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	actualHeight := cb.height
 	cbData := cb.data
 
-	const t1NmseDecFracBits = 6
 	if !e.params.HTJ2KMode {
 		// Apply T1 NMSEDEC FRACBITS scaling (left shift 6 bits).
 		// This matches OpenJPEG's representation for classic EBCOT T1 coding.
 		for i := range cbData {
-			cbData[i] <<= t1NmseDecFracBits
+			cbData[i] <<= t1NMSEDecFracBits
 		}
 	}
 
-	// Calculate max bitplane from scaled data
-	rawMaxBitplane := calculateMaxBitplane(cbData)
-
-	// Adjust maxBitplane by adding 1 then subtracting t1NmseDecFracBits
-	// OpenJPEG does: numbps = (floorlog2(max) + 1) - T1_NMSEDEC_FRACBITS
-	// The +1 is critical - it converts from bit position to number of bits
-	cblkNumbps := 0
-	if rawMaxBitplane >= 0 {
-		cblkNumbps = rawMaxBitplane + 1
-		if !e.params.HTJ2KMode {
-			cblkNumbps -= t1NmseDecFracBits
-		}
-		if cblkNumbps < 0 {
-			cblkNumbps = 0
-		}
-	}
-
-	// Calculate number of coding passes
-	// OpenJPEG sequencing: first pass is cleanup on the top bit-plane,
-	// then 3 passes per remaining bit-plane.
-	numPasses := 1
-	if cblkNumbps > 0 {
-		numPasses = (cblkNumbps * 3) - 2
-	}
-	if e.params.HTJ2KMode {
-		numPasses = 1
-	}
-
-	// Calculate zero bit-planes using OpenJPEG formula:
-	// zeroBitPlanes = bandNumbps - cblkNumbps
+	cblkNumbps := e.codeBlockNumBps(cbData)
 	bandNumbps := e.bandNumbps(cb.resLevel, cb.band)
 	if bandNumbps <= 0 {
 		bandNumbps = cblkNumbps
 	}
-	zeroBitPlanes := bandNumbps - cblkNumbps
-	if zeroBitPlanes < 0 {
-		zeroBitPlanes = 0
-	}
-	if e.params.HTJ2KMode {
-		zeroBitPlanes = bandNumbps - 1
-		if zeroBitPlanes < 0 {
-			zeroBitPlanes = 0
-		}
-		if cblkNumbps == 0 {
-			numPasses = 0
-		}
-	}
+	numPasses, zeroBitPlanes := e.codeBlockPassLayout(cblkNumbps, bandNumbps)
 
 	// Create block encoder (EBCOT T1 or HTJ2K)
-	var blockEnc BlockEncoder
-	if e.params.BlockEncoderFactory != nil {
-		blockEnc = e.params.BlockEncoderFactory(actualWidth, actualHeight)
-	} else {
-		t1Enc := t1.NewT1Encoder(actualWidth, actualHeight, 0)
-		t1Enc.SetOrientation(cb.band)
-		blockEnc = t1Enc
-	}
-	if setter, ok := blockEnc.(blockEncoderKMaxSetter); ok {
-		setter.SetKMax(bandNumbps)
-	}
+	blockEnc := e.newCodeBlockEncoder(actualWidth, actualHeight, cb.band, bandNumbps)
 
 	// ROI handling: determine style/shift/inside and apply scaling/roishift
 	_, roiShift, inside := e.roiContext(cb)
@@ -3138,62 +3086,111 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	useLayered := e.params.NumLayers > 1 || e.params.TargetRatio > 0
 
 	if useLayered {
-		// Force TERMALL style termination so each pass boundary is byte-aligned for PCRD.
-		var layerBoundaries []int
-		if e.params.NumLayers > 1 {
-			layerAlloc := AllocateLayersSimple(numPasses, e.params.NumLayers, 1)
-			layerBoundaries = make([]int, e.params.NumLayers)
-			for layer := 0; layer < e.params.NumLayers; layer++ {
-				layerBoundaries[layer] = layerAlloc.GetPassesForLayer(0, layer)
-			}
-		} else {
-			// Two boundaries are enough to force termination for all passes.
-			layerBoundaries = []int{1, numPasses}
+		return e.encodeLayeredCodeBlock(pcb, blockEnc, cbData, numPasses, roishift)
+	}
+	return e.encodeSingleLayerCodeBlock(pcb, blockEnc, cbData, numPasses, roishift, bandNumbps, zeroBitPlanes)
+}
+
+const t1NMSEDecFracBits = 6
+
+func (e *Encoder) codeBlockNumBps(cbData []int32) int {
+	rawMaxBitplane := calculateMaxBitplane(cbData)
+	if rawMaxBitplane < 0 {
+		return 0
+	}
+	cblkNumbps := rawMaxBitplane + 1
+	if !e.params.HTJ2KMode {
+		cblkNumbps -= t1NMSEDecFracBits
+	}
+	if cblkNumbps < 0 {
+		return 0
+	}
+	return cblkNumbps
+}
+
+func (e *Encoder) codeBlockPassLayout(cblkNumbps, bandNumbps int) (numPasses, zeroBitPlanes int) {
+	numPasses = 1
+	if cblkNumbps > 0 {
+		numPasses = (cblkNumbps * 3) - 2
+	}
+	zeroBitPlanes = bandNumbps - cblkNumbps
+	if zeroBitPlanes < 0 {
+		zeroBitPlanes = 0
+	}
+	if e.params.HTJ2KMode {
+		numPasses = 1
+		zeroBitPlanes = bandNumbps - 1
+		if zeroBitPlanes < 0 {
+			zeroBitPlanes = 0
 		}
-
-		// Try EncodeLayered if available (T1Encoder), otherwise fallback to simple Encode
-		var passes []t1.PassData
-		var completeData []byte
-		var err error
-
-		if t1Enc, ok := blockEnc.(*t1.Encoder); ok {
-			// Calculate code-block style flags (match writeCOD logic)
-			cblksty := uint8(0)
-			if e.params.NumLayers > 1 || e.params.TargetRatio > 0 {
-				cblksty |= 0x04
-			}
-			// Use layered encoding for T1Encoder
-			passes, completeData, err = t1Enc.EncodeLayered(cbData, numPasses, roishift, layerBoundaries, cblksty)
-		} else {
-			// Fallback to simple encoding for HTJ2K
-			completeData, err = blockEnc.Encode(cbData, numPasses, roishift)
-			// Create single pass data
-			if err == nil {
-				passes = []t1.PassData{{ActualBytes: len(completeData)}}
-			}
+		if cblkNumbps == 0 {
+			numPasses = 0
 		}
+	}
+	return numPasses, zeroBitPlanes
+}
 
-		if err != nil || len(passes) == 0 {
-			encodedData := []byte{0x00}
-			pcb.Data = encodedData
-			pcb.LayerData = [][]byte{encodedData}
-			pcb.LayerPasses = []int{1}
-			return pcb
+func (e *Encoder) newCodeBlockEncoder(width, height, band, bandNumbps int) BlockEncoder {
+	var blockEnc BlockEncoder
+	if e.params.BlockEncoderFactory != nil {
+		blockEnc = e.params.BlockEncoderFactory(width, height)
+	} else {
+		t1Enc := t1.NewT1Encoder(width, height, 0)
+		t1Enc.SetOrientation(band)
+		blockEnc = t1Enc
+	}
+	if setter, ok := blockEnc.(blockEncoderKMaxSetter); ok {
+		setter.SetKMax(bandNumbps)
+	}
+	return blockEnc
+}
+
+func (e *Encoder) layerBoundaries(numPasses int) []int {
+	if e.params.NumLayers <= 1 {
+		return []int{1, numPasses}
+	}
+	layerAlloc := AllocateLayersSimple(numPasses, e.params.NumLayers, 1)
+	layerBoundaries := make([]int, e.params.NumLayers)
+	for layer := 0; layer < e.params.NumLayers; layer++ {
+		layerBoundaries[layer] = layerAlloc.GetPassesForLayer(0, layer)
+	}
+	return layerBoundaries
+}
+
+func (e *Encoder) encodeLayeredCodeBlock(pcb *t2.PrecinctCodeBlock, blockEnc BlockEncoder, cbData []int32, numPasses, roishift int) *t2.PrecinctCodeBlock {
+	var passes []t1.PassData
+	var completeData []byte
+	var err error
+
+	if t1Enc, ok := blockEnc.(*t1.Encoder); ok {
+		passes, completeData, err = t1Enc.EncodeLayered(cbData, numPasses, roishift, e.layerBoundaries(numPasses), 0x04)
+	} else {
+		completeData, err = blockEnc.Encode(cbData, numPasses, roishift)
+		if err == nil {
+			passes = []t1.PassData{{ActualBytes: len(completeData)}}
 		}
+	}
 
-		// Store per-pass metadata for later PCRD allocation.
-		pcb.PassLengths = make([]int, len(passes))
-		for i, pass := range passes {
-			pcb.PassLengths[i] = pass.ActualBytes
-		}
-		pcb.Passes = passes
-		pcb.CompleteData = completeData
-		pcb.Data = completeData
-		pcb.UseTERMALL = e.params.NumLayers > 1 || e.params.TargetRatio > 0
-
+	if err != nil || len(passes) == 0 {
+		encodedData := []byte{0x00}
+		pcb.Data = encodedData
+		pcb.LayerData = [][]byte{encodedData}
+		pcb.LayerPasses = []int{1}
 		return pcb
 	}
-	// Single layer: use block encoder
+
+	pcb.PassLengths = make([]int, len(passes))
+	for i, pass := range passes {
+		pcb.PassLengths[i] = pass.ActualBytes
+	}
+	pcb.Passes = passes
+	pcb.CompleteData = completeData
+	pcb.Data = completeData
+	pcb.UseTERMALL = e.params.NumLayers > 1 || e.params.TargetRatio > 0
+	return pcb
+}
+
+func (e *Encoder) encodeSingleLayerCodeBlock(pcb *t2.PrecinctCodeBlock, blockEnc BlockEncoder, cbData []int32, numPasses, roishift, bandNumbps, zeroBitPlanes int) *t2.PrecinctCodeBlock {
 	if e.params.HTJ2KMode && numPasses == 0 {
 		pcb.NumPassesTotal = 0
 		pcb.ZeroBitPlanes = zeroBitPlanes

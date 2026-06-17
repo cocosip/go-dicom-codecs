@@ -253,19 +253,18 @@ func (v *VLCDecoder) readerPeek() uint32 {
 	return uint32(v.reverse.tmp)
 }
 
-func (v *VLCDecoder) readerAdvance(n int) uint32 {
+func (v *VLCDecoder) readerAdvance(n int) {
 	if v.reverse == nil || n <= 0 {
-		return v.readerPeek()
+		return
 	}
 	_ = v.reverse.readMore(n)
 	if n > v.reverse.num {
 		v.reverse.tmp = 0
 		v.reverse.num = 0
-		return 0
+		return
 	}
 	v.reverse.tmp >>= uint(n)
 	v.reverse.num -= n
-	return uint32(v.reverse.tmp)
 }
 
 // GetData returns the decoded coefficient data

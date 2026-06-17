@@ -9,8 +9,6 @@ type ojphMELReader struct {
 	data    []byte
 	pos     int
 	size    int
-	tmp     uint64
-	bitCnt  int
 	unstuff bool
 	k       int
 	numRuns int
@@ -21,13 +19,6 @@ type ojphMELReader struct {
 
 func newOJPHMELReader(data []byte) *ojphMELReader {
 	return &ojphMELReader{data: data, size: len(data) - 1}
-}
-
-func boolToInt(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
 }
 
 func (m *ojphMELReader) getRun() int {
@@ -148,117 +139,13 @@ func decodeOpenJPHCleanup(codeblock []byte, width, height, kmax, missingMSBs int
 	reverse := &reverseBitReader{data: cleanupData}
 	vlc.reader = reverse
 	vlc.reverse = reverse
-	run := mel.getRun()
-
-	cq := 0
-	for x, sp := 0, 0; x < width; sp += 4 {
-		vlcVal := vlc.readerPeek()
-		t0 := VLCLookupTable0[cq+int(vlcVal&0x7F)]
-		if cq == 0 {
-			run -= 2
-			if run != -1 {
-				t0 = 0
-			}
-			if run < 0 {
-				run = mel.getRun()
-			}
-		}
-		scratch[sp] = uint16(t0)
-		x += 2
-		cq = int(((t0 & 0x10) << 3) | ((t0 & 0xE0) << 2))
-		vlc.readerAdvance(int(t0 & 0x7))
-
-		t1 := VLCLookupEntry(0)
-		vlcVal = vlc.readerPeek()
-		t1 = VLCLookupTable0[cq+int(vlcVal&0x7F)]
-		if cq == 0 && x < width {
-			run -= 2
-			if run != -1 {
-				t1 = 0
-			}
-			if run < 0 {
-				run = mel.getRun()
-			}
-		}
-		if x >= width {
-			t1 = 0
-		}
-		scratch[sp+2] = uint16(t1)
-		x += 2
-		cq = int(((t1 & 0x10) << 3) | ((t1 & 0xE0) << 2))
-		vlc.readerAdvance(int(t1 & 0x7))
-
-		uvlcMode := int((t0&0x8)<<3) | int((t1&0x8)<<4)
-		if uvlcMode == 0xC0 {
-			run -= 2
-			if run == -1 {
-				uvlcMode += 0x40
-			}
-			if run < 0 {
-				run = mel.getRun()
-			}
-		}
-		u0, u1 := decodeOJPHUVLC(true, uvlcMode, vlc)
-		scratch[sp+1] = uint16(1 + u0)
-		scratch[sp+3] = uint16(1 + u1)
-	}
+	state := ojphCleanupState{mel: mel, vlc: vlc, run: mel.getRun()}
+	decodeOpenJPHInitialRow(scratch, width, &state)
 	initialSentinel := ((width + 3) / 4) * 4
 	scratch[initialSentinel+0] = 0
 	scratch[initialSentinel+1] = 0
 
-	for y := 2; y < height; y += 2 {
-		cq := 0
-		sp := (y >> 1) * sstr
-		prev := sp - sstr
-		for x := 0; x < width; sp += 4 {
-			cq |= int((scratch[sp-sstr]&0xA0)<<2) | int((scratch[sp-sstr+2]&0x20)<<4)
-			vlcVal := vlc.readerPeek()
-			t0 := VLCLookupTable1[cq+int(vlcVal&0x7F)]
-			if cq == 0 {
-				run -= 2
-				if run != -1 {
-					t0 = 0
-				}
-				if run < 0 {
-					run = mel.getRun()
-				}
-			}
-			scratch[sp] = uint16(t0)
-			x += 2
-			cq = int((t0&0x40)<<2) | int((t0&0x80)<<1)
-			cq |= int(scratch[sp-sstr] & 0x80)
-			cq |= int((scratch[sp-sstr+2]&0xA0)<<2) | int((scratch[sp-sstr+4]&0x20)<<4)
-			vlc.readerAdvance(int(t0 & 0x7))
-
-			vlcVal = vlc.readerPeek()
-			t1 := VLCLookupTable1[cq+int(vlcVal&0x7F)]
-			if cq == 0 && x < width {
-				run -= 2
-				if run != -1 {
-					t1 = 0
-				}
-				if run < 0 {
-					run = mel.getRun()
-				}
-			}
-			if x >= width {
-				t1 = 0
-			}
-			scratch[sp+2] = uint16(t1)
-			x += 2
-			cq = int((t1&0x40)<<2) | int((t1&0x80)<<1)
-			cq |= int(scratch[sp-sstr+2] & 0x80)
-			vlc.readerAdvance(int(t1 & 0x7))
-
-			uvlcMode := int((t0&0x8)<<3) | int((t1&0x8)<<4)
-			u0, u1 := decodeOJPHUVLC(false, uvlcMode, vlc)
-			scratch[sp+1] = uint16(u0)
-			scratch[sp+3] = uint16(u1)
-			_ = prev
-		}
-		scratch[sp] = 0
-		scratch[sp+1] = 0
-	}
+	decodeOpenJPHRemainingRows(scratch, width, height, sstr, &state)
 
 	cb, err := decodeOJPHScratchMagSgn(magsgnData, scratch, width, height, sstr, p, missingMSBs)
 	if err != nil {
@@ -275,6 +162,102 @@ func decodeOpenJPHCleanup(codeblock []byte, width, height, kmax, missingMSBs int
 		out[i] = mag
 	}
 	return out, nil
+}
+
+type ojphCleanupState struct {
+	mel *ojphMELReader
+	vlc *VLCDecoder
+	run int
+}
+
+func (s *ojphCleanupState) applyZeroRun(entry VLCLookupEntry) VLCLookupEntry {
+	s.run -= 2
+	if s.run != -1 {
+		entry = 0
+	}
+	if s.run < 0 {
+		s.run = s.mel.getRun()
+	}
+	return entry
+}
+
+func decodeOpenJPHInitialRow(scratch []uint16, width int, state *ojphCleanupState) {
+	cq := 0
+	for x, sp := 0, 0; x < width; sp += 4 {
+		t0 := VLCLookupTable0[cq+int(state.vlc.readerPeek()&0x7F)]
+		if cq == 0 {
+			t0 = state.applyZeroRun(t0)
+		}
+		scratch[sp] = uint16(t0)
+		x += 2
+		cq = int(((t0 & 0x10) << 3) | ((t0 & 0xE0) << 2))
+		state.vlc.readerAdvance(int(t0 & 0x7))
+
+		t1 := VLCLookupTable0[cq+int(state.vlc.readerPeek()&0x7F)]
+		if cq == 0 && x < width {
+			t1 = state.applyZeroRun(t1)
+		}
+		if x >= width {
+			t1 = 0
+		}
+		scratch[sp+2] = uint16(t1)
+		x += 2
+		cq = int(((t1 & 0x10) << 3) | ((t1 & 0xE0) << 2))
+		state.vlc.readerAdvance(int(t1 & 0x7))
+
+		uvlcMode := int((t0&0x8)<<3) | int((t1&0x8)<<4)
+		if uvlcMode == 0xC0 {
+			state.run -= 2
+			if state.run == -1 {
+				uvlcMode += 0x40
+			}
+			if state.run < 0 {
+				state.run = state.mel.getRun()
+			}
+		}
+		u0, u1 := decodeOJPHUVLC(true, uvlcMode, state.vlc)
+		scratch[sp+1] = uint16(1 + u0)
+		scratch[sp+3] = uint16(1 + u1)
+	}
+}
+
+func decodeOpenJPHRemainingRows(scratch []uint16, width, height, sstr int, state *ojphCleanupState) {
+	for y := 2; y < height; y += 2 {
+		cq := 0
+		sp := (y >> 1) * sstr
+		for x := 0; x < width; sp += 4 {
+			cq |= int((scratch[sp-sstr]&0xA0)<<2) | int((scratch[sp-sstr+2]&0x20)<<4)
+			t0 := VLCLookupTable1[cq+int(state.vlc.readerPeek()&0x7F)]
+			if cq == 0 {
+				t0 = state.applyZeroRun(t0)
+			}
+			scratch[sp] = uint16(t0)
+			x += 2
+			cq = int((t0&0x40)<<2) | int((t0&0x80)<<1)
+			cq |= int(scratch[sp-sstr] & 0x80)
+			cq |= int((scratch[sp-sstr+2]&0xA0)<<2) | int((scratch[sp-sstr+4]&0x20)<<4)
+			state.vlc.readerAdvance(int(t0 & 0x7))
+
+			t1 := VLCLookupTable1[cq+int(state.vlc.readerPeek()&0x7F)]
+			if cq == 0 && x < width {
+				t1 = state.applyZeroRun(t1)
+			}
+			if x >= width {
+				t1 = 0
+			}
+			scratch[sp+2] = uint16(t1)
+			x += 2
+			cq = int((t1&0x40)<<2) | int((t1&0x80)<<1)
+			cq |= int(scratch[sp-sstr+2] & 0x80)
+			state.vlc.readerAdvance(int(t1 & 0x7))
+
+			u0, u1 := decodeOJPHUVLC(false, int((t0&0x8)<<3)|int((t1&0x8)<<4), state.vlc)
+			scratch[sp+1] = uint16(u0)
+			scratch[sp+3] = uint16(u1)
+		}
+		scratch[sp] = 0
+		scratch[sp+1] = 0
+	}
 }
 
 func decodeOJPHUVLC(initial bool, mode int, vlc *VLCDecoder) (int, int) {
@@ -430,7 +413,7 @@ func traceOpenJPHCleanupFirstPair(codeblock []byte) (ojphCleanupTrace, error) {
 			uvlcMode += 0x40
 		}
 		if run < 0 {
-			run = mel.getRun()
+			_ = mel.getRun()
 		}
 	}
 	u0, u1 := decodeOJPHUVLC(true, uvlcMode, vlc)

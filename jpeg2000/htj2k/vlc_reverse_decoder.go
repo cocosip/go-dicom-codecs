@@ -39,18 +39,6 @@ func (r *reverseBitReader) init() bool {
 	return true
 }
 
-func (r *reverseBitReader) readOneByte() {
-	b := r.data[r.pos]
-	r.pos--
-	bits := 8
-	if r.unstuff && (b&0x7F) == 0x7F {
-		bits = 7
-	}
-	r.tmp |= uint64(b) << uint(r.num)
-	r.num += bits
-	r.unstuff = b > 0x8F
-}
-
 func (r *reverseBitReader) readChunk() {
 	if r.num > 32 {
 		return
