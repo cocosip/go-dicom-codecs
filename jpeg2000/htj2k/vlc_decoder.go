@@ -8,6 +8,8 @@ type VLCDecoder struct {
 	bitBuffer uint32 // Bit buffer
 	bitCount  int    // Number of valid bits in buffer
 	lastByte  uint8  // Last byte read (for bit-unstuffing detection)
+	reader    BitReader
+	reverse   *reverseBitReader
 
 	// Lookup tables for fast decoding (1024 entries each)
 	// Key: (cQ << 7) | codeword
@@ -89,6 +91,11 @@ func (v *VLCDecoder) buildLookupTables() {
 // readBits reads n bits from the bit stream (forward, LSB first)
 // Implements bit-unstuffing for JPEG-style bit-stuffing
 func (v *VLCDecoder) readBits(n int) (uint32, bool) {
+	if v.reader != nil {
+		bits, err := v.reader.ReadBitsLE(n)
+		return bits, err == nil
+	}
+
 	// Ensure we have enough bits in buffer (read forward)
 	for v.bitCount < n && v.pos < len(v.data) {
 		b := v.data[v.pos]

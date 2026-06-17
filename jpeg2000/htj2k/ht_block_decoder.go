@@ -16,9 +16,9 @@ type HTBlockDecoder struct {
 	numQY  int // Number of quads in Y direction
 
 	// Component decoders
-	mel     *MELDecoderSpec
-	magsgn  *MagSgnDecoder
-	vlc     vlcQuadDecoder
+	mel    *MELDecoderSpec
+	magsgn *MagSgnDecoder
+	vlc    vlcQuadDecoder
 
 	// Decoded coefficients
 	data []int32
@@ -30,11 +30,11 @@ func NewHTBlockDecoder(width, height int) *HTBlockDecoder {
 	numQY := (height + 1) / 2
 
 	return &HTBlockDecoder{
-		width:   width,
-		height:  height,
-		numQX:   numQX,
-		numQY:   numQY,
-		data:    make([]int32, width*height),
+		width:  width,
+		height: height,
+		numQX:  numQX,
+		numQY:  numQY,
+		data:   make([]int32, width*height),
 	}
 }
 
@@ -131,8 +131,8 @@ func (h *HTBlockDecoder) DecodeBlock(codeblock []byte) ([]int32, error) {
 			sx := qx * 2
 			sy := qy * 2
 			positions := [][2]int{
-				{sx, sy}, {sx + 1, sy},
-				{sx, sy + 1}, {sx + 1, sy + 1},
+				{sx, sy}, {sx, sy + 1},
+				{sx + 1, sy}, {sx + 1, sy + 1},
 			}
 
 			for i, pos := range positions {
@@ -181,48 +181,91 @@ func (h *HTBlockDecoder) DecodeBlock(codeblock []byte) ([]int32, error) {
 	return h.data, nil
 }
 
-// parseSegments parses the codeblock into MagSgn, MEL, and VLC segments
+// parseSegments parses the codeblock into MagSgn and cleanup suffix segments.
 func (h *HTBlockDecoder) parseSegments(codeblock []byte) error {
 	if len(codeblock) < 4 {
 		// Empty or too small - all zeros
 		return nil
 	}
 
-	// Parse footer: 4 bytes total
-	// bytes[n-4:n-2] = melLen as uint16 LE
-	// bytes[n-2:n] = vlcLen as uint16 LE
-	lcup := len(codeblock)
-	melLen := int(binary.LittleEndian.Uint16(codeblock[lcup-4 : lcup-2]))
-	vlcLen := int(binary.LittleEndian.Uint16(codeblock[lcup-2 : lcup]))
-	scup := melLen + vlcLen
-
-	magsgnLen := lcup - 4 - scup
-	if magsgnLen < 0 {
-		return fmt.Errorf("invalid segment lengths: magsgnLen=%d, scup=%d, lcup=%d", magsgnLen, scup, lcup)
+	magsgnData, cleanupData, err := parseStandardSegments(codeblock)
+	if err == nil {
+		h.magsgn = NewMagSgnDecoder(magsgnData)
+		h.mel = NewMELDecoderSpec(cleanupData)
+		h.vlc = NewVLCReverseDecoder(cleanupData)
+		return nil
 	}
 
-	magsgnData := codeblock[0:magsgnLen]
-
-	if scup > 0 {
-		melData := codeblock[magsgnLen : magsgnLen+melLen]
-		vlcData := codeblock[magsgnLen+melLen : magsgnLen+melLen+vlcLen]
+	if magsgnData, melData, vlcData, ok := parseLegacySegments(codeblock); ok {
 		h.magsgn = NewMagSgnDecoder(magsgnData)
-		h.mel = NewMELDecoderSpec(melData)            // Reads forward through MEL portion
-		h.vlc = NewVLCDecoderForward(vlcData)         // Reads forward through VLC portion
-	} else {
-		// Raw mode
-		h.magsgn = NewMagSgnDecoder(magsgnData)
-		h.mel = nil
-		h.vlc = nil
+		h.mel = NewMELDecoderSpec(melData)    // Reads forward through MEL portion
+		h.vlc = NewVLCDecoderForward(vlcData) // Reads forward through VLC portion
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf("invalid HTJ2K code-block layout: %w", err)
 }
 
 // NewVLCDecoderForward creates a forward VLC decoder that implements vlcQuadDecoder.
 // Used when VLC segment is stored in forward byte order (encoder writes forward).
 func NewVLCDecoderForward(data []byte) vlcQuadDecoder {
 	return NewVLCDecoder(data)
+}
+
+func parseLegacySegments(codeblock []byte) (magsgnData, melData, vlcData []byte, ok bool) {
+	lcup := len(codeblock)
+	if lcup < 4 {
+		return nil, nil, nil, false
+	}
+	melLen := int(binary.LittleEndian.Uint16(codeblock[lcup-4 : lcup-2]))
+	vlcLen := int(binary.LittleEndian.Uint16(codeblock[lcup-2 : lcup]))
+	scup := melLen + vlcLen
+	magsgnLen := lcup - 4 - scup
+	if magsgnLen < 0 {
+		return nil, nil, nil, false
+	}
+	if melLen == 0 && vlcLen == 0 {
+		return codeblock[:magsgnLen], nil, nil, true
+	}
+	if scup == 0 || scup > lcup-4 {
+		return nil, nil, nil, false
+	}
+	return codeblock[:magsgnLen],
+		codeblock[magsgnLen : magsgnLen+melLen],
+		codeblock[magsgnLen+melLen : magsgnLen+melLen+vlcLen],
+		true
+}
+
+// NewVLCReverseDecoder creates a reverse VLC decoder for standard HTJ2K cleanup suffixes.
+func NewVLCReverseDecoder(data []byte) vlcQuadDecoder {
+	decoder := NewVLCDecoder(data)
+	reverse := &reverseBitReader{data: data}
+	decoder.reader = reverse
+	decoder.reverse = reverse
+	return decoder
+}
+
+func (v *VLCDecoder) readerPeek() uint32 {
+	if v.reverse == nil {
+		return 0
+	}
+	_ = v.reverse.readMore(32)
+	return uint32(v.reverse.tmp)
+}
+
+func (v *VLCDecoder) readerAdvance(n int) uint32 {
+	if v.reverse == nil || n <= 0 {
+		return v.readerPeek()
+	}
+	_ = v.reverse.readMore(n)
+	if n > v.reverse.num {
+		v.reverse.tmp = 0
+		v.reverse.num = 0
+		return 0
+	}
+	v.reverse.tmp >>= uint(n)
+	v.reverse.num -= n
+	return uint32(v.reverse.tmp)
 }
 
 // GetData returns the decoded coefficient data

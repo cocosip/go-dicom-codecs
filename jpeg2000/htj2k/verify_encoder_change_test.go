@@ -14,11 +14,7 @@ func TestVerifyEncoderChange(t *testing.T) {
 	testCoeffs := make([]int32, size)
 	testCoeffs[0] = 100 // Only first sample significant
 
-	encoder := NewHTEncoder(width, height)
-	encoded, err := encoder.Encode(testCoeffs, 1, 0)
-	if err != nil {
-		t.Fatalf("Encode failed: %v", err)
-	}
+	encoded, decoded := encodeDecodeOpenJPHCleanupForTest(t, width, height, testCoeffs)
 
 	t.Logf("Single value=100: %d bytes: %v", len(encoded), encoded)
 
@@ -28,20 +24,9 @@ func TestVerifyEncoderChange(t *testing.T) {
 		testCoeffs2[i] = int32(i + 1) // All non-zero
 	}
 
-	encoder2 := NewHTEncoder(width, height)
-	encoded2, err := encoder2.Encode(testCoeffs2, 1, 0)
-	if err != nil {
-		t.Fatalf("Encode2 failed: %v", err)
-	}
+	encoded2, _ := encodeDecodeOpenJPHCleanupForTest(t, width, height, testCoeffs2)
 
 	t.Logf("All non-zero: %d bytes: %v", len(encoded2), encoded2)
-
-	// Test decoder
-	decoder := NewHTDecoder(width, height)
-	decoded, err := decoder.Decode(encoded, 1)
-	if err != nil {
-		t.Fatalf("Decode failed: %v", err)
-	}
 
 	if decoded[0] != 100 {
 		t.Errorf("Expected decoded[0]=100, got %d", decoded[0])

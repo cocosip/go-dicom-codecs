@@ -585,7 +585,7 @@ func (d *Decoder) buildDecoderROIInfo() *t2.ROIInfo {
 func (d *Decoder) decodeAllTiles(assembler *TileAssembler, roiInfo *t2.ROIInfo) error {
 	for tileIdx, tile := range d.cs.Tiles {
 		cod, qcd := d.resolveTileCODQCD(tile)
-		isHTJ2K := cod != nil && (cod.Scod&0x40) != 0
+		isHTJ2K := cod != nil && (cod.CodeBlockStyle&0x40) != 0
 		var blockDecoderFactory t2.BlockDecoderFactory
 		if isHTJ2K && d.blockDecoderFactory != nil {
 			blockDecoderFactory = d.blockDecoderFactory

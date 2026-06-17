@@ -89,11 +89,18 @@ type EncodeParams struct {
 	// Block encoder factory (for HTJ2K support)
 	// If nil, defaults to EBCOT T1 encoder
 	BlockEncoderFactory func(width, height int) BlockEncoder
+
+	// HTJ2KMode marks code-blocks as JPEG 2000 Part 15 HT code-blocks.
+	HTJ2KMode bool
 }
 
 // BlockEncoder is an interface for T1 block encoders (EBCOT or HTJ2K)
 type BlockEncoder interface {
 	Encode(coeffs []int32, numPasses int, roiShift int) ([]byte, error)
+}
+
+type blockEncoderKMaxSetter interface {
+	SetKMax(kmax int)
 }
 
 // MCTBindingParams describes Part 2 multi-component transform binding parameters.
@@ -370,6 +377,9 @@ func (e *Encoder) buildCodestream() ([]byte, error) {
 	// Write SIZ (Image and Tile Size)
 	if err := e.writeSIZ(buf); err != nil {
 		return nil, fmt.Errorf("failed to write SIZ: %w", err)
+	}
+	if err := e.writeCAP(buf); err != nil {
+		return nil, fmt.Errorf("failed to write CAP: %w", err)
 	}
 
 	// Write COD (Coding Style Default)
@@ -1054,8 +1064,11 @@ func (e *Encoder) writeSIZ(buf *bytes.Buffer) error {
 
 	sizData := &bytes.Buffer{}
 
-	// Rsiz - Capabilities (0 = baseline)
-	if err := binary.Write(sizData, binary.BigEndian, uint16(0)); err != nil {
+	rsiz := uint16(0)
+	if p.HTJ2KMode {
+		rsiz = 0x4000
+	}
+	if err := binary.Write(sizData, binary.BigEndian, rsiz); err != nil {
 		return err
 	}
 
@@ -1135,6 +1148,28 @@ func (e *Encoder) writeSIZ(buf *bytes.Buffer) error {
 	return nil
 }
 
+func (e *Encoder) writeCAP(buf *bytes.Buffer) error {
+	if !e.params.HTJ2KMode {
+		return nil
+	}
+
+	capData := &bytes.Buffer{}
+	if err := binary.Write(capData, binary.BigEndian, uint32(0x00020000)); err != nil {
+		return err
+	}
+	if err := binary.Write(capData, binary.BigEndian, uint16(0)); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.BigEndian, codestream.MarkerCAP); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.BigEndian, uint16(capData.Len()+2)); err != nil {
+		return err
+	}
+	_, err := buf.Write(capData.Bytes())
+	return err
+}
+
 // writeCOD writes the COD (Coding Style Default) segment
 func (e *Encoder) writeCOD(buf *bytes.Buffer) error {
 	p := e.params
@@ -1143,14 +1178,9 @@ func (e *Encoder) writeCOD(buf *bytes.Buffer) error {
 
 	// Scod - Coding style parameters
 	// Bit 0: Precinct defined (1 if custom precinct sizes are used)
-	// Bit 6 (0x40): HTJ2K mode (JPEG 2000 Part 15)
 	scod := uint8(0)
 	if p.PrecinctWidth > 0 || p.PrecinctHeight > 0 {
 		scod |= 0x01 // Enable precinct sizes
-	}
-	// Set HTJ2K bit if using HTJ2K block encoder
-	if p.BlockEncoderFactory != nil {
-		scod |= 0x40 // Enable HTJ2K mode
 	}
 	if err := binary.Write(codData, binary.BigEndian, scod); err != nil {
 		return err
@@ -1195,6 +1225,9 @@ func (e *Encoder) writeCOD(buf *bytes.Buffer) error {
 	codeBlockStyle := uint8(0)
 	if p.NumLayers > 1 || p.TargetRatio > 0 {
 		codeBlockStyle |= 0x04
+	}
+	if p.HTJ2KMode {
+		codeBlockStyle |= 0x40
 	}
 	if err := binary.Write(codData, binary.BigEndian, codeBlockStyle); err != nil {
 		return err
@@ -3005,12 +3038,13 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	actualHeight := cb.height
 	cbData := cb.data
 
-	// Apply T1 NMSEDEC FRACBITS scaling (left shift 6 bits)
-	// This matches OpenJPEG's representation for lossless encoding
-	// OpenJPEG applies this shift in t1.c before T1 encoding
 	const t1NmseDecFracBits = 6
-	for i := range cbData {
-		cbData[i] <<= t1NmseDecFracBits
+	if !e.params.HTJ2KMode {
+		// Apply T1 NMSEDEC FRACBITS scaling (left shift 6 bits).
+		// This matches OpenJPEG's representation for classic EBCOT T1 coding.
+		for i := range cbData {
+			cbData[i] <<= t1NmseDecFracBits
+		}
 	}
 
 	// Calculate max bitplane from scaled data
@@ -3021,7 +3055,10 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	// The +1 is critical - it converts from bit position to number of bits
 	cblkNumbps := 0
 	if rawMaxBitplane >= 0 {
-		cblkNumbps = (rawMaxBitplane + 1) - t1NmseDecFracBits
+		cblkNumbps = rawMaxBitplane + 1
+		if !e.params.HTJ2KMode {
+			cblkNumbps -= t1NmseDecFracBits
+		}
 		if cblkNumbps < 0 {
 			cblkNumbps = 0
 		}
@@ -3034,6 +3071,9 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	if cblkNumbps > 0 {
 		numPasses = (cblkNumbps * 3) - 2
 	}
+	if e.params.HTJ2KMode {
+		numPasses = 1
+	}
 
 	// Calculate zero bit-planes using OpenJPEG formula:
 	// zeroBitPlanes = bandNumbps - cblkNumbps
@@ -3045,6 +3085,15 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	if zeroBitPlanes < 0 {
 		zeroBitPlanes = 0
 	}
+	if e.params.HTJ2KMode {
+		zeroBitPlanes = bandNumbps - 1
+		if zeroBitPlanes < 0 {
+			zeroBitPlanes = 0
+		}
+		if cblkNumbps == 0 {
+			numPasses = 0
+		}
+	}
 
 	// Create block encoder (EBCOT T1 or HTJ2K)
 	var blockEnc BlockEncoder
@@ -3054,6 +3103,9 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 		t1Enc := t1.NewT1Encoder(actualWidth, actualHeight, 0)
 		t1Enc.SetOrientation(cb.band)
 		blockEnc = t1Enc
+	}
+	if setter, ok := blockEnc.(blockEncoderKMaxSetter); ok {
+		setter.SetKMax(bandNumbps)
 	}
 
 	// ROI handling: determine style/shift/inside and apply scaling/roishift
@@ -3142,6 +3194,12 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 		return pcb
 	}
 	// Single layer: use block encoder
+	if e.params.HTJ2KMode && numPasses == 0 {
+		pcb.NumPassesTotal = 0
+		pcb.ZeroBitPlanes = zeroBitPlanes
+		pcb.Data = nil
+		return pcb
+	}
 	encodedData, err := blockEnc.Encode(cbData, numPasses, roishift)
 	if err != nil {
 		// Return minimal code-block on error

@@ -35,8 +35,9 @@ func TestUVLCEncodeDecode(t *testing.T) {
 			t.Logf("Codeword: prefix=%d(%d bits), suffix=%d(%d bits), ext=%d(%d bits)",
 				cwd.Prefix, cwd.PrefixLen, cwd.Suffix, cwd.SuffixLen, cwd.Extension, cwd.ExtLen)
 
-			// Create VLC decoder
-			vlcDec := NewVLCDecoder(vlcData)
+			// Create standard reverse VLC decoder over a cleanup suffix.
+			writeScupLocator(vlcData, len(vlcData))
+			vlcDec := NewVLCReverseDecoder(vlcData).(*VLCDecoder)
 
 			// Manually decode following the same logic as decodeUVLCSimple
 			// Read first bit

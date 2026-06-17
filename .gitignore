@@ -38,3 +38,5 @@ fo-dicom-codec-code/
 toolstmpclaude-*/
 tools/
 .codex-go-cache/
+artifacts/
+.cache/

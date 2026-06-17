@@ -141,7 +141,7 @@ func EncodeQuadVLC(_, _ int, rho, ek, e1, uOff, context uint8,
 //
 // Parameters:
 //
-//	samples: 4 sample values in quad [TL, TR, BL, BR]
+//	samples: 4 sample values in quad [TL, BL, TR, BR]
 //	rho: Significance pattern (determines which samples to check)
 //
 // Returns: ek (4 bits), e1 (4 bits)
@@ -183,7 +183,7 @@ func ComputeQuadEMB(samples [4]int32, rho uint8) (ek, e1 uint8) {
 // ComputeQuadRho computes significance pattern for a quad
 // Returns 4-bit pattern where bit i indicates if sample i is non-zero
 //
-// Sample order: [0]=TL, [1]=TR, [2]=BL, [3]=BR
+// Sample order matches OpenJPH bit order: [0]=TL, [1]=BL, [2]=TR, [3]=BR
 func ComputeQuadRho(samples [4]int32) uint8 {
 	rho := uint8(0)
 	for i := 0; i < 4; i++ {
@@ -194,8 +194,8 @@ func ComputeQuadRho(samples [4]int32) uint8 {
 	return rho
 }
 
-// ExtractQuadSamples extracts 4 samples for a quad from coefficient array
-// Returns samples in order: [TL, TR, BL, BR]
+// ExtractQuadSamples extracts 4 samples for a quad from coefficient array.
+// Returns samples in OpenJPH bit order: [TL, BL, TR, BR].
 func ExtractQuadSamples(data []int32, width, qx, qy int) [4]int32 {
 	samples := [4]int32{0, 0, 0, 0}
 
@@ -206,16 +206,16 @@ func ExtractQuadSamples(data []int32, width, qx, qy int) [4]int32 {
 		samples[0] = data[y0*width+x0]
 	}
 
-	// Top-right (TR)
-	x1 := x0 + 1
-	if x1 < width && y0*width+x1 < len(data) {
-		samples[1] = data[y0*width+x1]
-	}
-
 	// Bottom-left (BL)
 	y1 := y0 + 1
 	if x0 < width && y1*width+x0 < len(data) {
-		samples[2] = data[y1*width+x0]
+		samples[1] = data[y1*width+x0]
+	}
+
+	// Top-right (TR)
+	x1 := x0 + 1
+	if x1 < width && y0*width+x1 < len(data) {
+		samples[2] = data[y0*width+x1]
 	}
 
 	// Bottom-right (BR)

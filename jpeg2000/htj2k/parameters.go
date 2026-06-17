@@ -51,7 +51,7 @@ func NewHTJ2KParameters() *Parameters {
 		Quality:     80, // Default quality 80 for lossy
 		BlockWidth:  64, // Default block width
 		BlockHeight: 64, // Default block height
-		NumLevels:   3,  // Conservative default (TODO: fix HTJ2K block coding issue for >64x64 images with gradient patterns)
+		NumLevels:   5,  // Match OpenJPH default used by fo-dicom.Codecs
 		params:      make(map[string]interface{}),
 	}
 }
@@ -62,7 +62,7 @@ func NewHTJ2KLosslessParameters() *Parameters {
 		Quality:     100, // Quality 100 for lossless
 		BlockWidth:  64,
 		BlockHeight: 64,
-		NumLevels:   0, // Use 0 levels (no DWT) - DWT integration with HTJ2K needs further investigation
+		NumLevels:   5,
 		params:      make(map[string]interface{}),
 	}
 }

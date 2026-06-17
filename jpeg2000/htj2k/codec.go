@@ -160,6 +160,8 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	encParams.CodeBlockWidth = htj2kParams.BlockWidth
 	encParams.CodeBlockHeight = htj2kParams.BlockHeight
+	encParams.ProgressionOrder = 2 // OpenJPH default is RPCL.
+	encParams.HTJ2KMode = true
 
 	// Set HTJ2K block encoder factory
 	encParams.BlockEncoderFactory = func(width, height int) jpeg2000.BlockEncoder {
@@ -172,11 +174,6 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	} else {
 		encParams.Lossless = false
 		encParams.Quality = htj2kParams.Quality
-	}
-
-	// Set progression order based on transfer syntax
-	if c.transferSyntax == transfer.HTJ2KLosslessRPCL {
-		encParams.ProgressionOrder = 2 // RPCL
 	}
 
 	// Create encoder with HTJ2K enabled

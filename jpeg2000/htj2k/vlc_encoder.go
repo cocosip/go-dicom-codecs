@@ -290,41 +290,11 @@ func (v *VLCEncoder) EncodeCxtVLCWithLen(context, rho, uOff, ek, e1 uint8, isFir
 // Returns: data bytes (including trailing 0xFF), last data byte, number of used bits in last byte
 // Reference: OpenJPH ojph_block_encoder.cpp lines 420-446
 func (v *VLCEncoder) FlushForFusion() ([]byte, uint8, int) {
-	usedBits := 0
-	lastByte := uint8(0)
-
-	// Flush any remaining bits, padding with 1s
-	if v.vlcBits > 0 {
-		usedBits = v.vlcBits
-		// Pad remaining bits with 1s to fill the byte
-		for v.vlcBits < 8 {
-			v.vlcTmp |= (1 << v.vlcBits)
-			v.vlcBits++
-		}
-		lastByte = v.vlcTmp
-		v.vlcBuf = append(v.vlcBuf, lastByte)
+	data := v.Flush()
+	if len(data) == 0 {
+		return data, 0, 0
 	}
-
-	// Add trailing padding byte (0xFF) to ensure decoder can read 7 bits
-	v.vlcBuf = append(v.vlcBuf, 0xFF)
-
-	// Skip the first byte (initialization byte) and return the rest AS-IS
-	if len(v.vlcBuf) <= 1 {
-		return []byte{}, 0, 0
-	}
-
-	result := make([]byte, len(v.vlcBuf)-1)
-	copy(result, v.vlcBuf[1:])
-
-	// Get last data byte (before trailing 0xFF)
-	if len(result) > 1 {
-		lastByte = result[len(result)-2] // -2 because last is 0xFF padding
-		if usedBits == 0 {
-			usedBits = 8 // Full byte
-		}
-	}
-
-	return result, lastByte, usedBits
+	return data, data[0], 8
 }
 
 // Flush flushes any pending bits and returns the VLC byte-stream
@@ -340,17 +310,14 @@ func (v *VLCEncoder) Flush() []byte {
 		v.vlcBuf = append(v.vlcBuf, v.vlcTmp)
 	}
 
-	// Add trailing padding byte (0xFF) to ensure decoder can read 7 bits
-	v.vlcBuf = append(v.vlcBuf, 0xFF)
-
-	// Skip the first byte (255) and return the rest AS-IS (don't reverse)
-	if len(v.vlcBuf) <= 1 {
+	if len(v.vlcBuf) == 0 {
 		return []byte{}
 	}
 
-	// Return from byte 1 onwards without reversal
-	result := make([]byte, len(v.vlcBuf)-1)
-	copy(result, v.vlcBuf[1:])
+	result := make([]byte, len(v.vlcBuf))
+	for i := range result {
+		result[i] = v.vlcBuf[len(v.vlcBuf)-1-i]
+	}
 
 	return result
 }

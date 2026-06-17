@@ -24,19 +24,7 @@ func TestHTEncoderUnsignedValues(t *testing.T) {
 
 			t.Logf("Input (first 16): %v", tt.values[:16])
 
-			// Encode
-			encoder := NewHTEncoder(width, height)
-			encoded, err := encoder.Encode(tt.values, 1, 0)
-			if err != nil {
-				t.Fatalf("Encode failed: %v", err)
-			}
-
-			// Decode
-			decoder := NewHTDecoder(width, height)
-			decoded, err := decoder.Decode(encoded, 1)
-			if err != nil {
-				t.Fatalf("Decode failed: %v", err)
-			}
+			_, decoded := encodeDecodeOpenJPHCleanupForTest(t, width, height, tt.values)
 
 			t.Logf("Decoded (first 16): %v", decoded[:16])
 

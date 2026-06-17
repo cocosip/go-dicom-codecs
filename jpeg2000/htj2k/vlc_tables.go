@@ -7,13 +7,13 @@ package htj2k
 // VLCEntry represents one entry in the VLC table
 // Structure: {c_q, rho, u_off, e_k, e_1, cwd, cwd_len}
 type VLCEntry struct {
-	CQ     uint8  // Context (c_q)
-	Rho    uint8  // Significance state
-	UOff   uint8  // Unsigned offset
-	EK     uint8  // E_k value
-	E1     uint8  // E_1 value
-	Cwd    uint8  // Codeword
-	CwdLen uint8  // Codeword length
+	CQ     uint8 // Context (c_q)
+	Rho    uint8 // Significance state
+	UOff   uint8 // Unsigned offset
+	EK     uint8 // E_k value
+	E1     uint8 // E_1 value
+	Cwd    uint8 // Codeword
+	CwdLen uint8 // Codeword length
 }
 
 // VLCTbl0 for initial quad rows
@@ -837,12 +837,16 @@ type VLCLookupEntry uint16
 
 // CwdLen returns VLC codeword length (bits 0-2).
 func (e VLCLookupEntry) CwdLen() uint8 { return uint8(e & 0x07) }
+
 // UOff returns U-VLC offset flag (bit 3).
 func (e VLCLookupEntry) UOff() uint8 { return uint8((e >> 3) & 0x01) }
+
 // Rho returns significance pattern (bits 4-7).
 func (e VLCLookupEntry) Rho() uint8 { return uint8((e >> 4) & 0x0F) }
+
 // E1 returns EMB e_1 pattern (bits 8-11).
 func (e VLCLookupEntry) E1() uint8 { return uint8((e >> 8) & 0x0F) }
+
 // EK returns EMB e_k pattern (bits 12-15).
 func (e VLCLookupEntry) EK() uint8 { return uint8((e >> 12) & 0x0F) }
 
@@ -861,6 +865,10 @@ var VLCLookupTable0 [1024]VLCLookupEntry
 // Indexed by: (context << 7) | (codeword_prefix & 0x7F)
 // Context: 3 bits (0-7), Codeword prefix: 7 bits (0-127)
 var VLCLookupTable1 [1024]VLCLookupEntry
+
+func init() {
+	InitVLCTables()
+}
 
 // InitVLCTables initializes the VLC lookup tables from the source tables
 // This must be called before using the VLC tables (e.g., in init() or at startup)

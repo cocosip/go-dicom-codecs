@@ -1,10 +1,10 @@
 package htj2k
 
 // Reverse VLC decoding for HTJ2K VLC segments that grow backward.
-// Matches OpenJPH's dec_rev implementation:
-// - Bytes are read from end to start
-// - New bytes are shifted to the bottom of the accumulator
-// - Bits are extracted from the top of the accumulator
+// Matches OpenJPH's rev_init/rev_fetch/rev_advance implementation:
+// - Scup is packed into the last 12 bits of the cleanup suffix
+// - VLC reading starts from the upper nibble of the penultimate byte
+// - Bytes are read from end to start and consumed LSB-first from tmp
 
 type reverseBitReader struct {
 	data     []byte
@@ -20,50 +20,93 @@ func (r *reverseBitReader) init() bool {
 		return true
 	}
 	r.initDone = true
-	if r.pos < 0 {
+	if len(r.data) < 2 {
 		return false
 	}
 
-	// Read init byte from end of stream (OpenJPH dec_initMixin)
+	r.pos = len(r.data) - 2
 	d := r.data[r.pos]
 	r.pos--
 
-	// Handle unstuffing: if byte > 0x8F and (byte & 0x7F) == 0x7F, strip stuffed bit
-	tmp := uint64(d)
-	if d > 0x8F && (d&0x7F) == 0x7F {
-		tmp >>= 1
-	}
-
+	r.tmp = uint64(d >> 4)
 	r.num = 4
-	// Strip trailing 1-bits down to first 0
-	if (tmp & 0x7) == 0x7 {
+	if (r.tmp & 0x7) == 0x7 {
 		r.num--
 	}
-
-	// Shift right to keep only top `num` bits at LSB side
-	tmp >>= (8 - uint(r.num))
-	r.tmp = tmp
 	r.unstuff = (d | 0x0F) > 0x8F
 
+	r.readChunk()
 	return true
+}
+
+func (r *reverseBitReader) readOneByte() {
+	b := r.data[r.pos]
+	r.pos--
+	bits := 8
+	if r.unstuff && (b&0x7F) == 0x7F {
+		bits = 7
+	}
+	r.tmp |= uint64(b) << uint(r.num)
+	r.num += bits
+	r.unstuff = b > 0x8F
+}
+
+func (r *reverseBitReader) readChunk() {
+	if r.num > 32 {
+		return
+	}
+	var val uint32
+	shift := 24
+	for i := 0; i < 4 && r.pos >= 0; i++ {
+		val |= uint32(r.data[r.pos]) << uint(shift)
+		r.pos--
+		shift -= 8
+	}
+
+	tmp := val >> 24
+	bits := 8
+	if r.unstuff && ((val>>24)&0x7F) == 0x7F {
+		bits = 7
+	}
+	unstuff := (val >> 24) > 0x8F
+
+	tmp |= ((val >> 16) & 0xFF) << uint(bits)
+	if unstuff && ((val>>16)&0x7F) == 0x7F {
+		bits += 7
+	} else {
+		bits += 8
+	}
+	unstuff = ((val >> 16) & 0xFF) > 0x8F
+
+	tmp |= ((val >> 8) & 0xFF) << uint(bits)
+	if unstuff && ((val>>8)&0x7F) == 0x7F {
+		bits += 7
+	} else {
+		bits += 8
+	}
+	unstuff = ((val >> 8) & 0xFF) > 0x8F
+
+	tmp |= (val & 0xFF) << uint(bits)
+	if unstuff && (val&0x7F) == 0x7F {
+		bits += 7
+	} else {
+		bits += 8
+	}
+	r.unstuff = (val & 0xFF) > 0x8F
+
+	r.tmp |= uint64(tmp) << uint(r.num)
+	r.num += bits
 }
 
 func (r *reverseBitReader) readMore(minBits int) bool {
 	if !r.init() {
 		return false
 	}
-	for r.num < minBits && r.pos >= 0 {
-		b := r.data[r.pos]
-		r.pos--
-		bits := 8
-		if r.unstuff && (b&0x7F) == 0x7F {
-			bits = 7
+	for r.num < minBits {
+		if r.pos < 0 {
+			break
 		}
-		// OpenJPH: tmp = (tmp << bits) | b
-		// Shift existing bits up, add new byte at bottom
-		r.tmp = (r.tmp << uint(bits)) | uint64(b)
-		r.num += bits
-		r.unstuff = b > 0x8F
+		r.readChunk()
 	}
 	return r.num >= minBits
 }
@@ -75,10 +118,10 @@ func (r *reverseBitReader) readBits(n int) (uint32, bool) {
 	if !r.readMore(n) {
 		return 0, false
 	}
-	// OpenJPH: extract from TOP of accumulator
+	mask := uint64((1 << uint(n)) - 1)
+	val := uint32(r.tmp & mask)
+	r.tmp >>= uint(n)
 	r.num -= n
-	val := uint32(r.tmp >> uint(r.num))
-	r.tmp &= (1 << uint(r.num)) - 1
 	return val, true
 }
 

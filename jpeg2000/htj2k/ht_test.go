@@ -50,19 +50,7 @@ func TestHTEncoderDecoder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Encode
-			encoder := NewHTEncoder(tt.width, tt.height)
-			encoded, err := encoder.Encode(tt.data, 10, 0)
-			if err != nil {
-				t.Fatalf("Encode failed: %v", err)
-			}
-
-			// Decode
-			decoder := NewHTDecoder(tt.width, tt.height)
-			decoded, err := decoder.Decode(encoded, 10)
-			if err != nil {
-				t.Fatalf("Decode failed: %v", err)
-			}
+			encoded, decoded := encodeDecodeOpenJPHCleanupForTest(t, tt.width, tt.height, tt.data)
 
 			// Compare
 			if len(decoded) != len(tt.data) {
@@ -179,6 +167,28 @@ func TestMELEncoderByteStuffing(t *testing.T) {
 		}
 		if bit != bits[i] {
 			t.Fatalf("bit %d: got %d, want %d", i, bit, bits[i])
+		}
+	}
+}
+
+func TestMELDecoderSpecMatchesEncoderAfterLongZeroRun(t *testing.T) {
+	encoder := NewMELEncoder()
+	want := make([]int, 0, 32)
+	for i := 0; i < 31; i++ {
+		encoder.EncodeBit(0)
+		want = append(want, 0)
+	}
+	encoder.EncodeBit(1)
+	want = append(want, 1)
+
+	decoder := NewMELDecoderSpec(encoder.Flush())
+	for i, expected := range want {
+		got, ok := decoder.DecodeMELSym()
+		if !ok {
+			t.Fatalf("DecodeMELSym stopped at %d", i)
+		}
+		if got != expected {
+			t.Fatalf("DecodeMELSym[%d]=%d, want %d", i, got, expected)
 		}
 	}
 }

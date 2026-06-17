@@ -29,6 +29,7 @@ func TestVLCEncodeDecodeRoundtrip(t *testing.T) {
 
 	// Get encoded data
 	vlcData := encoder.Flush()
+	writeScupLocator(vlcData, len(vlcData))
 	t.Logf("VLC data: %d bytes: %v", len(vlcData), vlcData)
 
 	// Print in binary
@@ -37,7 +38,7 @@ func TestVLCEncodeDecodeRoundtrip(t *testing.T) {
 	}
 
 	// Create decoder
-	decoder := NewVLCDecoder(vlcData)
+	decoder := NewVLCReverseDecoder(vlcData)
 
 	// Decode
 	decodedRho, decodedUOff, decodedEK, decodedE1, found := decoder.DecodeQuadWithContext(context, isFirstRow)
@@ -84,10 +85,11 @@ func TestVLCMultipleQuads(t *testing.T) {
 	}
 
 	vlcData := encoder.Flush()
+	writeScupLocator(vlcData, len(vlcData))
 	t.Logf("Encoded %d quads into %d bytes", 2, len(vlcData))
 
 	// Decode
-	decoder := NewVLCDecoder(vlcData)
+	decoder := NewVLCReverseDecoder(vlcData)
 
 	// Decode first quad
 	rho1, uOff1, ek1, e1_1, found1 := decoder.DecodeQuadWithContext(0, true)

@@ -18,6 +18,7 @@ func TestHTBlockEncoderDecoder(t *testing.T) {
 		{"8x8", 8, 8},
 		{"16x16", 16, 16},
 		{"32x32", 32, 32},
+		{"64x64", 64, 64},
 	}
 
 	for _, tt := range tests {
@@ -29,22 +30,10 @@ func TestHTBlockEncoderDecoder(t *testing.T) {
 				testCoeffs[i] = int32(i - size/2) // Range: [-size/2, size/2]
 			}
 
-			// Encode
-			encoder := NewHTEncoder(tt.width, tt.height)
-			encoded, err := encoder.Encode(testCoeffs, 1, 0)
-			if err != nil {
-				t.Fatalf("Encode failed: %v", err)
-			}
+			encoded, decodedCoeffs := encodeDecodeOpenJPHCleanupForTest(t, tt.width, tt.height, testCoeffs)
 
 			t.Logf("Original coeffs: %d int32s (%d bytes equivalent)", len(testCoeffs), len(testCoeffs)*4)
 			t.Logf("Encoded size: %d bytes", len(encoded))
-
-			// Decode
-			decoder := NewHTDecoder(tt.width, tt.height)
-			decodedCoeffs, err := decoder.Decode(encoded, 1)
-			if err != nil {
-				t.Fatalf("Decode failed: %v", err)
-			}
 
 			// Compare
 			if len(decodedCoeffs) != len(testCoeffs) {
@@ -88,21 +77,9 @@ func TestHTBlockZeroCoeffs(t *testing.T) {
 	// All zeros
 	testCoeffs := make([]int32, size)
 
-	// Encode
-	encoder := NewHTEncoder(width, height)
-	encoded, err := encoder.Encode(testCoeffs, 1, 0)
-	if err != nil {
-		t.Fatalf("Encode failed: %v", err)
-	}
+	encoded, decodedCoeffs := encodeDecodeOpenJPHCleanupForTest(t, width, height, testCoeffs)
 
 	t.Logf("Zero coeffs encoded size: %d bytes", len(encoded))
-
-	// Decode
-	decoder := NewHTDecoder(width, height)
-	decodedCoeffs, err := decoder.Decode(encoded, 1)
-	if err != nil {
-		t.Fatalf("Decode failed: %v", err)
-	}
 
 	// Verify all zeros
 	for i := 0; i < len(decodedCoeffs); i++ {
@@ -121,21 +98,9 @@ func TestHTBlockSingleNonZero(t *testing.T) {
 	testCoeffs := make([]int32, size)
 	testCoeffs[0] = 100 // Single non-zero at top-left
 
-	// Encode
-	encoder := NewHTEncoder(width, height)
-	encoded, err := encoder.Encode(testCoeffs, 1, 0)
-	if err != nil {
-		t.Fatalf("Encode failed: %v", err)
-	}
+	encoded, decodedCoeffs := encodeDecodeOpenJPHCleanupForTest(t, width, height, testCoeffs)
 
 	t.Logf("Single non-zero encoded size: %d bytes", len(encoded))
-
-	// Decode
-	decoder := NewHTDecoder(width, height)
-	decodedCoeffs, err := decoder.Decode(encoded, 1)
-	if err != nil {
-		t.Fatalf("Decode failed: %v", err)
-	}
 
 	// Verify reconstruction
 	if decodedCoeffs[0] != 100 {
@@ -146,5 +111,18 @@ func TestHTBlockSingleNonZero(t *testing.T) {
 		if decodedCoeffs[i] != 0 {
 			t.Errorf("Expected zero at [%d], got %d", i, decodedCoeffs[i])
 		}
+	}
+}
+
+func TestHTBlockRightEdgeHighPassCoefficient(t *testing.T) {
+	width := 64
+	height := 64
+	coeffs := make([]int32, width*height)
+	coeffs[63] = 64
+
+	_, decoded := encodeDecodeOpenJPHCleanupForTest(t, width, height, coeffs)
+
+	if decoded[63] != coeffs[63] {
+		t.Fatalf("right-edge coefficient mismatch: got %d, want %d", decoded[63], coeffs[63])
 	}
 }

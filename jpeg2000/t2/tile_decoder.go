@@ -597,6 +597,15 @@ func (td *TileDecoder) buildAndDecodeCodeBlocks(comp *ComponentDecoder, cbWidth,
 					if orientSetter, ok := cbd.t1Decoder.(interface{ SetOrientation(int) }); ok {
 						orientSetter.SetOrientation(band)
 					}
+					if td.isHTJ2K {
+						if contextSetter, ok := cbd.t1Decoder.(interface {
+							SetCodingContext(bandNumbps int, zeroBitplanes int)
+						}); ok {
+							if bandNumbps, ok := bandNumbpsFromQCD(td.qcd, comp.numLevels, res, band); ok {
+								contextSetter.SetCodingContext(bandNumbps, info.zeroBitplanes)
+							}
+						}
+					}
 					if td.shouldDecode(info) {
 						td.decodeCodeBlock(comp, cbd, info, actualWidth, actualHeight)
 					} else {
@@ -712,9 +721,11 @@ func (td *TileDecoder) decodeCodeBlock(comp *ComponentDecoder, cbd *CodeBlockDec
 			applyInverseMaxShift(cbd.coeffs, shiftVal)
 		}
 	}
-	const t1NmseDecFracBits = 6
-	for i := range cbd.coeffs {
-		cbd.coeffs[i] >>= t1NmseDecFracBits
+	if !td.isHTJ2K {
+		const t1NmseDecFracBits = 6
+		for i := range cbd.coeffs {
+			cbd.coeffs[i] >>= t1NmseDecFracBits
+		}
 	}
 	if td.roi != nil && style == 1 && shiftVal > 0 && inside {
 		blockMask := td.roi.blockMask(comp.componentIdx, cbd.x0, cbd.y0, cbd.x1, cbd.y1)

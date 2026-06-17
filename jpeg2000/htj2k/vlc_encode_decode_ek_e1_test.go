@@ -29,10 +29,11 @@ func TestVLCEncodeDecodeEKE1(t *testing.T) {
 	t.Logf("Encoded: %d bits", length)
 
 	vlcData := encoder.Flush()
+	writeScupLocator(vlcData, len(vlcData))
 	t.Logf("VLC data: %d bytes: %X", len(vlcData), vlcData)
 
 	// Test decoding
-	decoder := NewVLCDecoder(vlcData)
+	decoder := NewVLCReverseDecoder(vlcData)
 	decodedRho, decodedUOff, decodedEK, decodedE1, found := decoder.DecodeQuadWithContext(context, isFirstRow)
 	if !found {
 		t.Fatalf("Decode failed: no match found")
@@ -55,10 +56,10 @@ func TestVLCEncodeDecodeEKE1(t *testing.T) {
 
 	// Verify that the decoded values are reasonable
 	// The important thing is that encoding and decoding are consistent
-	if (decodedEK & ek) == 0 && ek != 0 {
+	if (decodedEK&ek) == 0 && ek != 0 {
 		t.Errorf("Decoded EK=0x%X has no overlap with input ek=0x%X", decodedEK, ek)
 	}
-	if (decodedE1 & e1) == 0 && e1 != 0 {
+	if (decodedE1&e1) == 0 && e1 != 0 {
 		t.Errorf("Decoded E1=0x%X has no overlap with input e1=0x%X", decodedE1, e1)
 	}
 
@@ -93,7 +94,8 @@ func TestVLCVariousEKE1(t *testing.T) {
 			}
 
 			vlcData := encoder.Flush()
-			decoder := NewVLCDecoder(vlcData)
+			writeScupLocator(vlcData, len(vlcData))
+			decoder := NewVLCReverseDecoder(vlcData)
 			decodedRho, decodedUOff, decodedEK, decodedE1, found := decoder.DecodeQuadWithContext(context, isFirstRow)
 			if !found {
 				t.Fatalf("Decode failed")
@@ -112,10 +114,10 @@ func TestVLCVariousEKE1(t *testing.T) {
 
 			// For ek/e1, check if decoded values are consistent with encoding
 			// Verify that the decoded values have some overlap with input
-			if (decodedEK & tc.ek) == 0 && tc.ek != 0 {
+			if (decodedEK&tc.ek) == 0 && tc.ek != 0 {
 				t.Errorf("Decoded EK=0x%X has no overlap with input ek=0x%X", decodedEK, tc.ek)
 			}
-			if (decodedE1 & tc.e1) == 0 && tc.e1 != 0 {
+			if (decodedE1&tc.e1) == 0 && tc.e1 != 0 {
 				t.Errorf("Decoded E1=0x%X has no overlap with input e1=0x%X", decodedE1, tc.e1)
 			}
 		})

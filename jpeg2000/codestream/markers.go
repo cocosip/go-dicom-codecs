@@ -25,6 +25,9 @@ const (
 const (
 	// MarkerSIZ - Image and tile size
 	MarkerSIZ uint16 = 0xFF51
+
+	// MarkerCAP - Extended capabilities (JPEG 2000 Part 15 HTJ2K)
+	MarkerCAP uint16 = 0xFF50
 )
 
 // Functional marker segments
@@ -52,6 +55,9 @@ const (
 const (
 	// MarkerTLM - Tile-part lengths
 	MarkerTLM uint16 = 0xFF55
+
+	// MarkerCPF - Corresponding profile values (JPEG 2000 Part 15 HTJ2K)
+	MarkerCPF uint16 = 0xFF59
 
 	// MarkerPLM - Packet length, main header
 	MarkerPLM uint16 = 0xFF57
@@ -96,6 +102,8 @@ func MarkerName(marker uint16) string {
 	// Fixed information
 	case MarkerSIZ:
 		return "SIZ"
+	case MarkerCAP:
+		return "CAP"
 
 	// Functional
 	case MarkerCOD:
@@ -114,6 +122,8 @@ func MarkerName(marker uint16) string {
 	// Pointer
 	case MarkerTLM:
 		return "TLM"
+	case MarkerCPF:
+		return "CPF"
 	case MarkerPLM:
 		return "PLM"
 	case MarkerPLT:
