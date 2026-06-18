@@ -603,7 +603,7 @@ func (td *TileDecoder) buildAndDecodeCodeBlocks(comp *ComponentDecoder, cbWidth,
 							SetCodingContext(bandNumbps int, zeroBitplanes int)
 						}); ok {
 							if bandNumbps, ok := bandNumbpsFromQCD(td.qcd, comp.numLevels, res, band); ok {
-								contextSetter.SetCodingContext(bandNumbps, info.zeroBitplanes)
+								contextSetter.SetCodingContext(bandNumbps, td.htj2kMissingMSBs(info, bandNumbps))
 							}
 						}
 					}
@@ -686,6 +686,16 @@ func (td *TileDecoder) shouldDecode(info cbInfo) bool {
 		}
 	}
 	return true
+}
+
+func (td *TileDecoder) htj2kMissingMSBs(info cbInfo, bandNumbps int) int {
+	if info.zeroBitplanesSet {
+		return info.zeroBitplanes
+	}
+	if bandNumbps <= 0 {
+		return 0
+	}
+	return bandNumbps - 1
 }
 
 // decodeCodeBlock performs layered or bitplane decoding and applies ROI and normalization.
@@ -961,14 +971,16 @@ func (td *TileDecoder) dequantizeSubbandFloat(data []float32, x0, y0, w, h, stri
 	if stepSize <= 0 {
 		return
 	}
+	scale := 0.5 * stepSize
+	if td.isHTJ2K {
+		scale = stepSize
+	}
 
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			idx := (y0+y)*stride + (x0 + x)
 			if idx < len(data) {
-				// OpenJPEG T1 decode reconstructs half-step centered values and
-				// irreversible dequantization applies 0.5 * band->stepsize.
-				data[idx] *= float32(0.5 * stepSize)
+				data[idx] *= float32(scale)
 			}
 		}
 	}

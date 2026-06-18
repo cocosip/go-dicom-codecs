@@ -2126,6 +2126,10 @@ func (e *Encoder) applyQuantizationBySubbandFloat(coeffs []float32, width, heigh
 // stride: row stride (width of full image)
 // stepSize: quantization step size
 func (e *Encoder) quantizeSubbandFloat(coeffs []float32, out []int32, x0, y0, w, h, stride int, stepSize float64) {
+	scale := float32(1 << t1NMSEDecFracBits)
+	if e.params.HTJ2KMode {
+		scale = 1
+	}
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			idx := (y0+y)*stride + (x0 + x)
@@ -2133,7 +2137,7 @@ func (e *Encoder) quantizeSubbandFloat(coeffs []float32, out []int32, x0, y0, w,
 				if stepSize <= 0 {
 					out[idx] = int32(math.RoundToEven(float64(coeffs[idx])))
 				} else {
-					quantized := (coeffs[idx] / float32(stepSize)) * float32(1<<t1NMSEDecFracBits)
+					quantized := (coeffs[idx] / float32(stepSize)) * scale
 					out[idx] = int32(math.RoundToEven(float64(quantized)))
 				}
 			}
