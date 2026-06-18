@@ -32,12 +32,13 @@ type Encoder struct {
 	orientation int
 
 	// Encoding parameters
-	roishift     int  // ROI shift value
-	cblkstyle    int  // Code-block style flags
-	resetctx     bool // Reset context on each pass
-	termall      bool // Terminate all passes
-	segmentation bool // Use segmentation symbols
-
+	roishift         int  // ROI shift value
+	cblkstyle        int  // Code-block style flags
+	resetctx         bool // Reset context on each pass
+	termall          bool // Terminate all passes
+	segmentation     bool // Use segmentation symbols
+	nmseDecFracBits  int  // Number of T1_NMSEDEC_FRACBITS already present in data
+	distortionWeight float64
 }
 
 func isLazyRawPass(bitplane int, maxBitplane int, passType int, cblkstyle int) bool {
@@ -75,9 +76,10 @@ func NewT1Encoder(width, height int, cblkstyle int) *Encoder {
 	paddedHeight := height + 2
 
 	t1 := &Encoder{
-		width:  width,
-		height: height,
-		flags:  make([]uint32, paddedWidth*paddedHeight),
+		width:            width,
+		height:           height,
+		flags:            make([]uint32, paddedWidth*paddedHeight),
+		distortionWeight: 1,
 	}
 
 	// Parse code-block style flags
@@ -93,6 +95,27 @@ func NewT1Encoder(width, height int, cblkstyle int) *Encoder {
 // SetOrientation sets the subband orientation for zero coding context lookup.
 func (t1 *Encoder) SetOrientation(orient int) {
 	t1.orientation = orient
+}
+
+// SetNMSEDecFractionalBits records how many OpenJPEG fractional NMSE bits are
+// already present in the coefficient data supplied to the encoder.
+func (t1 *Encoder) SetNMSEDecFractionalBits(bits int) {
+	if bits < 0 {
+		bits = 0
+	}
+	if bits > t1NMSEDecFracBits {
+		bits = t1NMSEDecFracBits
+	}
+	t1.nmseDecFracBits = bits
+}
+
+// SetDistortionWeight applies OpenJPEG's weighted MSE scale to per-pass
+// nmsedec values before they are used by PCRD layer allocation.
+func (t1 *Encoder) SetDistortionWeight(weight float64) {
+	if weight <= 0 {
+		weight = 1
+	}
+	t1.distortionWeight = weight
 }
 
 // Encode encodes a code-block
@@ -174,11 +197,11 @@ func (t1 *Encoder) Encode(data []int32, numPasses int, roishift int) ([]byte, er
 
 		switch passType {
 		case 0:
-			t1.encodeSigPropPass(raw)
+			_ = t1.encodeSigPropPass(raw)
 		case 1:
-			t1.encodeMagRefPass(raw)
+			_ = t1.encodeMagRefPass(raw)
 		case 2:
-			t1.encodeCleanupPass()
+			_ = t1.encodeCleanupPass()
 			if t1.segmentation {
 				t1.mqe.SegmarkEnc()
 			}
@@ -257,8 +280,9 @@ func (t1 *Encoder) findMaxBitplane() int {
 // This pass encodes coefficients that:
 // - Are not yet significant
 // - Have at least one significant neighbor
-func (t1 *Encoder) encodeSigPropPass(raw bool) {
+func (t1 *Encoder) encodeSigPropPass(raw bool) int {
 	paddedWidth := t1.width + 2
+	nmsedec := 0
 
 	// JPEG 2000 passes are stripe-coded: process 4-row groups, then columns, then rows in stripe.
 	for k := 0; k < t1.height; k += 4 {
@@ -297,6 +321,8 @@ func (t1 *Encoder) encodeSigPropPass(raw bool) {
 				t1.flags[idx] |= T1Visit
 
 				if isSig != 0 {
+					nmsedec += t1.getNMSEDecSig(absVal)
+
 					// Coefficient becomes significant
 					// Encode sign bit with prediction
 					signBit := 0
@@ -325,12 +351,14 @@ func (t1 *Encoder) encodeSigPropPass(raw bool) {
 		}
 	}
 
+	return nmsedec
 }
 
 // encodeMagRefPass encodes the Magnitude Refinement Pass
 // This pass refines coefficients that are already significant
-func (t1 *Encoder) encodeMagRefPass(raw bool) {
+func (t1 *Encoder) encodeMagRefPass(raw bool) int {
 	paddedWidth := t1.width + 2
+	nmsedec := 0
 
 	// JPEG 2000 passes are stripe-coded: process 4-row groups, then columns, then rows in stripe.
 	for k := 0; k < t1.height; k += 4 {
@@ -354,6 +382,7 @@ func (t1 *Encoder) encodeMagRefPass(raw bool) {
 
 				// Encode refinement bit
 				ctx := getMagRefinementContext(flags)
+				nmsedec += t1.getNMSEDecRef(absVal)
 				if raw {
 					t1.mqe.BypassEncode(int(refBit))
 				} else {
@@ -366,14 +395,16 @@ func (t1 *Encoder) encodeMagRefPass(raw bool) {
 		}
 	}
 
+	return nmsedec
 }
 
 // encodeCleanupPass encodes the Cleanup Pass
 // This pass encodes all remaining coefficients not encoded in previous passes
 // IMPORTANT: Process in VERTICAL order (column-first) with 4-row groups for RL encoding
 // This matches OpenJPEG's opj_t1_enc_clnpass() implementation
-func (t1 *Encoder) encodeCleanupPass() {
+func (t1 *Encoder) encodeCleanupPass() int {
 	paddedWidth := t1.width + 2
+	nmsedec := 0
 
 	// Process in groups of 4 rows (vertical RL encoding)
 	for k := 0; k < t1.height; k += 4 {
@@ -460,6 +491,12 @@ func (t1 *Encoder) encodeCleanupPass() {
 						}
 
 						if isSig != 0 {
+							absVal := t1.data[idx]
+							if absVal < 0 {
+								absVal = -absVal
+							}
+							nmsedec += t1.getNMSEDecSig(absVal)
+
 							// Encode sign bit with prediction (same as OpenJPEG clnpass)
 							signBit := 0
 							if t1.data[idx] < 0 {
@@ -509,6 +546,8 @@ func (t1 *Encoder) encodeCleanupPass() {
 				t1.mqe.Encode(isSig, int(ctx))
 
 				if isSig != 0 {
+					nmsedec += t1.getNMSEDecSig(absVal)
+
 					// Encode sign bit with prediction (same as OpenJPEG clnpass)
 					signBit := 0
 					if t1.data[idx] < 0 {
@@ -533,6 +572,7 @@ func (t1 *Encoder) encodeCleanupPass() {
 		}
 	}
 
+	return nmsedec
 }
 
 // updateNeighborFlags updates the neighbor significance flags

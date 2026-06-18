@@ -26,8 +26,8 @@ type JPEG2000LosslessParameters struct {
 	// OpenJPEG enables MCT for RGB only when AllowMCT is true.
 	AllowMCT bool
 
-	// Rate is the fo-dicom/OpenJPEG style target rate parameter (optional).
-	// Effective target ratio ~= Rate * BitsStored / BitsAllocated. Default: 0 (disabled).
+	// Rate is the fo-dicom/OpenJPEG style target rate parameter.
+	// Effective target ratio ~= Rate * BitsStored / BitsAllocated. Default: 20.
 	Rate int
 
 	// RateLevels is the fo-dicom/OpenJPEG layer ladder used with Rate.
@@ -62,15 +62,15 @@ func NewLosslessParameters() *JPEG2000LosslessParameters {
 	levels := make([]int, len(defaultRateLevels))
 	copy(levels, defaultRateLevels)
 	return &JPEG2000LosslessParameters{
-		NumLevels:           5,  // Default 5 decomposition levels (recommended)
+		NumLevels:           5, // Default 5 decomposition levels (recommended)
 		AllowMCT:            true,
-		Rate:                0,
+		Rate:                20,
 		RateLevels:          levels,
-		ProgressionOrder:    0,  // LRCP
-		NumLayers:           1,  // Single layer by default
-		TargetRatio:         0,  // No target ratio
+		ProgressionOrder:    0, // LRCP
+		NumLayers:           1, // Single layer by default
+		TargetRatio:         0, // No target ratio
 		UsePCRDOpt:          false,
-		AppendLosslessLayer: false,
+		AppendLosslessLayer: true,
 		params:              make(map[string]interface{}),
 	}
 }

@@ -30,7 +30,7 @@ func TestGetDefaultParametersUsesCodecRate(t *testing.T) {
 
 // TestCodecTransferSyntax tests the transfer syntax UID
 func TestCodecTransferSyntax(t *testing.T) {
-	c := NewCodecWithRate(80)
+	c := NewCodec()
 	ts := c.TransferSyntax()
 	if ts == nil {
 		t.Fatal("Transfer syntax is nil")
@@ -192,7 +192,7 @@ func TestLargerImage(t *testing.T) {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
-	c := NewCodecWithRate(80)
+	c := NewCodec()
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
 
 	// Encode

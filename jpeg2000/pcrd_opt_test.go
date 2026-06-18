@@ -108,3 +108,60 @@ func TestAllocateLayersWithLambda(t *testing.T) {
 		}
 	}
 }
+
+func TestAllocateLayersOpenJPEGThresholdAppendsFullFinalLayer(t *testing.T) {
+	passes := [][]t1.PassData{
+		{
+			{Rate: 10, Distortion: 100},
+			{Rate: 20, Distortion: 150},
+			{Rate: 30, Distortion: 170},
+		},
+		{
+			{Rate: 8, Distortion: 80},
+			{Rate: 16, Distortion: 110},
+		},
+	}
+
+	alloc := AllocateLayersOpenJPEGThreshold(passes, []float64{18, 0})
+
+	if alloc.NumLayers != 2 {
+		t.Fatalf("NumLayers = %d, want 2", alloc.NumLayers)
+	}
+	if got := alloc.CodeBlockPasses[0][1]; got != len(passes[0]) {
+		t.Fatalf("final layer block 0 passes = %d, want all", got)
+	}
+	if got := alloc.CodeBlockPasses[1][1]; got != len(passes[1]) {
+		t.Fatalf("final layer block 1 passes = %d, want all", got)
+	}
+	if alloc.CodeBlockPasses[0][0] > alloc.CodeBlockPasses[0][1] ||
+		alloc.CodeBlockPasses[1][0] > alloc.CodeBlockPasses[1][1] {
+		t.Fatalf("allocation is not monotonic: %+v", alloc.CodeBlockPasses)
+	}
+}
+
+func TestSelectOpenJPEGThresholdUsesDBLEpsilonMargin(t *testing.T) {
+	const dblEpsilon = 2.220446049250313e-16
+	threshold := 1.0
+	passes := [][]t1.PassData{{
+		{Rate: 1, ActualBytes: 1, Distortion: threshold - dblEpsilon/2},
+	}}
+
+	selected := selectOpenJPEGThreshold(passes, []int{0}, threshold)
+
+	if got := selected[0]; got != 1 {
+		t.Fatalf("selected passes = %d, want 1 for OpenJPEG DBL_EPSILON threshold margin", got)
+	}
+}
+
+func TestOpenJPEGThresholdUsesPassRateNotActualBytes(t *testing.T) {
+	passes := [][]t1.PassData{{
+		{Rate: 10, ActualBytes: 7, Distortion: 10},
+		{Rate: 20, ActualBytes: 14, Distortion: 17},
+	}}
+
+	selected := selectOpenJPEGThreshold(passes, []int{0}, 0.8)
+
+	if got := selected[0]; got != 1 {
+		t.Fatalf("selected passes = %d, want 1 when using OpenJPEG pass->rate slopes", got)
+	}
+}

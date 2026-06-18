@@ -56,6 +56,9 @@ type EncodeParams struct {
 
 	// Layer parameters
 	NumLayers int // Number of quality layers (default 1)
+	// LayerRates mirrors OpenJPEG tcp_rates before tile byte-budget conversion.
+	// Values > 0 are compression rates; 0 means a final lossless/full layer.
+	LayerRates []float64
 
 	// PCRD options
 	UsePCRDOpt          bool
@@ -137,6 +140,7 @@ func DefaultEncodeParams(width, height, components, bitDepth int, isSigned bool)
 		TargetRatio:         0,
 		ProgressionOrder:    0, // LRCP
 		NumLayers:           1,
+		LayerRates:          nil,
 		UsePCRDOpt:          false,
 		LayerBudgetStrategy: "EXPONENTIAL",
 		LambdaTolerance:     0.01,
@@ -148,17 +152,19 @@ func DefaultEncodeParams(width, height, components, bitDepth int, isSigned bool)
 
 // Encoder implements JPEG 2000 encoding
 type Encoder struct {
-	params    *EncodeParams
-	data      [][]int32 // [component][pixel]
-	roiShifts []int
-	RoiRects  [][]RoiRect // per-component rectangles
-	roiStyles []byte      // per-component Srgn value: 0=MaxShift, 1=GeneralScaling
-	roiMasks  []*roiMask  // per-component ROI mask (full-res)
-	qcdReady  bool
-	qcdStyle  int
-	qcdGuard  int
-	qcdExpn   []int
-	qcdSteps  []uint16
+	params                  *EncodeParams
+	data                    [][]int32 // [component][pixel]
+	roiShifts               []int
+	RoiRects                [][]RoiRect // per-component rectangles
+	roiStyles               []byte      // per-component Srgn value: 0=MaxShift, 1=GeneralScaling
+	roiMasks                []*roiMask  // per-component ROI mask (full-res)
+	qcdReady                bool
+	qcdStyle                int
+	qcdGuard                int
+	qcdExpn                 []int
+	qcdSteps                []uint16
+	openJPEGMainHeaderBytes int
+	openJPEGNumTiles        int
 }
 
 // NewEncoder creates a new JPEG 2000 encoder
@@ -411,6 +417,8 @@ func (e *Encoder) buildCodestream() ([]byte, error) {
 	if err := e.writeMCTAndMCC(buf); err != nil {
 		return nil, fmt.Errorf("failed to write MCT/MCC: %w", err)
 	}
+
+	e.openJPEGMainHeaderBytes = buf.Len()
 
 	// Write tiles
 	if err := e.writeTiles(buf); err != nil {
@@ -1218,14 +1226,7 @@ func (e *Encoder) writeCOD(buf *bytes.Buffer) error {
 		return err
 	}
 
-	// Code-block style
-	// Bit 2 (0x04): Termination on each coding pass (TERMALL mode)
-	// Enable TERMALL for layered encoding (NumLayers>1) and target-ratio encoding.
-	// This is required because encoder writes PassLengths metadata for layered modes.
 	codeBlockStyle := uint8(0)
-	if p.NumLayers > 1 || p.TargetRatio > 0 {
-		codeBlockStyle |= 0x04
-	}
 	if p.HTJ2KMode {
 		codeBlockStyle |= 0x40
 	}
@@ -1508,14 +1509,9 @@ func (e *Encoder) quantizationInfo() quantizationInfo {
 	} else {
 		info.style = 2
 		guardBits := 2
-		var steps []uint16
-		if len(p.CustomQuantSteps) > 0 {
-			steps = encodeQuantStepsFromFloats(p.CustomQuantSteps, p.BitDepth)
-		} else {
-			quantParams := CalculateQuantizationParams(p.Quality, p.NumLevels, p.BitDepth)
-			guardBits = quantParams.GuardBits
-			steps = quantParams.EncodedSteps
-		}
+		quantParams := e.lossyQuantizationParams()
+		guardBits = quantParams.GuardBits
+		steps := quantParams.EncodedSteps
 		expn := make([]int, len(steps))
 		for i, step := range steps {
 			expn[i] = int((step >> 11) & 0x1F)
@@ -1532,6 +1528,22 @@ func (e *Encoder) quantizationInfo() quantizationInfo {
 	e.qcdSteps = info.steps
 
 	return info
+}
+
+func (e *Encoder) lossyQuantizationParams() *QuantizationParams {
+	if len(e.params.CustomQuantSteps) > 0 {
+		steps := encodeQuantStepsFromFloats(e.params.CustomQuantSteps, e.params.BitDepth)
+		return &QuantizationParams{
+			Style:        2,
+			GuardBits:    2,
+			StepSizes:    append([]float64(nil), e.params.CustomQuantSteps...),
+			EncodedSteps: steps,
+		}
+	}
+	if len(e.params.LayerRates) > 0 {
+		return CalculateOpenJPEGQuantizationParams(e.params.NumLevels, e.params.BitDepth)
+	}
+	return CalculateQuantizationParams(e.params.Quality, e.params.NumLevels, e.params.BitDepth)
 }
 
 func losslessLog2Gain(res, band int) int {
@@ -1663,7 +1675,7 @@ func (e *Encoder) writeRGN(buf *bytes.Buffer) error {
 // writeVersionCOM writes a COM (Comment) marker with version information.
 // This matches OpenJPEG's behavior of including a version string.
 func (e *Encoder) writeVersionCOM(buf *bytes.Buffer) error {
-	const version = "go-dicom-codec JPEG2000 encoder v1.0"
+	const version = "Created by OpenJPEG version 2.5.4"
 
 	data := &bytes.Buffer{}
 
@@ -1872,6 +1884,7 @@ func (e *Encoder) writeTiles(buf *bytes.Buffer) error {
 	numTilesX := (p.Width + tileWidth - 1) / tileWidth
 	numTilesY := (p.Height + tileHeight - 1) / tileHeight
 	numTiles := numTilesX * numTilesY
+	e.openJPEGNumTiles = numTiles
 
 	useGlobalPCRD := numTiles > 1 && (e.params.NumLayers > 1 || e.params.TargetRatio > 0)
 	if useGlobalPCRD {
@@ -2049,15 +2062,15 @@ func (e *Encoder) applyWaveletTransform(tileData [][]int32, width, height, x0, y
 	}
 	// Apply 9/7 irreversible wavelet transform (lossy)
 	transformed := make([][]int32, len(tileData))
-	// Calculate quantization parameters based on quality
-	quantParams := CalculateQuantizationParams(e.params.Quality, e.params.NumLevels, e.params.BitDepth)
+	quantParams := e.lossyQuantizationParams()
+	stepSizes := OpenJPEGRuntimeQuantizationSteps(quantParams.EncodedSteps, e.params.NumLevels, e.params.BitDepth)
 	for c := 0; c < len(tileData); c++ {
-		// Convert to float64 for 9/7 transform
-		floatData := wavelet.ConvertInt32ToFloat64(tileData[c])
+		// OpenJPEG stores irreversible tile samples as OPJ_FLOAT32 through DWT and T1 input.
+		floatData := wavelet.ConvertInt32ToFloat32(tileData[c])
 		// Apply forward multilevel 9/7 DWT
-		wavelet.ForwardMultilevel97WithParity(floatData, width, height, e.params.NumLevels, x0, y0)
+		wavelet.ForwardMultilevel97Float32WithParity(floatData, width, height, e.params.NumLevels, x0, y0)
 		// Apply quantization per subband using float coefficients
-		transformed[c] = e.applyQuantizationBySubbandFloat(floatData, width, height, x0, y0, quantParams.StepSizes)
+		transformed[c] = e.applyQuantizationBySubbandFloat(floatData, width, height, x0, y0, stepSizes)
 	}
 	return transformed
 }
@@ -2066,12 +2079,12 @@ func (e *Encoder) applyWaveletTransform(tileData [][]int32, width, height, x0, y
 // coeffs: wavelet coefficients in subband layout (float domain)
 // width, height: dimensions of the full image
 // stepSizes: quantization step sizes for each subband (LL, HL1, LH1, HH1, HL2, ...)
-func (e *Encoder) applyQuantizationBySubbandFloat(coeffs []float64, width, height, x0, y0 int, stepSizes []float64) []int32 {
+func (e *Encoder) applyQuantizationBySubbandFloat(coeffs []float32, width, height, x0, y0 int, stepSizes []float64) []int32 {
 	if len(stepSizes) == 0 || e.params.NumLevels == 0 {
 		// No quantization
 		out := make([]int32, len(coeffs))
 		for i, v := range coeffs {
-			out[i] = int32(math.RoundToEven(v))
+			out[i] = int32(math.RoundToEven(float64(v)))
 		}
 		return out
 	}
@@ -2112,15 +2125,16 @@ func (e *Encoder) applyQuantizationBySubbandFloat(coeffs []float64, width, heigh
 // w, h: dimensions of subband
 // stride: row stride (width of full image)
 // stepSize: quantization step size
-func (e *Encoder) quantizeSubbandFloat(coeffs []float64, out []int32, x0, y0, w, h, stride int, stepSize float64) {
+func (e *Encoder) quantizeSubbandFloat(coeffs []float32, out []int32, x0, y0, w, h, stride int, stepSize float64) {
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			idx := (y0+y)*stride + (x0 + x)
 			if idx < len(out) {
 				if stepSize <= 0 {
-					out[idx] = int32(math.RoundToEven(coeffs[idx]))
+					out[idx] = int32(math.RoundToEven(float64(coeffs[idx])))
 				} else {
-					out[idx] = int32(math.RoundToEven(coeffs[idx] / stepSize))
+					quantized := (coeffs[idx] / float32(stepSize)) * float32(1<<t1NMSEDecFracBits)
+					out[idx] = int32(math.RoundToEven(float64(quantized)))
 				}
 			}
 		}
@@ -2392,6 +2406,11 @@ func (e *Encoder) applyRateDistortionGlobal(blocks []*t2.PrecinctCodeBlock, pack
 		e.params.NumLayers = 1
 	}
 
+	if len(e.params.LayerRates) > 0 {
+		e.applyRateDistortionWithBudget(blocks, packetEncs, 0)
+		return
+	}
+
 	if e.params.UsePCRDOpt && e.params.TargetRatio > 0 {
 		midRefine := e.params.TargetRatio >= 7.5 && e.params.TargetRatio <= 8.5
 		targetTotal := float64(origBytes) / e.params.TargetRatio
@@ -2411,7 +2430,7 @@ func (e *Encoder) applyRateDistortionGlobal(blocks []*t2.PrecinctCodeBlock, pack
 			maxScale = 1.2
 		}
 		for iter := 0; iter < maxIter; iter++ {
-			e.applyRateDistortionWithBudget(blocks, budget)
+			e.applyRateDistortionWithBudget(blocks, nil, budget)
 			pktBytes := 0
 			for _, pe := range packetEncs {
 				if pe == nil {
@@ -2424,7 +2443,7 @@ func (e *Encoder) applyRateDistortionGlobal(blocks []*t2.PrecinctCodeBlock, pack
 					break
 				}
 				for _, p := range packets {
-					pktBytes += stuffedLen(p.Header) + stuffedLen(p.Body)
+					pktBytes += PacketPayloadLen(p.Header) + PacketPayloadLen(p.Body)
 				}
 			}
 			if pktBytes == 0 {
@@ -2450,11 +2469,11 @@ func (e *Encoder) applyRateDistortionGlobal(blocks []*t2.PrecinctCodeBlock, pack
 }
 
 // applyRateDistortionWithBudget performs allocation using a target total packet-data budget in bytes.
-func (e *Encoder) applyRateDistortionWithBudget(blocks []*t2.PrecinctCodeBlock, targetBudget float64) {
+func (e *Encoder) applyRateDistortionWithBudget(blocks []*t2.PrecinctCodeBlock, packetEncs []*t2.PacketEncoder, targetBudget float64) {
 	numLayers, appendLossless := e.initRDLayerConfig()
 	passesPerBlock, totalRate := e.collectRDPassesAndRate(blocks)
 	budget := e.computeRDBudget(targetBudget, totalRate)
-	alloc := e.computeRDLayerAllocation(passesPerBlock, numLayers, budget)
+	alloc := e.computeRDLayerAllocation(passesPerBlock, blocks, packetEncs, numLayers, budget)
 	for idx, cb := range blocks {
 		e.finalizeRDCodeBlockLayers(cb, idx, numLayers, alloc, appendLossless)
 	}
@@ -2479,9 +2498,9 @@ func (e *Encoder) collectRDPassesAndRate(blocks []*t2.PrecinctCodeBlock) ([][]t1
 		passesPerBlock = append(passesPerBlock, cb.Passes)
 		if len(cb.Passes) > 0 {
 			last := cb.Passes[len(cb.Passes)-1]
-			bytes := last.ActualBytes
+			bytes := last.Rate
 			if bytes == 0 {
-				bytes = last.Rate
+				bytes = last.ActualBytes
 			}
 			totalRate += float64(bytes)
 		}
@@ -2497,12 +2516,66 @@ func (e *Encoder) computeRDBudget(targetBudget, totalRate float64) float64 {
 	return budget
 }
 
-func (e *Encoder) computeRDLayerAllocation(passesPerBlock [][]t1.PassData, numLayers int, budget float64) *LayerAllocation {
+func (e *Encoder) computeRDLayerAllocation(passesPerBlock [][]t1.PassData, blocks []*t2.PrecinctCodeBlock, packetEncs []*t2.PacketEncoder, numLayers int, budget float64) *LayerAllocation {
+	if len(e.params.LayerRates) > 0 {
+		layerBudgets := e.openJPEGLayerBudgets(budget)
+		var measurer PacketRateMeasurer
+		if len(packetEncs) > 0 {
+			measurer = func(layer int, selected []int, committed [][]int) (int, error) {
+				return MeasureOpenJPEGLayerSelectionBytes(packetEncs, blocks, numLayers, layer, selected, committed)
+			}
+		}
+		return AllocateLayersOpenJPEGThresholdMeasured(passesPerBlock, layerBudgets, measurer)
+	}
 	if e.params.UsePCRDOpt && e.params.TargetRatio > 8.0 {
 		layerBudgets := ComputeLayerBudgets(budget, numLayers, e.params.LayerBudgetStrategy)
 		return AllocateLayersWithLambda(passesPerBlock, numLayers, layerBudgets, e.params.LambdaTolerance)
 	}
 	return AllocateLayersRateDistortionPasses(passesPerBlock, numLayers, budget)
+}
+
+func (e *Encoder) openJPEGLayerBudgets(fullBudget float64) []float64 {
+	numLayers := e.params.NumLayers
+	if numLayers <= 0 {
+		numLayers = 1
+	}
+	budgets := make([]float64, numLayers)
+	sizePixel := float64(e.params.Components * e.params.BitDepth)
+	bitsEmpty := 8.0
+	pixels := float64(e.params.Width * e.params.Height)
+	if e.params.Components <= 0 || e.params.BitDepth <= 0 || pixels <= 0 {
+		for i := range budgets {
+			budgets[i] = fullBudget
+		}
+		return budgets
+	}
+	for i := range budgets {
+		rate := 0.0
+		if i < len(e.params.LayerRates) {
+			rate = e.params.LayerRates[i]
+		}
+		if rate <= 0 {
+			budgets[i] = fullBudget
+			continue
+		}
+		budget := (sizePixel * pixels) / (rate * bitsEmpty)
+		if e.openJPEGMainHeaderBytes > 0 {
+			numTiles := e.openJPEGNumTiles
+			if numTiles <= 0 {
+				numTiles = 1
+			}
+			budget -= float64(e.openJPEGMainHeaderBytes) / float64(numTiles)
+		}
+		if budget < 30 {
+			budget = 30
+		}
+		budget = math.Ceil(budget)
+		if budget > fullBudget {
+			budget = fullBudget
+		}
+		budgets[i] = budget
+	}
+	return budgets
 }
 
 func (e *Encoder) finalizeRDCodeBlockLayers(cb *t2.PrecinctCodeBlock, idx, numLayers int, alloc *LayerAllocation, appendLossless bool) {
@@ -2517,14 +2590,14 @@ func (e *Encoder) finalizeRDCodeBlockLayers(cb *t2.PrecinctCodeBlock, idx, numLa
 		e.appendRDLosslessLayer(cb, numLayers)
 	}
 	cb.Data = cb.CompleteData
-	cb.UseTERMALL = numLayers > 1
+	cb.UseTERMALL = e.classicCodeBlockStyle()&0x04 != 0
 }
 
 func (e *Encoder) initRDPassLengths(cb *t2.PrecinctCodeBlock) {
 	if len(cb.PassLengths) == 0 {
 		cb.PassLengths = make([]int, len(cb.Passes))
 		for i, p := range cb.Passes {
-			cb.PassLengths[i] = p.ActualBytes
+			cb.PassLengths[i] = p.Rate
 		}
 	}
 }
@@ -2539,9 +2612,9 @@ func (e *Encoder) allocateRDLayerData(cb *t2.PrecinctCodeBlock, idx, numLayers i
 		cb.LayerPasses[layer] = passCount
 		end := prevEnd
 		if passCount > 0 {
-			end = cb.Passes[passCount-1].ActualBytes
+			end = cb.Passes[passCount-1].Rate
 			if end == 0 {
-				end = cb.Passes[passCount-1].Rate
+				end = cb.Passes[passCount-1].ActualBytes
 			}
 		}
 		if end < prevEnd {
@@ -2571,14 +2644,14 @@ func (e *Encoder) appendRDLosslessLayer(cb *t2.PrecinctCodeBlock, numLayers int)
 	cb.LayerPasses[last] = fullPasses
 	start := 0
 	if prevPasses > 0 {
-		start = cb.Passes[prevPasses-1].ActualBytes
+		start = cb.Passes[prevPasses-1].Rate
 		if start == 0 {
-			start = cb.Passes[prevPasses-1].Rate
+			start = cb.Passes[prevPasses-1].ActualBytes
 		}
 	}
-	end := cb.Passes[fullPasses-1].ActualBytes
+	end := cb.Passes[fullPasses-1].Rate
 	if end == 0 {
-		end = cb.Passes[fullPasses-1].Rate
+		end = cb.Passes[fullPasses-1].ActualBytes
 	}
 	if start < 0 {
 		start = 0
@@ -2622,9 +2695,9 @@ func passBytes(passes []t1.PassData, count int) int {
 	if count > len(passes) {
 		count = len(passes)
 	}
-	b := passes[count-1].ActualBytes
+	b := passes[count-1].Rate
 	if b == 0 {
-		b = passes[count-1].Rate
+		b = passes[count-1].ActualBytes
 	}
 	return b
 }
@@ -2636,9 +2709,9 @@ func (e *Encoder) collectPassesAndRate(blocks []*t2.PrecinctCodeBlock) ([][]t1.P
 		passesPerBlock = append(passesPerBlock, cb.Passes)
 		if len(cb.Passes) > 0 {
 			last := cb.Passes[len(cb.Passes)-1]
-			bytes := last.ActualBytes
+			bytes := last.Rate
 			if bytes == 0 {
-				bytes = last.Rate
+				bytes = last.ActualBytes
 			}
 			totalRate += float64(bytes)
 		}
@@ -2710,7 +2783,7 @@ func (e *Encoder) finalizeBlock(cb *t2.PrecinctCodeBlock, numLayers int, alloc *
 	if len(cb.PassLengths) == 0 {
 		cb.PassLengths = make([]int, len(cb.Passes))
 		for i, p := range cb.Passes {
-			cb.PassLengths[i] = p.ActualBytes
+			cb.PassLengths[i] = p.Rate
 		}
 	}
 	cb.LayerPasses = make([]int, numLayers)
@@ -2724,9 +2797,9 @@ func (e *Encoder) finalizeBlock(cb *t2.PrecinctCodeBlock, numLayers int, alloc *
 		cb.LayerPasses[layer] = passCount
 		end := prevEnd
 		if passCount > 0 {
-			end = cb.Passes[passCount-1].ActualBytes
+			end = cb.Passes[passCount-1].Rate
 			if end == 0 {
-				end = cb.Passes[passCount-1].Rate
+				end = cb.Passes[passCount-1].ActualBytes
 			}
 		}
 		if end < prevEnd {
@@ -2754,14 +2827,14 @@ func (e *Encoder) finalizeBlock(cb *t2.PrecinctCodeBlock, numLayers int, alloc *
 		cb.LayerPasses[last] = fullPasses
 		start := 0
 		if prevPasses > 0 {
-			start = cb.Passes[prevPasses-1].ActualBytes
+			start = cb.Passes[prevPasses-1].Rate
 			if start == 0 {
-				start = cb.Passes[prevPasses-1].Rate
+				start = cb.Passes[prevPasses-1].ActualBytes
 			}
 		}
-		end := cb.Passes[fullPasses-1].ActualBytes
+		end := cb.Passes[fullPasses-1].Rate
 		if end == 0 {
-			end = cb.Passes[fullPasses-1].Rate
+			end = cb.Passes[fullPasses-1].ActualBytes
 		}
 		if start < 0 {
 			start = 0
@@ -2775,20 +2848,7 @@ func (e *Encoder) finalizeBlock(cb *t2.PrecinctCodeBlock, numLayers int, alloc *
 		cb.LayerData[last] = cb.CompleteData[start:end]
 	}
 	cb.Data = cb.CompleteData
-	cb.UseTERMALL = numLayers > 1
-}
-
-func stuffedLen(data []byte) int {
-	if len(data) == 0 {
-		return 0
-	}
-	n := len(data)
-	for _, b := range data {
-		if b == 0xFF {
-			n++
-		}
-	}
-	return n
+	cb.UseTERMALL = false
 }
 
 // subbandInfo represents a wavelet subband
@@ -3038,7 +3098,7 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	actualHeight := cb.height
 	cbData := cb.data
 
-	if !e.params.HTJ2KMode {
+	if !e.params.HTJ2KMode && e.params.Lossless {
 		// Apply T1 NMSEDEC FRACBITS scaling (left shift 6 bits).
 		// This matches OpenJPEG's representation for classic EBCOT T1 coding.
 		for i := range cbData {
@@ -3054,7 +3114,7 @@ func (e *Encoder) encodeCodeBlock(cb codeBlockInfo, _ int) *t2.PrecinctCodeBlock
 	numPasses, zeroBitPlanes := e.codeBlockPassLayout(cblkNumbps, bandNumbps)
 
 	// Create block encoder (EBCOT T1 or HTJ2K)
-	blockEnc := e.newCodeBlockEncoder(actualWidth, actualHeight, cb.band, bandNumbps)
+	blockEnc := e.newCodeBlockEncoder(actualWidth, actualHeight, cb.resLevel, cb.band, bandNumbps)
 
 	// ROI handling: determine style/shift/inside and apply scaling/roishift
 	_, roiShift, inside := e.roiContext(cb)
@@ -3130,19 +3190,72 @@ func (e *Encoder) codeBlockPassLayout(cblkNumbps, bandNumbps int) (numPasses, ze
 	return numPasses, zeroBitPlanes
 }
 
-func (e *Encoder) newCodeBlockEncoder(width, height, band, bandNumbps int) BlockEncoder {
+func (e *Encoder) newCodeBlockEncoder(width, height, res, band, bandNumbps int) BlockEncoder {
 	var blockEnc BlockEncoder
 	if e.params.BlockEncoderFactory != nil {
 		blockEnc = e.params.BlockEncoderFactory(width, height)
 	} else {
 		t1Enc := t1.NewT1Encoder(width, height, 0)
 		t1Enc.SetOrientation(band)
+		if !e.params.HTJ2KMode {
+			t1Enc.SetNMSEDecFractionalBits(t1NMSEDecFracBits)
+			if e.params.Lossless {
+				level := e.params.NumLevels - res
+				norm := dwtNorm53(level, band)
+				weight := norm * norm / 8192.0
+				t1Enc.SetDistortionWeight(weight)
+			} else {
+				step := e.openJPEGRuntimeStepForBand(res, band)
+				level := e.params.NumLevels - res
+				t1Enc.SetDistortionWeight(openJPEGDistortionWeight(false, level, band, step))
+			}
+		}
 		blockEnc = t1Enc
 	}
 	if setter, ok := blockEnc.(blockEncoderKMaxSetter); ok {
 		setter.SetKMax(bandNumbps)
 	}
 	return blockEnc
+}
+
+func (e *Encoder) openJPEGRuntimeStepForBand(res, band int) float64 {
+	quantParams := e.lossyQuantizationParams()
+	steps := OpenJPEGRuntimeQuantizationSteps(quantParams.EncodedSteps, e.params.NumLevels, e.params.BitDepth)
+	idx := subbandIndexForResolutionBand(e.params.NumLevels, res, band)
+	if idx < 0 || idx >= len(steps) {
+		return 1.0
+	}
+	return steps[idx]
+}
+
+func subbandIndexForResolutionBand(numLevels, res, band int) int {
+	if res == 0 {
+		return 0
+	}
+	if res < 0 || res > numLevels || band < 1 || band > 3 {
+		return -1
+	}
+	return 1 + (res-1)*3 + (band - 1)
+}
+
+func openJPEGDistortionWeight(lossless bool, level, orient int, stepSize float64) float64 {
+	if lossless {
+		norm := dwtNorm53(level, orient)
+		return norm * norm / 8192.0
+	}
+	if stepSize <= 0 {
+		stepSize = 1.0
+	}
+	log2Gain := 0
+	if orient == 3 {
+		log2Gain = 2
+	} else if orient != 0 {
+		log2Gain = 1
+	}
+	gain := 1 << log2Gain
+	adjustedStep := stepSize / float64(gain)
+	weight := dwtNorm97(level, orient) * adjustedStep
+	return weight * weight / 8192.0
 }
 
 func (e *Encoder) layerBoundaries(numPasses int) []int {
@@ -3163,7 +3276,7 @@ func (e *Encoder) encodeLayeredCodeBlock(pcb *t2.PrecinctCodeBlock, blockEnc Blo
 	var err error
 
 	if t1Enc, ok := blockEnc.(*t1.Encoder); ok {
-		passes, completeData, err = t1Enc.EncodeLayered(cbData, numPasses, roishift, e.layerBoundaries(numPasses), 0x04)
+		passes, completeData, err = t1Enc.EncodeLayered(cbData, numPasses, roishift, e.layerBoundaries(numPasses), e.classicCodeBlockStyle())
 	} else {
 		completeData, err = blockEnc.Encode(cbData, numPasses, roishift)
 		if err == nil {
@@ -3171,7 +3284,7 @@ func (e *Encoder) encodeLayeredCodeBlock(pcb *t2.PrecinctCodeBlock, blockEnc Blo
 		}
 	}
 
-	if err != nil || len(passes) == 0 {
+	if err != nil {
 		encodedData := []byte{0x00}
 		pcb.Data = encodedData
 		pcb.LayerData = [][]byte{encodedData}
@@ -3179,15 +3292,29 @@ func (e *Encoder) encodeLayeredCodeBlock(pcb *t2.PrecinctCodeBlock, blockEnc Blo
 		return pcb
 	}
 
+	if len(passes) == 0 {
+		pcb.NumPassesTotal = 0
+		pcb.Data = nil
+		pcb.CompleteData = completeData
+		return pcb
+	}
+
 	pcb.PassLengths = make([]int, len(passes))
 	for i, pass := range passes {
-		pcb.PassLengths[i] = pass.ActualBytes
+		pcb.PassLengths[i] = pass.Rate
 	}
 	pcb.Passes = passes
 	pcb.CompleteData = completeData
 	pcb.Data = completeData
-	pcb.UseTERMALL = e.params.NumLayers > 1 || e.params.TargetRatio > 0
+	pcb.UseTERMALL = e.classicCodeBlockStyle()&0x04 != 0
 	return pcb
+}
+
+func (e *Encoder) classicCodeBlockStyle() uint8 {
+	if e.params.HTJ2KMode {
+		return 0x40
+	}
+	return 0
 }
 
 func (e *Encoder) encodeSingleLayerCodeBlock(pcb *t2.PrecinctCodeBlock, blockEnc BlockEncoder, cbData []int32, numPasses, roishift, bandNumbps, zeroBitPlanes int) *t2.PrecinctCodeBlock {

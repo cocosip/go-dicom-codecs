@@ -7,11 +7,33 @@ import (
 
 // OpenJPEG 9-7 wavelet norms (opj_dwt_norms_real).
 // These values are used to derive per-subband quantization step sizes.
+var dwtNorms53 = [4][10]float64{
+	{1.000, 1.500, 2.750, 5.375, 10.68, 21.34, 42.67, 85.33, 170.7, 341.3},
+	{1.038, 1.592, 2.919, 5.703, 11.33, 22.64, 45.25, 90.48, 180.9, 0.0},
+	{1.038, 1.592, 2.919, 5.703, 11.33, 22.64, 45.25, 90.48, 180.9, 0.0},
+	{.7186, .9218, 1.586, 3.043, 6.019, 12.01, 24.00, 47.97, 95.93, 0.0},
+}
+
 var dwtNorms97 = [4][10]float64{
 	{1.000, 1.965, 4.177, 8.403, 16.90, 33.84, 67.69, 135.3, 270.6, 540.9},
 	{2.022, 3.989, 8.355, 17.04, 34.27, 68.63, 137.3, 274.6, 549.0, 0.0},
 	{2.022, 3.989, 8.355, 17.04, 34.27, 68.63, 137.3, 274.6, 549.0, 0.0},
 	{2.080, 3.865, 8.307, 17.18, 34.71, 69.59, 139.3, 278.6, 557.2, 0.0},
+}
+
+func dwtNorm53(level, orient int) float64 {
+	if level < 0 {
+		level = 0
+	}
+	if orient == 0 && level >= 10 {
+		level = 9
+	} else if orient > 0 && level >= 9 {
+		level = 8
+	}
+	if orient < 0 || orient > 3 {
+		return 1.0
+	}
+	return dwtNorms53[orient][level]
 }
 
 func dwtNorm97(level, orient int) float64 {
@@ -40,7 +62,7 @@ func qualityScale(quality int) float64 {
 	if scale < 0.01 {
 		scale = 0.01
 	}
-	return scale * 0.9 * 0.2
+	return scale * 0.05
 }
 
 func subbandParams(idx, numLevels int) (resno, orient, level int) {
@@ -111,6 +133,25 @@ func decodeQuantizationStepWithGain(encoded uint16, bitDepth, log2Gain int) floa
 	return math.Ldexp(1.0+mant/2048.0, rb-expn)
 }
 
+// OpenJPEGRuntimeQuantizationSteps mirrors tcd.c band->stepsize initialization.
+// OpenJPEG writes QCD as mantissa/exponent, then decodes those encoded values
+// back into OPJ_FLOAT32 band steps before T1 quantization.
+func OpenJPEGRuntimeQuantizationSteps(encoded []uint16, numLevels, bitDepth int) []float64 {
+	steps := make([]float64, len(encoded))
+	for idx, step := range encoded {
+		_, orient, _ := subbandParams(idx, numLevels)
+		log2Gain := 0
+		switch orient {
+		case 3:
+			log2Gain = 2
+		case 1, 2:
+			log2Gain = 1
+		}
+		steps[idx] = float64(float32(decodeQuantizationStepWithGain(step, bitDepth, log2Gain)))
+	}
+	return steps
+}
+
 // QuantizationParams holds quantization parameters for all subbands.
 type QuantizationParams struct {
 	// Quantization style
@@ -160,6 +201,34 @@ func CalculateQuantizationParams(quality, numLevels, bitDepth int) *Quantization
 	// Encode step sizes using OpenJPEG's stepsize encoding.
 	for i, stepSize := range params.StepSizes {
 		params.EncodedSteps[i] = encodeQuantizationStep(stepSize, bitDepth)
+	}
+
+	return params
+}
+
+// CalculateOpenJPEGQuantizationParams mirrors OpenJPEG's opj_dwt_calc_explicit_stepsizes
+// for the default irreversible 9/7 encoder path used by fo-dicom.Codecs.
+func CalculateOpenJPEGQuantizationParams(numLevels, bitDepth int) *QuantizationParams {
+	if numLevels < 0 {
+		numLevels = 0
+	}
+	numSubbands := 3*numLevels + 1
+	params := &QuantizationParams{
+		Style:        2,
+		GuardBits:    2,
+		StepSizes:    make([]float64, numSubbands),
+		EncodedSteps: make([]uint16, numSubbands),
+	}
+
+	for bandno := 0; bandno < numSubbands; bandno++ {
+		_, orient, level := subbandParams(bandno, numLevels)
+		norm := dwtNorm97(level, orient)
+		stepsize := 1.0
+		if norm > 0 {
+			stepsize = 1.0 / norm
+		}
+		params.StepSizes[bandno] = stepsize
+		params.EncodedSteps[bandno] = encodeQuantizationStep(stepsize, bitDepth)
 	}
 
 	return params

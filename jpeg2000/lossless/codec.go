@@ -171,9 +171,16 @@ func (c *Codec) configureLosslessEncodeParams(frameInfo *imagetypes.FrameInfo, l
 	if targetRatio > 0 && encParams.NumLayers <= 1 {
 		encParams.NumLayers = layersFromRateLevels(losslessParams.Rate, losslessParams.RateLevels)
 	}
-	if targetRatio > 0 && encParams.NumLayers < 2 && losslessParams.AppendLosslessLayer {
-		encParams.NumLayers = 2
+	if targetRatio > 0 && losslessParams.AppendLosslessLayer {
+		encParams.NumLayers++
 	}
+	encParams.LayerRates = openJPEGLayerRates(
+		losslessParams.Rate,
+		losslessParams.RateLevels,
+		int(frameInfo.BitsStored),
+		int(frameInfo.BitsAllocated),
+		losslessParams.AppendLosslessLayer,
+	)
 	return encParams
 }
 
@@ -341,4 +348,30 @@ func layersFromRateLevels(rate int, levels []int) int {
 		return 1
 	}
 	return layers
+}
+
+func openJPEGLayerRates(rate int, levels []int, bitsStored, bitsAllocated int, appendLossless bool) []float64 {
+	if rate <= 0 {
+		return nil
+	}
+	rates := make([]float64, 0, len(levels)+2)
+	for _, v := range levels {
+		if v > rate {
+			rates = append(rates, float64(v))
+			continue
+		}
+		break
+	}
+	if bitsAllocated <= 0 {
+		bitsAllocated = bitsStored
+	}
+	if bitsStored <= 0 || bitsAllocated <= 0 {
+		rates = append(rates, float64(rate))
+	} else {
+		rates = append(rates, float64(rate)*float64(bitsStored)/float64(bitsAllocated))
+	}
+	if appendLossless {
+		rates = append(rates, 0)
+	}
+	return rates
 }

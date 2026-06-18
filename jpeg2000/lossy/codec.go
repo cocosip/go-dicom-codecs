@@ -270,6 +270,13 @@ func (c *Codec) configureBasicEncodeParams(encParams *jpeg2000.EncodeParams, fra
 	encParams.NumLayers = p.NumLayers
 	encParams.EnableMCT = p.AllowMCT
 	encParams.Quality = effectiveQuality(baseQuality, p.QuantStepScale)
+	if p.Irreversible && p.Rate > 0 && p.TargetRatio <= 0 {
+		encParams.LayerRates = openJPEGLayerRates(p.Rate, p.RateLevels, int(frameInfo.BitsStored), int(frameInfo.BitsAllocated))
+		if len(encParams.LayerRates) > 0 {
+			encParams.NumLayers = len(encParams.LayerRates)
+			encParams.UsePCRDOpt = true
+		}
+	}
 	if !encParams.Lossless && int(frameInfo.SamplesPerPixel) >= 3 && encParams.Quality < 100 {
 		bump := 10
 		q := encParams.Quality + bump
@@ -440,6 +447,29 @@ func layersFromRateLevels(rate int, levels []int) int {
 		return 1
 	}
 	return layers
+}
+
+func openJPEGLayerRates(rate int, levels []int, bitsStored, bitsAllocated int) []float64 {
+	if rate <= 0 {
+		return nil
+	}
+	rates := make([]float64, 0, len(levels)+1)
+	for _, v := range levels {
+		if v > rate {
+			rates = append(rates, float64(v))
+			continue
+		}
+		break
+	}
+	if bitsAllocated <= 0 {
+		bitsAllocated = bitsStored
+	}
+	if bitsStored <= 0 || bitsAllocated <= 0 {
+		rates = append(rates, float64(rate))
+		return rates
+	}
+	rates = append(rates, float64(rate)*float64(bitsStored)/float64(bitsAllocated))
+	return rates
 }
 
 func clampQuality(q int) int {

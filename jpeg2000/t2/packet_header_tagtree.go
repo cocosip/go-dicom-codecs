@@ -376,7 +376,7 @@ func encodeCodeBlockLengths(bw packetBitWriter, cb *PrecinctCodeBlock, dataLen, 
 	for passIdx := prevPasses; passIdx <= lastPass; passIdx++ {
 		nump++
 		segLen += passLens[passIdx]
-		terminate := termAll || passIdx == lastPass
+		terminate := codeBlockPassTerminates(cb, termAll, passIdx) || passIdx == lastPass
 		if terminate {
 			need := (floorLog2(segLen) + 1) - (cb.NumLenBits + floorLog2(nump))
 			if need > increment {
@@ -397,7 +397,7 @@ func encodeCodeBlockLengths(bw packetBitWriter, cb *PrecinctCodeBlock, dataLen, 
 	for passIdx := prevPasses; passIdx <= lastPass; passIdx++ {
 		nump++
 		segLen += passLens[passIdx]
-		terminate := termAll || passIdx == lastPass
+		terminate := codeBlockPassTerminates(cb, termAll, passIdx) || passIdx == lastPass
 		if terminate {
 			bitCount := cb.NumLenBits + floorLog2(nump)
 			bw.writeBits(segLen, bitCount)
@@ -405,6 +405,16 @@ func encodeCodeBlockLengths(bw packetBitWriter, cb *PrecinctCodeBlock, dataLen, 
 			nump = 0
 		}
 	}
+}
+
+func codeBlockPassTerminates(cb *PrecinctCodeBlock, termAll bool, passIdx int) bool {
+	if termAll {
+		return true
+	}
+	if cb != nil && passIdx >= 0 && passIdx < len(cb.Passes) {
+		return cb.Passes[passIdx].Terminated
+	}
+	return false
 }
 
 func buildPassLengths(cumulative []int, passes []t1.PassData) []int {

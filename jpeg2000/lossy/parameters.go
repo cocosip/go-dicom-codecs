@@ -14,8 +14,10 @@ type JPEG2000LossyParameters struct {
 	// true = irreversible 9/7 (lossy), false = reversible 5/3.
 	Irreversible bool
 
-	// Rate is a quality-like setting (1-100, higher = better quality). Default: 20.
-	// When TargetRatio > 0, PCRD rate control is used; Rate sets the base quantization quality.
+	// Rate is the fo-dicom/OpenJPEG target compression ratio. Higher values
+	// request stronger compression. Default: 20.
+	// When TargetRatio > 0, PCRD rate control is used and Rate is only a base
+	// layer-ladder selector.
 	Rate int
 
 	// RateLevels is the fo-dicom/OpenJPEG layer ladder used with Rate.
@@ -64,19 +66,19 @@ func NewLossyParameters() *JPEG2000LossyParameters {
 	copy(levels, defaultRateLevels)
 
 	return &JPEG2000LossyParameters{
-		Irreversible:                  true,
-		Rate:                          20,
-		RateLevels:                    levels,
-		IsVerbose:                     false,
-		AllowMCT:                      true,
-		UpdatePhotometricInterpretation: true,
+		Irreversible:                      true,
+		Rate:                              20,
+		RateLevels:                        levels,
+		IsVerbose:                         false,
+		AllowMCT:                          true,
+		UpdatePhotometricInterpretation:   true,
 		EncodeSignedPixelValuesAsUnsigned: false,
-		NumLevels:                     5, // Default 5 decomposition levels
-		NumLayers:                     1,
-		TargetRatio:                   0,
-		QuantStepScale:                1.0,
-		SubbandSteps:                  nil,
-		params:                        make(map[string]interface{}),
+		NumLevels:                         5, // Default 5 decomposition levels
+		NumLayers:                         1,
+		TargetRatio:                       0,
+		QuantStepScale:                    1.0,
+		SubbandSteps:                      nil,
+		params:                            make(map[string]interface{}),
 	}
 }
 

@@ -3,7 +3,7 @@ package jpeg2000
 import "testing"
 
 func TestCustomMCTMatrix_Identity4Components(t *testing.T) {
-	t.Skip("Experimental MCT roundtrip pending full Part 2 alignment")
+	//t.Skip("Experimental MCT roundtrip pending full Part 2 alignment")
 	width, height := 32, 32
 	n := width * height
 	comps := 3

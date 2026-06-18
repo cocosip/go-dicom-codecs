@@ -571,8 +571,7 @@ func (td *TileDecoder) buildAndDecodeCodeBlocks(comp *ComponentDecoder, cbWidth,
 					}
 					numPasses := info.totalPasses
 					if numPasses == 0 {
-						const t1NmseDecFracBits = 6
-						cblkNumbps := (info.maxBitplane + 1) - t1NmseDecFracBits
+						cblkNumbps := info.maxBitplane
 						if cblkNumbps > 0 {
 							numPasses = (cblkNumbps * 3) - 2
 						} else if info.maxBitplane >= 0 {
@@ -591,7 +590,9 @@ func (td *TileDecoder) buildAndDecodeCodeBlocks(comp *ComponentDecoder, cbWidth,
 							if td.isHTJ2K && td.blockDecoderFactory != nil {
 								return td.blockDecoderFactory(actualWidth, actualHeight, int(td.cod.CodeBlockStyle))
 							}
-							return t1.NewT1Decoder(actualWidth, actualHeight, int(td.cod.CodeBlockStyle))
+							dec := t1.NewT1Decoder(actualWidth, actualHeight, int(td.cod.CodeBlockStyle))
+							dec.SetOpenJPEGReconstruction(true)
+							return dec
 						}(),
 					}
 					if orientSetter, ok := cbd.t1Decoder.(interface{ SetOrientation(int) }); ok {
@@ -630,20 +631,18 @@ func (td *TileDecoder) estimateMaxBitplane(comp *ComponentDecoder, res, band int
 	var maxBP int
 	maxFromPass := -1
 	if info.totalPasses > 0 {
-		const t1NmseDecFracBits = 6
 		cblkNumbps := (info.totalPasses + 2) / 3
 		if cblkNumbps <= 0 {
 			maxFromPass = -1
 		} else {
-			maxFromPass = (cblkNumbps - 1) + t1NmseDecFracBits
+			maxFromPass = cblkNumbps
 		}
 	}
 	maxFromQCD := -1
 	if bandNumbps, ok := bandNumbpsFromQCD(td.qcd, comp.numLevels, res, band); ok && bandNumbps > 0 {
-		const t1NmseDecFracBits = 6
 		cblkNumbps := bandNumbps - zbp
 		if cblkNumbps > 0 {
-			maxFromQCD = (cblkNumbps - 1) + t1NmseDecFracBits
+			maxFromQCD = cblkNumbps
 		}
 	}
 	if maxFromPass >= 0 && maxFromQCD >= 0 {
@@ -657,10 +656,9 @@ func (td *TileDecoder) estimateMaxBitplane(comp *ComponentDecoder, res, band int
 	} else if maxFromPass >= 0 {
 		maxBP = maxFromPass
 	} else {
-		const t1NmseDecFracBits = 6
 		componentBitDepth := int(td.siz.Components[comp.componentIdx].Ssiz&0x7F) + 1
-		effectiveBitDepth := componentBitDepth + comp.numLevels + t1NmseDecFracBits
-		maxBP = effectiveBitDepth - 1 - zbp
+		effectiveBitDepth := componentBitDepth + comp.numLevels
+		maxBP = effectiveBitDepth - zbp
 	}
 	if maxBP < -1 {
 		maxBP = -1
@@ -721,11 +719,8 @@ func (td *TileDecoder) decodeCodeBlock(comp *ComponentDecoder, cbd *CodeBlockDec
 			applyInverseMaxShift(cbd.coeffs, shiftVal)
 		}
 	}
-	if !td.isHTJ2K {
-		const t1NmseDecFracBits = 6
-		for i := range cbd.coeffs {
-			cbd.coeffs[i] >>= t1NmseDecFracBits
-		}
+	if !td.isHTJ2K && td.cod.Transformation == 1 {
+		normalizeOpenJPEGReversibleT1Coefficients(cbd.coeffs)
 	}
 	if td.roi != nil && style == 1 && shiftVal > 0 && inside {
 		blockMask := td.roi.blockMask(comp.componentIdx, cbd.x0, cbd.y0, cbd.x1, cbd.y1)
@@ -893,7 +888,7 @@ func (td *TileDecoder) applyIDWT(comp *ComponentDecoder) error {
 		wavelet.InverseMultilevelWithParity(comp.samples, comp.width, comp.height, comp.numLevels, comp.x0, comp.y0)
 	case 0:
 		// 9/7 irreversible wavelet (lossy)
-		var floatCoeffs []float64
+		var floatCoeffs []float32
 		qType := 0
 		if td.qcd != nil {
 			qType = td.qcd.QuantizationType()
@@ -902,10 +897,10 @@ func (td *TileDecoder) applyIDWT(comp *ComponentDecoder) error {
 			bitDepth := td.siz.Components[comp.componentIdx].BitDepth()
 			floatCoeffs = td.applyDequantizationBySubbandFloat(comp.coefficients, comp.width, comp.height, comp.numLevels, bitDepth, comp.x0, comp.y0)
 		} else {
-			floatCoeffs = wavelet.ConvertInt32ToFloat64(comp.coefficients)
+			floatCoeffs = wavelet.ConvertInt32ToFloat32(comp.coefficients)
 		}
-		wavelet.InverseMultilevel97WithParity(floatCoeffs, comp.width, comp.height, comp.numLevels, comp.x0, comp.y0)
-		comp.samples = wavelet.ConvertFloat64ToInt32(floatCoeffs)
+		wavelet.InverseMultilevel97OpenJPEGWithParity(floatCoeffs, comp.width, comp.height, comp.numLevels, comp.x0, comp.y0)
+		comp.samples = wavelet.ConvertFloat32ToInt32OpenJPEG(floatCoeffs)
 	default:
 		return fmt.Errorf("unsupported wavelet transformation type: %d", td.cod.Transformation)
 	}
@@ -917,18 +912,18 @@ func (td *TileDecoder) applyIDWT(comp *ComponentDecoder) error {
 // coeffs: quantized wavelet coefficients in subband layout
 // width, height: dimensions of the full image
 // numLevels: number of wavelet decomposition levels
-func (td *TileDecoder) applyDequantizationBySubbandFloat(coeffs []int32, width, height, numLevels, bitDepth, x0, y0 int) []float64 {
+func (td *TileDecoder) applyDequantizationBySubbandFloat(coeffs []int32, width, height, numLevels, bitDepth, x0, y0 int) []float32 {
 	if td.qcd == nil || len(td.qcd.SPqcd) == 0 {
 		// No dequantization
-		return wavelet.ConvertInt32ToFloat64(coeffs)
+		return wavelet.ConvertInt32ToFloat32(coeffs)
 	}
 
 	stepSizes := td.decodeQuantizationSteps(numLevels, bitDepth)
 	if len(stepSizes) == 0 {
-		return wavelet.ConvertInt32ToFloat64(coeffs)
+		return wavelet.ConvertInt32ToFloat32(coeffs)
 	}
 
-	floatCoeffs := wavelet.ConvertInt32ToFloat64(coeffs)
+	floatCoeffs := wavelet.ConvertInt32ToFloat32(coeffs)
 
 	subbandIdx := 0
 
@@ -962,7 +957,7 @@ func (td *TileDecoder) applyDequantizationBySubbandFloat(coeffs []int32, width, 
 // w, h: dimensions of subband
 // stride: row stride (width of full image)
 // stepSize: quantization step size
-func (td *TileDecoder) dequantizeSubbandFloat(data []float64, x0, y0, w, h, stride int, stepSize float64) {
+func (td *TileDecoder) dequantizeSubbandFloat(data []float32, x0, y0, w, h, stride int, stepSize float64) {
 	if stepSize <= 0 {
 		return
 	}
@@ -971,10 +966,17 @@ func (td *TileDecoder) dequantizeSubbandFloat(data []float64, x0, y0, w, h, stri
 		for x := 0; x < w; x++ {
 			idx := (y0+y)*stride + (x0 + x)
 			if idx < len(data) {
-				// Dequantize: coeff * stepSize.
-				data[idx] *= stepSize
+				// OpenJPEG T1 decode reconstructs half-step centered values and
+				// irreversible dequantization applies 0.5 * band->stepsize.
+				data[idx] *= float32(0.5 * stepSize)
 			}
 		}
+	}
+}
+
+func normalizeOpenJPEGReversibleT1Coefficients(coeffs []int32) {
+	for i := range coeffs {
+		coeffs[i] /= 2
 	}
 }
 

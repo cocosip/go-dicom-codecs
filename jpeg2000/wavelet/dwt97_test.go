@@ -5,259 +5,270 @@ import (
 	"testing"
 )
 
-// TestForwardInverse97_1D tests 1D forward and inverse 9/7 transform
-func TestForwardInverse97_1D(t *testing.T) {
-	tests := []struct {
-		name string
-		size int
-	}{
-		{"Size 4", 4},
-		{"Size 8", 8},
-		{"Size 16", 16},
-		{"Size 32", 32},
-		{"Size 64", 64},
-	}
+func TestForward97_1DUsesOpenJPEGFloat32Arithmetic(t *testing.T) {
+	input := []float64{0, 17, 33, 71, 129, 251, 502, 777, 1023}
+	got := append([]float64(nil), input...)
+	want := openJPEGForward97_1DFloat32(input, true)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create test signal
-			original := make([]float64, tt.size)
-			for i := range original {
-				original[i] = float64(i%10) + 0.5
-			}
+	Forward97_1DWithParity(got, true)
 
-			// Make a copy
-			data := make([]float64, tt.size)
-			copy(data, original)
-
-			// Forward transform
-			Forward97_1D(data)
-
-			// Inverse transform
-			Inverse97_1D(data)
-
-			// Check reconstruction (with tolerance for floating point)
-			maxError := 0.0
-			for i := range data {
-				err := math.Abs(data[i] - original[i])
-				if err > maxError {
-					maxError = err
-				}
-			}
-
-			// 9/7 is irreversible, but error should be very small
-			if maxError > 1e-10 {
-				t.Errorf("Reconstruction error too large: %e", maxError)
-			}
-		})
+	for i := range got {
+		if got[i] != float64(want[i]) {
+			t.Fatalf("coefficient %d = %.10f, want OpenJPEG float32 %.10f", i, got[i], want[i])
+		}
 	}
 }
 
-func TestForwardInverse97_1DParity(t *testing.T) {
+func openJPEGForward97_1DFloat32(input []float64, even bool) []float32 {
+	data := make([]float32, len(input))
+	for i, v := range input {
+		data[i] = float32(v)
+	}
+	width := len(data)
+	var sn, dn int32
+	if even {
+		sn = int32((width + 1) >> 1)
+		dn = int32(width) - sn
+	} else {
+		sn = int32(width >> 1)
+		dn = int32(width) - sn
+	}
+
+	var a, b int32
+	if even {
+		a = 0
+		b = 1
+	} else {
+		a = 1
+		b = 0
+	}
+
+	openJPEGEncodeStep2Float32(data, a, b+1, dn, min32(dn, sn-b), float32(alpha97))
+	openJPEGEncodeStep2Float32(data, b, a+1, sn, min32(sn, dn-a), float32(beta97))
+	openJPEGEncodeStep2Float32(data, a, b+1, dn, min32(dn, sn-b), float32(gamma97))
+	openJPEGEncodeStep2Float32(data, b, a+1, sn, min32(sn, dn-a), float32(delta97))
+
+	if a == 0 {
+		openJPEGEncodeStep1CombinedFloat32(data, sn, dn, float32(invK97), float32(K97))
+	} else {
+		openJPEGEncodeStep1CombinedFloat32(data, dn, sn, float32(K97), float32(invK97))
+	}
+
+	out := make([]float32, len(data))
+	if even {
+		for i := int32(0); i < sn; i++ {
+			out[i] = data[2*i]
+		}
+		for i := int32(0); i < dn; i++ {
+			out[sn+i] = data[2*i+1]
+		}
+	} else {
+		for i := int32(0); i < sn; i++ {
+			out[i] = data[2*i+1]
+		}
+		for i := int32(0); i < dn; i++ {
+			out[sn+i] = data[2*i]
+		}
+	}
+	return out
+}
+
+func openJPEGEncodeStep2Float32(data []float32, flStart, fwStart, end, m int32, c float32) {
+	imax := min32(end, m)
+	if imax > 0 {
+		fw := fwStart
+		fl := flStart
+		data[fw-1] += (data[fl] + data[fw]) * c
+		fw += 2
+		for i := int32(1); i < imax; i++ {
+			data[fw-1] += (data[fw-2] + data[fw]) * c
+			fw += 2
+		}
+	}
+	if m < end {
+		fw := fwStart + 2*m
+		data[fw-1] += (2 * data[fw-2]) * c
+	}
+}
+
+func openJPEGEncodeStep1CombinedFloat32(data []float32, itersC1, itersC2 int32, c1, c2 float32) {
+	itersCommon := min32(itersC1, itersC2)
+	var i int32
+	fw := int32(0)
+	for i = 0; i < itersCommon; i++ {
+		data[fw] *= c1
+		data[fw+1] *= c2
+		fw += 2
+	}
+	if i < itersC1 {
+		data[fw] *= c1
+	} else if i < itersC2 {
+		data[fw+1] *= c2
+	}
+}
+
+func TestInverse97_1DMatchesOpenJPEGDecode(t *testing.T) {
 	tests := []struct {
 		name string
-		size int
+		data []float32
 		even bool
 	}{
-		{"Even start size 6", 6, true},
-		{"Odd start size 6", 6, false},
-		{"Even start size 9", 9, true},
-		{"Odd start size 9", 9, false},
+		{"Even size 2", []float32{2, 3}, true},
+		{"Even size 5", []float32{1.25, -2.5, 3.75, -4.5, 5.25}, true},
+		{"Odd size 5", []float32{1.25, -2.5, 3.75, -4.5, 5.25}, false},
+		{"Even size 8", []float32{-7, -3, 0, 2, 5, 9, 13, 17}, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			original := make([]float64, tt.size)
-			for i := range original {
-				original[i] = float64((i*5)%13) + 0.25
-			}
+			got := append([]float32(nil), tt.data...)
+			want := openJPEGInverse97_1DFloat32(tt.data, tt.even)
 
-			data := make([]float64, tt.size)
-			copy(data, original)
+			Inverse97_1DOpenJPEGWithParity(got, tt.even)
 
-			Forward97_1DWithParity(data, tt.even)
-			Inverse97_1DWithParity(data, tt.even)
-
-			maxError := 0.0
-			for i := range data {
-				err := math.Abs(data[i] - original[i])
-				if err > maxError {
-					maxError = err
+			for i := range got {
+				if got[i] != want[i] {
+					t.Fatalf("sample %d = %.10f, want OpenJPEG %.10f", i, got[i], want[i])
 				}
-			}
-			if maxError > 1e-10 {
-				t.Errorf("Parity reconstruction error too large: %e", maxError)
 			}
 		})
 	}
 }
 
-// TestForwardInverse97_2D tests 2D forward and inverse 9/7 transform
-func TestForwardInverse97_2D(t *testing.T) {
-	tests := []struct {
-		name   string
-		width  int
-		height int
-	}{
-		{"4x4", 4, 4},
-		{"8x8", 8, 8},
-		{"16x16", 16, 16},
-		{"32x32", 32, 32},
-		{"Non-square 8x16", 8, 16},
-	}
+func TestInverse97_1DWrapperUsesOpenJPEGDecode(t *testing.T) {
+	input := []float64{1.25, -2.5, 3.75, -4.5, 5.25}
+	got := append([]float64(nil), input...)
+	want32 := openJPEGInverse97_1DFloat32([]float32{1.25, -2.5, 3.75, -4.5, 5.25}, false)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			size := tt.width * tt.height
+	Inverse97_1DWithParity(got, false)
 
-			// Create test image
-			original := make([]float64, size)
-			for y := 0; y < tt.height; y++ {
-				for x := 0; x < tt.width; x++ {
-					original[y*tt.width+x] = float64((x+y)%10) + 0.5
-				}
-			}
-
-			// Make a copy
-			data := make([]float64, size)
-			copy(data, original)
-
-			// Forward transform
-			Forward97_2D(data, tt.width, tt.height, tt.width)
-
-			// Inverse transform
-			Inverse97_2D(data, tt.width, tt.height, tt.width)
-
-			// Check reconstruction
-			maxError := 0.0
-			for i := range data {
-				err := math.Abs(data[i] - original[i])
-				if err > maxError {
-					maxError = err
-				}
-			}
-
-			if maxError > 1e-10 {
-				t.Errorf("Reconstruction error too large: %e", maxError)
-			}
-		})
+	for i := range got {
+		if got[i] != float64(want32[i]) {
+			t.Fatalf("sample %d = %.10f, want wrapper to expose OpenJPEG %.10f", i, got[i], want32[i])
+		}
 	}
 }
 
-func TestForwardInverse97_2DParity(t *testing.T) {
-	width, height := 15, 21
-	size := width * height
-	original := make([]float64, size)
-	for y := 0; y < height; y++ {
+func TestInverseMultilevel97MatchesOpenJPEGDecode(t *testing.T) {
+	width, height := 4, 3
+	input := []float32{
+		1, 2, 3, 4,
+		5, 6, 7, 8,
+		9, 10, 11, 12,
+	}
+	got := append([]float32(nil), input...)
+	want := append([]float32(nil), input...)
+
+	openJPEGInverse97_2DFloat32(want, width, height, width, false, true)
+	InverseMultilevel97OpenJPEGWithParity(got, width, height, 1, 1, 0)
+
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("sample %d = %.10f, want OpenJPEG %.10f", i, got[i], want[i])
+		}
+	}
+}
+
+func openJPEGInverse97_1DFloat32(input []float32, even bool) []float32 {
+	data := append([]float32(nil), input...)
+	width := len(data)
+	var sn, dn int32
+	if even {
+		sn = int32((width + 1) >> 1)
+		dn = int32(width) - sn
+	} else {
+		sn = int32(width >> 1)
+		dn = int32(width) - sn
+	}
+
+	var a, b int32
+	if even {
+		a = 0
+		b = 1
+	} else {
+		a = 1
+		b = 0
+	}
+
+	openJPEGInterleaveHFloat32(data, dn, sn, even)
+	openJPEGDecodeStep1Float32(data, a, sn, float32(K97))
+	openJPEGDecodeStep1Float32(data, b, dn, float32(twoInvK97))
+	openJPEGDecodeStep2Float32(data, b, a+1, sn, min32(sn, dn-a), float32(-delta97))
+	openJPEGDecodeStep2Float32(data, a, b+1, dn, min32(dn, sn-b), float32(-gamma97))
+	openJPEGDecodeStep2Float32(data, b, a+1, sn, min32(sn, dn-a), float32(-beta97))
+	openJPEGDecodeStep2Float32(data, a, b+1, dn, min32(dn, sn-b), float32(-alpha97))
+	return data
+}
+
+func openJPEGInverse97_2DFloat32(data []float32, width, height, stride int, evenRow, evenCol bool) {
+	if width > 1 {
+		row := make([]float32, width)
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				row[x] = data[y*stride+x]
+			}
+			row = openJPEGInverse97_1DFloat32(row, evenRow)
+			for x := 0; x < width; x++ {
+				data[y*stride+x] = row[x]
+			}
+		}
+	}
+
+	if height > 1 {
+		col := make([]float32, height)
 		for x := 0; x < width; x++ {
-			original[y*width+x] = float64(x-y) * 0.5
+			for y := 0; y < height; y++ {
+				col[y] = data[y*stride+x]
+			}
+			col = openJPEGInverse97_1DFloat32(col, evenCol)
+			for y := 0; y < height; y++ {
+				data[y*stride+x] = col[y]
+			}
 		}
-	}
-
-	data := make([]float64, size)
-	copy(data, original)
-
-	Forward97_2DWithParity(data, width, height, width, false, false)
-	Inverse97_2DWithParity(data, width, height, width, false, false)
-
-	maxError := 0.0
-	for i := range data {
-		err := math.Abs(data[i] - original[i])
-		if err > maxError {
-			maxError = err
-		}
-	}
-	if maxError > 1e-10 {
-		t.Errorf("2D parity reconstruction error too large: %e", maxError)
 	}
 }
 
-// TestForwardInverseMultilevel97 tests multilevel 9/7 transform
-func TestForwardInverseMultilevel97(t *testing.T) {
-	tests := []struct {
-		name   string
-		width  int
-		height int
-		levels int
-	}{
-		{"16x16 1-level", 16, 16, 1},
-		{"32x32 2-level", 32, 32, 2},
-		{"64x64 3-level", 64, 64, 3},
-		{"128x128 4-level", 128, 128, 4},
+func openJPEGInterleaveHFloat32(data []float32, dn, sn int32, even bool) {
+	tmp := make([]float32, int(dn+sn))
+	if even {
+		for i := int32(0); i < sn; i++ {
+			tmp[2*i] = data[i]
+		}
+		for i := int32(0); i < dn; i++ {
+			tmp[2*i+1] = data[sn+i]
+		}
+	} else {
+		for i := int32(0); i < sn; i++ {
+			tmp[2*i+1] = data[i]
+		}
+		for i := int32(0); i < dn; i++ {
+			tmp[2*i] = data[sn+i]
+		}
 	}
+	copy(data, tmp)
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			size := tt.width * tt.height
-
-			// Create test image with gradient pattern
-			original := make([]float64, size)
-			for y := 0; y < tt.height; y++ {
-				for x := 0; x < tt.width; x++ {
-					original[y*tt.width+x] = float64(x+y) / float64(tt.width+tt.height)
-				}
-			}
-
-			// Make a copy
-			data := make([]float64, size)
-			copy(data, original)
-
-			// Forward multilevel transform
-			ForwardMultilevel97(data, tt.width, tt.height, tt.levels)
-
-			// Inverse multilevel transform
-			InverseMultilevel97(data, tt.width, tt.height, tt.levels)
-
-			// Check reconstruction
-			maxError := 0.0
-			avgError := 0.0
-			for i := range data {
-				err := math.Abs(data[i] - original[i])
-				if err > maxError {
-					maxError = err
-				}
-				avgError += err
-			}
-			avgError /= float64(len(data))
-
-			if maxError > 1e-9 {
-				t.Errorf("Max reconstruction error too large: %e", maxError)
-			}
-			if avgError > 1e-10 {
-				t.Errorf("Avg reconstruction error too large: %e", avgError)
-			}
-		})
+func openJPEGDecodeStep1Float32(data []float32, start, end int32, c float32) {
+	for i := int32(0); i < end; i++ {
+		data[start+2*i] *= c
 	}
 }
 
-func TestForwardInverseMultilevel97Parity(t *testing.T) {
-	width, height := 64, 48
-	levels := 3
-	x0, y0 := 3, 1
-	size := width * height
-
-	original := make([]float64, size)
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			original[y*width+x] = float64(x+y) / 7.0
+func openJPEGDecodeStep2Float32(data []float32, flStart, fwStart, end, m int32, c float32) {
+	imax := min32(end, m)
+	if imax > 0 {
+		fw := fwStart
+		fl := flStart
+		data[fw-1] += (data[fl] + data[fw]) * c
+		fw += 2
+		for i := int32(1); i < imax; i++ {
+			data[fw-1] += (data[fw-2] + data[fw]) * c
+			fw += 2
 		}
 	}
-
-	data := make([]float64, size)
-	copy(data, original)
-
-	ForwardMultilevel97WithParity(data, width, height, levels, x0, y0)
-	InverseMultilevel97WithParity(data, width, height, levels, x0, y0)
-
-	maxError := 0.0
-	for i := range data {
-		err := math.Abs(data[i] - original[i])
-		if err > maxError {
-			maxError = err
-		}
-	}
-	if maxError > 1e-9 {
-		t.Errorf("Multilevel parity reconstruction error too large: %e", maxError)
+	if m < end {
+		fw := fwStart + 2*m
+		data[fw-1] += (2 * data[fw-2]) * c
 	}
 }
 
@@ -347,17 +358,15 @@ func TestEdgeCases97(t *testing.T) {
 	})
 
 	t.Run("Size 2", func(t *testing.T) {
-		original := []float64{10.5, 20.5}
-		data := make([]float64, 2)
-		copy(data, original)
+		data := []float64{10.5, 20.5}
+		want := openJPEGInverse97_1DFloat32([]float32{10.5, 20.5}, true)
 
-		Forward97_1D(data)
 		Inverse97_1D(data)
 
 		for i := range data {
-			if math.Abs(data[i]-original[i]) > 1e-10 {
-				t.Errorf("Reconstruction failed at %d: got %f, want %f",
-					i, data[i], original[i])
+			if data[i] != float64(want[i]) {
+				t.Errorf("OpenJPEG decode mismatch at %d: got %f, want %f",
+					i, data[i], want[i])
 			}
 		}
 	})
@@ -443,7 +452,8 @@ func TestConversionFunctions(t *testing.T) {
 	})
 }
 
-// TestLossyNature97 tests that 9/7 transform is lossy when using int32 conversion
+// TestLossyNature97 tests that OpenJPEG's irreversible decode path is lossy
+// and deterministic when converted back to integer samples.
 func TestLossyNature97(t *testing.T) {
 	width, height := 32, 32
 	size := width * height
@@ -454,15 +464,12 @@ func TestLossyNature97(t *testing.T) {
 		original[i] = int32(i % 256)
 	}
 
-	// Convert to float64
-	data := ConvertInt32ToFloat64(original)
+	data := ConvertInt32ToFloat32(original)
 
-	// Apply transform
-	ForwardMultilevel97(data, width, height, 2)
-	InverseMultilevel97(data, width, height, 2)
+	ForwardMultilevel97Float32WithParity(data, width, height, 2, 0, 0)
+	InverseMultilevel97OpenJPEGWithParity(data, width, height, 2, 0, 0)
 
-	// Convert back to int32
-	result := ConvertFloat64ToInt32(data)
+	result := ConvertFloat32ToInt32OpenJPEG(data)
 
 	// Calculate error
 	differences := 0
@@ -480,13 +487,14 @@ func TestLossyNature97(t *testing.T) {
 		}
 	}
 
-	// Some differences expected due to rounding, but should be small
 	t.Logf("Pixels with differences: %d / %d", differences, size)
 	t.Logf("Max error: %d", maxError)
 
-	// Error should be very small (typically 0-1 due to rounding)
-	if maxError > 2 {
-		t.Errorf("Max error too large: %d (expected <= 2)", maxError)
+	if differences == 0 {
+		t.Fatal("expected irreversible OpenJPEG 9/7 decode path to lose information")
+	}
+	if maxError == 0 {
+		t.Fatal("expected non-zero maximum error")
 	}
 }
 

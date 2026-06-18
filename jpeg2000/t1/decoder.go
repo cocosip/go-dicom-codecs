@@ -31,11 +31,12 @@ type Decoder struct {
 	orientation int
 
 	// Decoding parameters
-	roishift     int  // ROI shift value
-	cblkstyle    int  // Code-block style flags
-	resetctx     bool // Reset context on each pass
-	termall      bool // Terminate all passes
-	segmentation bool // Use segmentation symbols
+	roishift               int  // ROI shift value
+	cblkstyle              int  // Code-block style flags
+	resetctx               bool // Reset context on each pass
+	termall                bool // Terminate all passes
+	segmentation           bool // Use segmentation symbols
+	openJPEGReconstruction bool // Use OpenJPEG T1 decode reconstruction centers
 }
 
 // NewT1Decoder creates a new Tier-1 decoder
@@ -64,6 +65,12 @@ func NewT1Decoder(width, height int, cblkstyle int) *Decoder {
 // SetOrientation sets the subband orientation for zero coding context lookup.
 func (t1 *Decoder) SetOrientation(orient int) {
 	t1.orientation = orient
+}
+
+// SetOpenJPEGReconstruction switches decoded coefficient reconstruction to
+// OpenJPEG's one-plus-half / poshalf rules.
+func (t1 *Decoder) SetOpenJPEGReconstruction(enabled bool) {
+	t1.openJPEGReconstruction = enabled
 }
 
 // DecodeWithBitplane decodes a code-block starting from a specific bitplane
@@ -429,18 +436,10 @@ func (t1 *Decoder) decodeSigPropPass(raw bool) {
 						sign = signBit ^ signPred
 					}
 
-					// Set coefficient value (2^bitplane) and sign
-					// Note: This is the first time this coefficient becomes significant
-					val := int32(1) << uint(t1.bitplane)
 					if sign != 0 {
 						t1.flags[idx] |= T1Sign
 					}
-					// Apply sign to value
-					if t1.flags[idx]&T1Sign != 0 {
-						t1.data[idx] = -val
-					} else {
-						t1.data[idx] = val
-					}
+					t1.data[idx] = t1.reconstructSignificantValue(t1.bitplane, sign)
 
 					// Mark as significant (VISIT already set for this SPP sample).
 					t1.flags[idx] |= T1Sig
@@ -481,14 +480,7 @@ func (t1 *Decoder) decodeMagRefPass(raw bool) {
 					bit = t1.mqc.Decode(int(ctx))
 				}
 
-				// Update coefficient magnitude
-				if bit != 0 {
-					if t1.data[idx] >= 0 {
-						t1.data[idx] += int32(1) << uint(t1.bitplane)
-					} else {
-						t1.data[idx] -= int32(1) << uint(t1.bitplane)
-					}
-				}
+				t1.data[idx] = t1.refineReconstructedValue(t1.data[idx], t1.bitplane, bit)
 
 				// Mark as refined (OpenJPEG MU flag behavior).
 				t1.flags[idx] |= T1Refine
@@ -573,16 +565,10 @@ func (t1 *Decoder) decodeCleanupPass() {
 							signPred := getSignPrediction(flags)
 							sign := signBit ^ signPred
 
-							// Set coefficient value (2^bitplane) and sign
-							val := int32(1) << uint(t1.bitplane)
 							if sign != 0 {
 								t1.flags[idx] |= T1Sign
 							}
-							if t1.flags[idx]&T1Sign != 0 {
-								t1.data[idx] = -val
-							} else {
-								t1.data[idx] = val
-							}
+							t1.data[idx] = t1.reconstructSignificantValue(t1.bitplane, sign)
 
 							// Mark as significant. Cleanup pass does not keep PI/VISIT set.
 							t1.flags[idx] |= T1Sig
@@ -621,16 +607,10 @@ func (t1 *Decoder) decodeCleanupPass() {
 					signPred := getSignPrediction(flags)
 					sign := signBit ^ signPred
 
-					// Set coefficient value (2^bitplane) and sign
-					val := int32(1) << uint(t1.bitplane)
 					if sign != 0 {
 						t1.flags[idx] |= T1Sign
 					}
-					if t1.flags[idx]&T1Sign != 0 {
-						t1.data[idx] = -val
-					} else {
-						t1.data[idx] = val
-					}
+					t1.data[idx] = t1.reconstructSignificantValue(t1.bitplane, sign)
 
 					// Mark as significant. Cleanup pass does not keep PI/VISIT set.
 					t1.flags[idx] |= T1Sig
@@ -645,6 +625,48 @@ func (t1 *Decoder) decodeCleanupPass() {
 		}
 	}
 
+}
+
+func reconstructSignificantValue(bitplane int, sign int) int32 {
+	one := int32(1) << uint(bitplane)
+	half := one >> 1
+	val := one | half
+	if sign != 0 {
+		return -val
+	}
+	return val
+}
+
+func refineReconstructedValue(current int32, bitplane int, bit int) int32 {
+	poshalf := (int32(1) << uint(bitplane)) >> 1
+	if (bit != 0) != (current < 0) {
+		return current + poshalf
+	}
+	return current - poshalf
+}
+
+func (t1 *Decoder) reconstructSignificantValue(bitplane int, sign int) int32 {
+	if t1.openJPEGReconstruction {
+		return reconstructSignificantValue(bitplane, sign)
+	}
+	val := int32(1) << uint(bitplane)
+	if sign != 0 {
+		return -val
+	}
+	return val
+}
+
+func (t1 *Decoder) refineReconstructedValue(current int32, bitplane int, bit int) int32 {
+	if t1.openJPEGReconstruction {
+		return refineReconstructedValue(current, bitplane, bit)
+	}
+	if bit == 0 {
+		return current
+	}
+	if current >= 0 {
+		return current + (int32(1) << uint(bitplane))
+	}
+	return current - (int32(1) << uint(bitplane))
 }
 
 // updateNeighborFlags updates the neighbor significance flags

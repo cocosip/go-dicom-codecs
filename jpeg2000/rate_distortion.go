@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/cocosip/go-dicom-codec/jpeg2000/t1"
+	"github.com/cocosip/go-dicom-codec/jpeg2000/t2"
 )
 
 // LayerAllocation represents pass allocation for quality layers
@@ -522,6 +523,337 @@ func AllocateLayersWithLambda(passesPerBlock [][]t1.PassData, numLayers int, lay
 		copy(selected, sel)
 	}
 	return alloc
+}
+
+// AllocateLayersOpenJPEGThreshold approximates OpenJPEG's opj_tcd_makelayer loop:
+// each positive-rate layer selects all remaining passes whose incremental
+// distortion/rate slope is above a searched threshold; a zero-rate layer takes
+// all remaining passes.
+func AllocateLayersOpenJPEGThreshold(passesPerBlock [][]t1.PassData, layerBudgets []float64) *LayerAllocation {
+	return AllocateLayersOpenJPEGThresholdMeasured(passesPerBlock, layerBudgets, nil)
+}
+
+// PacketRateMeasurer reports cumulative packet bytes through a candidate layer.
+type PacketRateMeasurer func(layer int, selected []int, committed [][]int) (int, error)
+
+// AllocateLayersOpenJPEGThresholdMeasured mirrors OpenJPEG's threshold search.
+// When measurer is provided it validates each temporary makelayer selection
+// with packet header+body bytes, equivalent to opj_t2_encode_packets(THRESH_CALC).
+func AllocateLayersOpenJPEGThresholdMeasured(passesPerBlock [][]t1.PassData, layerBudgets []float64, measurer PacketRateMeasurer) *LayerAllocation {
+	numBlocks := len(passesPerBlock)
+	numLayers := len(layerBudgets)
+	if numLayers <= 0 {
+		numLayers = 1
+	}
+	alloc := &LayerAllocation{
+		NumLayers:       numLayers,
+		CodeBlockPasses: make([][]int, numBlocks),
+	}
+	for i := range alloc.CodeBlockPasses {
+		alloc.CodeBlockPasses[i] = make([]int, numLayers)
+	}
+	if numBlocks == 0 {
+		return alloc
+	}
+
+	selected := make([]int, numBlocks)
+	minSlope, maxSlope := rdSlopeRange(passesPerBlock)
+	fullRate := 0.0
+	for i, passes := range passesPerBlock {
+		fullRate += float64(getPassBytes(passes, len(passes)))
+		if len(passes) == 0 {
+			selected[i] = 0
+		}
+	}
+
+	for layer := 0; layer < numLayers; layer++ {
+		budget := fullRate
+		if layer < len(layerBudgets) {
+			budget = layerBudgets[layer]
+		}
+		if budget <= 0 || budget >= fullRate {
+			for cb, passes := range passesPerBlock {
+				selected[cb] = len(passes)
+				alloc.CodeBlockPasses[cb][layer] = selected[cb]
+			}
+			continue
+		}
+
+		lo, hi := minSlope, maxSlope
+		thresh := 0.0
+		stableThresh := 0.0
+		lastLayerAllocationOK := false
+		lastCandidate := []int(nil)
+		for i := 0; i < 128; i++ {
+			newThresh := (lo + hi) * 0.5
+			if math.Abs(newThresh-thresh) <= 0.5*1e-5*thresh {
+				break
+			}
+			thresh = newThresh
+			candidate := selectOpenJPEGThreshold(passesPerBlock, selected, thresh)
+			allocationSame := i != 0 && sameSelection(candidate, lastCandidate)
+			lastCandidate = candidate
+
+			allocationOK := true
+			if allocationSame && !lastLayerAllocationOK {
+				allocationOK = false
+			} else if !allocationSame {
+				rate := selectionRate(passesPerBlock, candidate)
+				if measurer != nil {
+					if measured, err := measurer(layer, candidate, alloc.CodeBlockPasses); err == nil {
+						rate = float64(measured)
+					}
+				}
+				allocationOK = rate <= budget
+			}
+
+			if !allocationOK {
+				lastLayerAllocationOK = false
+				lo = thresh
+				continue
+			}
+
+			lastLayerAllocationOK = true
+			hi = thresh
+			stableThresh = thresh
+		}
+
+		goodThresh := thresh
+		if stableThresh != 0 {
+			goodThresh = stableThresh
+		}
+		best := selectOpenJPEGThreshold(passesPerBlock, selected, goodThresh)
+		copy(selected, best)
+		for cb := range passesPerBlock {
+			alloc.CodeBlockPasses[cb][layer] = selected[cb]
+			if layer > 0 && alloc.CodeBlockPasses[cb][layer] < alloc.CodeBlockPasses[cb][layer-1] {
+				alloc.CodeBlockPasses[cb][layer] = alloc.CodeBlockPasses[cb][layer-1]
+				selected[cb] = alloc.CodeBlockPasses[cb][layer]
+			}
+		}
+	}
+	return alloc
+}
+
+func sameSelection(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func MeasureOpenJPEGLayerSelectionBytes(packetEncs []*t2.PacketEncoder, blocks []*t2.PrecinctCodeBlock, numLayers int, layer int, selected []int, committed [][]int) (int, error) {
+	snapshots := snapshotLayerAssignments(blocks)
+	applyCandidateLayerAssignments(blocks, numLayers, layer, selected, committed)
+	defer restoreLayerAssignments(blocks, snapshots)
+
+	total := 0
+	for _, pe := range packetEncs {
+		if pe == nil {
+			continue
+		}
+		pe.ResetState()
+		packets, err := pe.EncodePacketsToLayer(layer + 1)
+		if err != nil {
+			return 0, err
+		}
+		for _, p := range packets {
+			total += PacketPayloadLen(p.Header) + PacketPayloadLen(p.Body)
+		}
+	}
+	return total, nil
+}
+
+type layerAssignmentSnapshot struct {
+	layerPasses []int
+	layerData   [][]byte
+	numLenBits  int
+	included    bool
+}
+
+func snapshotLayerAssignments(blocks []*t2.PrecinctCodeBlock) []layerAssignmentSnapshot {
+	snapshots := make([]layerAssignmentSnapshot, len(blocks))
+	for i, cb := range blocks {
+		if cb == nil {
+			continue
+		}
+		snapshots[i] = layerAssignmentSnapshot{
+			layerPasses: append([]int(nil), cb.LayerPasses...),
+			layerData:   append([][]byte(nil), cb.LayerData...),
+			numLenBits:  cb.NumLenBits,
+			included:    cb.Included,
+		}
+	}
+	return snapshots
+}
+
+func applyCandidateLayerAssignments(blocks []*t2.PrecinctCodeBlock, numLayers int, layer int, selected []int, committed [][]int) {
+	for idx, cb := range blocks {
+		if cb == nil {
+			continue
+		}
+		if len(cb.LayerPasses) < numLayers {
+			next := make([]int, numLayers)
+			copy(next, cb.LayerPasses)
+			cb.LayerPasses = next
+		}
+		if len(cb.LayerData) < numLayers {
+			next := make([][]byte, numLayers)
+			copy(next, cb.LayerData)
+			cb.LayerData = next
+		}
+		for l := 0; l <= layer && l < numLayers; l++ {
+			passCount := 0
+			if l == layer {
+				if idx < len(selected) {
+					passCount = selected[idx]
+				}
+			} else if idx < len(committed) && l < len(committed[idx]) {
+				passCount = committed[idx][l]
+			}
+			applyCandidateLayerData(cb, l, passCount)
+		}
+	}
+}
+
+func applyCandidateLayerData(cb *t2.PrecinctCodeBlock, layer, passCount int) {
+	if passCount < 0 {
+		passCount = 0
+	}
+	if passCount > len(cb.Passes) {
+		passCount = len(cb.Passes)
+	}
+	cb.LayerPasses[layer] = passCount
+	start := 0
+	if layer > 0 {
+		prevPasses := cb.LayerPasses[layer-1]
+		if prevPasses > 0 && prevPasses <= len(cb.Passes) {
+			start = cb.Passes[prevPasses-1].Rate
+			if start == 0 {
+				start = cb.Passes[prevPasses-1].ActualBytes
+			}
+		}
+	}
+	end := start
+	if passCount > 0 {
+		end = cb.Passes[passCount-1].Rate
+		if end == 0 {
+			end = cb.Passes[passCount-1].ActualBytes
+		}
+	}
+	if end < start {
+		end = start
+	}
+	if start < 0 {
+		start = 0
+	}
+	if end > len(cb.CompleteData) {
+		end = len(cb.CompleteData)
+	}
+	if start > end {
+		start = end
+	}
+	cb.LayerData[layer] = cb.CompleteData[start:end]
+}
+
+func restoreLayerAssignments(blocks []*t2.PrecinctCodeBlock, snapshots []layerAssignmentSnapshot) {
+	for i, cb := range blocks {
+		if cb == nil || i >= len(snapshots) {
+			continue
+		}
+		cb.LayerPasses = snapshots[i].layerPasses
+		cb.LayerData = snapshots[i].layerData
+		cb.NumLenBits = snapshots[i].numLenBits
+		cb.Included = snapshots[i].included
+	}
+}
+
+// PacketPayloadLen returns the already-encoded packet payload byte count.
+func PacketPayloadLen(data []byte) int {
+	return len(data)
+}
+
+func rdSlopeRange(passesPerBlock [][]t1.PassData) (float64, float64) {
+	minSlope := math.MaxFloat64
+	maxSlope := 0.0
+	for _, passes := range passesPerBlock {
+		prevRate := 0
+		prevDist := 0.0
+		for _, p := range passes {
+			rate := p.Rate
+			if rate == 0 {
+				rate = p.ActualBytes
+			}
+			dr := rate - prevRate
+			dd := p.Distortion - prevDist
+			if dr > 0 {
+				slope := dd / float64(dr)
+				if slope < minSlope {
+					minSlope = slope
+				}
+				if slope > maxSlope {
+					maxSlope = slope
+				}
+			}
+			prevRate = rate
+			prevDist = p.Distortion
+		}
+	}
+	if minSlope == math.MaxFloat64 {
+		minSlope = 0
+	}
+	return minSlope, maxSlope
+}
+
+func selectOpenJPEGThreshold(passesPerBlock [][]t1.PassData, selected []int, threshold float64) []int {
+	const dblEpsilon = 2.220446049250313e-16
+	out := append([]int(nil), selected...)
+	for cb, passes := range passesPerBlock {
+		n := selected[cb]
+		for passIdx := n; passIdx < len(passes); passIdx++ {
+			prev := n - 1
+			prevRate := 0
+			prevDist := 0.0
+			if prev >= 0 {
+				prevRate = passes[prev].Rate
+				if prevRate == 0 {
+					prevRate = passes[prev].ActualBytes
+				}
+				prevDist = passes[prev].Distortion
+			}
+			rate := passes[passIdx].Rate
+			if rate == 0 {
+				rate = passes[passIdx].ActualBytes
+			}
+			dr := rate - prevRate
+			dd := passes[passIdx].Distortion - prevDist
+			if dr == 0 {
+				if dd != 0 {
+					n = passIdx + 1
+				}
+				continue
+			}
+			if threshold-(dd/float64(dr)) < dblEpsilon {
+				n = passIdx + 1
+			}
+		}
+		out[cb] = n
+	}
+	return out
+}
+
+func selectionRate(passesPerBlock [][]t1.PassData, selected []int) float64 {
+	total := 0.0
+	for cb, passes := range passesPerBlock {
+		selBytes := getPassBytes(passes, selected[cb])
+		total += float64(selBytes)
+	}
+	return total
 }
 
 func adjustSelectionToBudget(passesPerBlock [][]t1.PassData, prev []int, selected []int, targetBudget float64) []int {

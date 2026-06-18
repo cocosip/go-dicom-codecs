@@ -15,6 +15,7 @@ type PassData struct {
 	Rate        int     // Cumulative bytes for R-D optimization (includes rate_extra_bytes)
 	ActualBytes int     // Actual cumulative bytes in buffer (for slicing data)
 	Len         int     // Length of this pass in bytes (Rate[i] - Rate[i-1])
+	Terminated  bool    // OpenJPEG pass->term flag
 	Distortion  float64 // Cumulative distortion (for rate-distortion optimization)
 }
 
@@ -75,15 +76,7 @@ func (t1 *Encoder) EncodeLayered(data []int32, numPasses int, roishift int, laye
 	// Determine maximum bit-plane
 	maxBitplane := t1.findMaxBitplane()
 	if maxBitplane < 0 {
-		// All coefficients are zero - return empty pass
-		return []PassData{{
-			PassIndex:  0,
-			Bitplane:   0,
-			PassType:   2, // CP
-			Rate:       0,
-			Len:        0,
-			Distortion: 0,
-		}}, []byte{}, nil
+		return nil, []byte{}, nil
 	}
 
 	// Initialize MQ encoder
@@ -99,10 +92,7 @@ func (t1 *Encoder) EncodeLayered(data []int32, numPasses int, roishift int, laye
 	// Result array
 	passes := make([]PassData, 0, numPasses)
 
-	// Calculate initial distortion (all bits unencoded)
-	// This is the baseline: sum of squared coefficients
-	initialDist := calculateDistortion(t1.data, t1.width, t1.height, maxBitplane+1, 0)
-	cumDistReduction := 0.0 // Cumulative distortion reduction from initial state
+	cumDistReduction := 0.0
 
 	// Encode passes using OpenJPEG sequencing.
 	passIdx := 0
@@ -136,19 +126,26 @@ func (t1 *Encoder) EncodeLayered(data []int32, numPasses int, roishift int, laye
 			prevTerminated = false
 		}
 
+		nmsedec := 0
 		switch passType {
 		case 0:
-			t1.encodeSigPropPass(raw)
+			nmsedec = t1.encodeSigPropPass(raw)
 		case 1:
-			t1.encodeMagRefPass(raw)
+			nmsedec = t1.encodeMagRefPass(raw)
 		case 2:
-			t1.encodeCleanupPass()
+			nmsedec = t1.encodeCleanupPass()
 			if (t1.cblkstyle & CblkStyleSegsym) != 0 {
 				t1.mqe.SegmarkEnc()
 			}
 		}
+		bpno := t1.bitplane - t1.nmseDecFracBits
+		if bpno < 0 {
+			bpno = 0
+		}
+		bitplaneScale := float64(int64(1) << uint(bpno))
+		cumDistReduction += float64(nmsedec) * t1.distortionWeight * bitplaneScale * bitplaneScale
 
-		shouldTerminate := isTerminatingPass(t1.bitplane, maxBitplane, passType, t1.cblkstyle) || shouldTerminateLayer(passIdx, layerBoundaries, cblksty)
+		shouldTerminate := isTerminatingPass(t1.bitplane, maxBitplane, passType, t1.cblkstyle)
 		if shouldTerminate {
 			if raw {
 				t1.mqe.BypassFlushEnc((t1.cblkstyle & CblkStylePterm) != 0)
@@ -178,15 +175,13 @@ func (t1 *Encoder) EncodeLayered(data []int32, numPasses int, roishift int, laye
 			}
 		}
 
-		remainingDist := calculateDistortion(t1.data, t1.width, t1.height, t1.bitplane, passType)
-		cumDistReduction = initialDist - remainingDist
-
 		passData := PassData{
 			PassIndex:   passIdx,
 			Bitplane:    t1.bitplane,
 			PassType:    passType,
 			Rate:        rate,
 			ActualBytes: actualBytes,
+			Terminated:  shouldTerminate,
 			Distortion:  cumDistReduction,
 		}
 		passes = append(passes, passData)
@@ -208,8 +203,9 @@ func (t1 *Encoder) EncodeLayered(data []int32, numPasses int, roishift int, laye
 		fullMQData = t1.mqe.Flush()
 	}
 
-	// Calculate Len for each pass (Rate[i] - Rate[i-1])
-	// Following OpenJPEG's implementation
+	normalizePassRates(passes, fullMQData)
+
+	// Calculate Len for each pass (Rate[i] - Rate[i-1]).
 	for i := range passes {
 		if i == 0 {
 			passes[i].Len = passes[i].Rate
@@ -220,6 +216,27 @@ func (t1 *Encoder) EncodeLayered(data []int32, numPasses int, roishift int, laye
 
 	// Return passes with rate/distortion info and the complete MQ data
 	return passes, fullMQData, nil
+}
+
+func normalizePassRates(passes []PassData, data []byte) {
+	if len(passes) == 0 {
+		return
+	}
+	lastRate := len(data)
+	for i := len(passes) - 1; i >= 0; i-- {
+		if passes[i].Rate > lastRate {
+			passes[i].Rate = lastRate
+		} else {
+			lastRate = passes[i].Rate
+		}
+		if passes[i].Rate > 0 && passes[i].Rate <= len(data) && data[passes[i].Rate-1] == 0xFF {
+			passes[i].Rate--
+			lastRate = passes[i].Rate
+		}
+		if passes[i].ActualBytes > passes[i].Rate {
+			passes[i].ActualBytes = passes[i].Rate
+		}
+	}
 }
 
 // calculateDistortion computes accurate distortion based on reconstruction error.

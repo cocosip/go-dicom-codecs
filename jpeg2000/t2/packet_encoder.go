@@ -161,26 +161,42 @@ func (pe *PacketEncoder) AddCodeBlock(component, resolution, precinctIdx int, co
 // EncodePackets encodes all packets according to progression order
 func (pe *PacketEncoder) EncodePackets() ([]Packet, error) {
 	pe.packets = make([]Packet, 0)
+	return pe.encodePacketsToLayer(pe.numLayers)
+}
 
+// EncodePacketsToLayer encodes packets up to maxLayers, mirroring OpenJPEG's
+// THRESH_CALC path where rate allocation measures packets through layno + 1.
+func (pe *PacketEncoder) EncodePacketsToLayer(maxLayers int) ([]Packet, error) {
+	if maxLayers < 0 {
+		maxLayers = 0
+	}
+	if maxLayers > pe.numLayers {
+		maxLayers = pe.numLayers
+	}
+	pe.packets = make([]Packet, 0)
+	return pe.encodePacketsToLayer(maxLayers)
+}
+
+func (pe *PacketEncoder) encodePacketsToLayer(maxLayers int) ([]Packet, error) {
 	switch pe.progression {
 	case ProgressionLRCP:
-		return pe.encodeLRCP()
+		return pe.encodeLRCP(maxLayers)
 	case ProgressionRLCP:
-		return pe.encodeRLCP()
+		return pe.encodeRLCP(maxLayers)
 	case ProgressionRPCL:
-		return pe.encodeRPCL()
+		return pe.encodeRPCL(maxLayers)
 	case ProgressionPCRL:
-		return pe.encodePCRL()
+		return pe.encodePCRL(maxLayers)
 	case ProgressionCPRL:
-		return pe.encodeCPRL()
+		return pe.encodeCPRL(maxLayers)
 	default:
 		return nil, fmt.Errorf("unsupported progression order: %v", pe.progression)
 	}
 }
 
 // encodeLRCP encodes packets in Layer-Resolution-Component-Position order
-func (pe *PacketEncoder) encodeLRCP() ([]Packet, error) {
-	for layer := 0; layer < pe.numLayers; layer++ {
+func (pe *PacketEncoder) encodeLRCP(maxLayers int) ([]Packet, error) {
+	for layer := 0; layer < maxLayers; layer++ {
 		for res := 0; res < pe.numResolutions; res++ {
 			for comp := 0; comp < pe.numComponents; comp++ {
 				// Get precincts for this component/resolution
@@ -208,9 +224,9 @@ func (pe *PacketEncoder) encodeLRCP() ([]Packet, error) {
 }
 
 // encodeRLCP encodes packets in Resolution-Layer-Component-Position order
-func (pe *PacketEncoder) encodeRLCP() ([]Packet, error) {
+func (pe *PacketEncoder) encodeRLCP(maxLayers int) ([]Packet, error) {
 	for res := 0; res < pe.numResolutions; res++ {
-		for layer := 0; layer < pe.numLayers; layer++ {
+		for layer := 0; layer < maxLayers; layer++ {
 			for comp := 0; comp < pe.numComponents; comp++ {
 				// Get precincts for this component/resolution
 				if pe.precincts[comp] == nil || pe.precincts[comp][res] == nil {
@@ -237,7 +253,7 @@ func (pe *PacketEncoder) encodeRLCP() ([]Packet, error) {
 }
 
 // encodeRPCL encodes packets in Resolution-Position-Component-Layer order
-func (pe *PacketEncoder) encodeRPCL() ([]Packet, error) {
+func (pe *PacketEncoder) encodeRPCL(maxLayers int) ([]Packet, error) {
 	posMaps := pe.buildPositionMaps()
 	for res := 0; res < pe.numResolutions; res++ {
 		positions := posMaps.byRes[res]
@@ -251,7 +267,7 @@ func (pe *PacketEncoder) encodeRPCL() ([]Packet, error) {
 				if !ok {
 					continue
 				}
-				for layer := 0; layer < pe.numLayers; layer++ {
+				for layer := 0; layer < maxLayers; layer++ {
 					precincts := pe.getPrecincts(comp, res, precinctIdx)
 					if len(precincts) == 0 {
 						continue
@@ -270,7 +286,7 @@ func (pe *PacketEncoder) encodeRPCL() ([]Packet, error) {
 }
 
 // encodePCRL encodes packets in Position-Component-Resolution-Layer order
-func (pe *PacketEncoder) encodePCRL() ([]Packet, error) {
+func (pe *PacketEncoder) encodePCRL(maxLayers int) ([]Packet, error) {
 	posMaps := pe.buildPositionMaps()
 	for _, pos := range posMaps.all {
 		for comp := 0; comp < pe.numComponents; comp++ {
@@ -283,7 +299,7 @@ func (pe *PacketEncoder) encodePCRL() ([]Packet, error) {
 				if !ok {
 					continue
 				}
-				for layer := 0; layer < pe.numLayers; layer++ {
+				for layer := 0; layer < maxLayers; layer++ {
 					precincts := pe.getPrecincts(comp, res, precinctIdx)
 					if len(precincts) == 0 {
 						continue
@@ -302,7 +318,7 @@ func (pe *PacketEncoder) encodePCRL() ([]Packet, error) {
 }
 
 // encodeCPRL encodes packets in Component-Position-Resolution-Layer order
-func (pe *PacketEncoder) encodeCPRL() ([]Packet, error) {
+func (pe *PacketEncoder) encodeCPRL(maxLayers int) ([]Packet, error) {
 	posMaps := pe.buildPositionMaps()
 	for comp := 0; comp < pe.numComponents; comp++ {
 		positions := posMaps.byComp[comp]
@@ -316,7 +332,7 @@ func (pe *PacketEncoder) encodeCPRL() ([]Packet, error) {
 				if !ok {
 					continue
 				}
-				for layer := 0; layer < pe.numLayers; layer++ {
+				for layer := 0; layer < maxLayers; layer++ {
 					precincts := pe.getPrecincts(comp, res, precinctIdx)
 					if len(precincts) == 0 {
 						continue
