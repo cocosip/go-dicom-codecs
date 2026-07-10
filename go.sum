@@ -1,6 +1,6 @@
-github.com/cocosip/go-dicom v0.5.0 h1:fCg+PEtoRnIL4PCZwsDiiJb1LBOY7TYxQhy4/SasB/c=
-github.com/cocosip/go-dicom v0.5.0/go.mod h1:5XFIdpLXwJkDZ1CUa3yg6qPXAi+JmF4zzD6ohBUKqTI=
+github.com/cocosip/go-dicom v0.5.2 h1:gnd8D2xzDELO21rNCavp5N7Hkup8BJwm9lPkRLpkxEM=
+github.com/cocosip/go-dicom v0.5.2/go.mod h1:w29kd5uQL9hVRfvhvTv0njIK1hQXlghc/aSFCI3VWRQ=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-golang.org/x/text v0.38.0 h1:sXmwo9DwP3OK9EZ7PqAdaooSGozfl/3a6/xJcbzPRhE=
-golang.org/x/text v0.38.0/go.mod h1:YXZt3QhHUKYT53r2lLKFIVi6Ao1jdzrTR/KQ09qyxF4=
+golang.org/x/text v0.40.0 h1:Ub2Z6/xjgF1WrYQz2nuITOEegKFtiIy+rieRJ5lHZKs=
+golang.org/x/text v0.40.0/go.mod h1:hpnzDAfGV753zIKo+wk3u1bVKCGPbrnF7+7LBF/UHVY=
