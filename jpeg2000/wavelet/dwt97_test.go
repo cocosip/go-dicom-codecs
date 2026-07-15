@@ -391,10 +391,11 @@ func TestEdgeCases97(t *testing.T) {
 
 		Forward97_1D(data)
 
-		// High-pass coefficients should be near zero
+		// The OpenJPEG-compatible 9/7 path operates on float32 samples. ARM64
+		// rounding can leave residuals slightly above 1e-6 for a constant signal.
 		nL := (len(data) + 1) / 2
 		for i := nL; i < len(data); i++ {
-			if math.Abs(data[i]) > 1e-6 {
+			if math.Abs(data[i]) > 1e-5 {
 				t.Errorf("High-pass coefficient should be near zero: got %f", data[i])
 			}
 		}
