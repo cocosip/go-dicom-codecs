@@ -17,10 +17,10 @@ type Codec struct {
 }
 
 // NewBaselineCodec creates a new JPEG Baseline codec
-// quality: 1-100, where 100 is best quality (default: 85)
+// quality: 1-100, where 100 is best quality (default: 90)
 func NewBaselineCodec(quality int) *Codec {
 	if quality < 1 || quality > 100 {
-		quality = 85 // default
+		quality = 90 // default
 	}
 	return &Codec{
 		transferSyntax: transfer.JPEGBaseline8Bit,
@@ -185,5 +185,5 @@ func RegisterBaselineCodec(quality int) {
 }
 
 func init() {
-	RegisterBaselineCodec(85)
+	RegisterBaselineCodec(90)
 }

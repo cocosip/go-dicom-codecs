@@ -75,6 +75,10 @@ func Encode(pixelData []byte, width, height, components, quality int) ([]byte, e
 	enc.dcCodes[1] = standard.BuildHuffmanCodes(enc.dcTables[1])
 	enc.acCodes[1] = standard.BuildHuffmanCodes(enc.acTables[1])
 
+	if err := enc.optimizeHuffmanTables(pixelData); err != nil {
+		return nil, err
+	}
+
 	var buf bytes.Buffer
 	writer := standard.NewWriter(&buf)
 
@@ -88,7 +92,7 @@ func Encode(pixelData []byte, width, height, components, quality int) ([]byte, e
 		return nil, err
 	}
 
-	// Write SOF0
+	// Write SOF0.
 	if err := enc.writeSOF0(writer); err != nil {
 		return nil, err
 	}
@@ -135,7 +139,7 @@ func (enc *Encoder) writeDQT(writer *standard.Writer) error {
 	return nil
 }
 
-// writeSOF0 writes Start of Frame (Baseline DCT)
+// writeSOF0 writes Start of Frame (Baseline DCT).
 func (enc *Encoder) writeSOF0(writer *standard.Writer) error {
 	data := make([]byte, 6+enc.components*3)
 
@@ -152,10 +156,10 @@ func (enc *Encoder) writeSOF0(writer *standard.Writer) error {
 		data[7] = 0x11 // Sampling factors: 1x1
 		data[8] = 0    // Quantization table 0
 	} else {
-		// YCbCr (4:2:0 subsampling)
+		// YCbCr 4:4:4 sampling, matching fo-dicom's default SF444.
 		// Y component
 		data[6] = 1    // Component ID
-		data[7] = 0x22 // Sampling factors: 2x2
+		data[7] = 0x11 // Sampling factors: 1x1
 		data[8] = 0    // Quantization table 0
 
 		// Cb component
@@ -299,40 +303,27 @@ func (enc *Encoder) encodeGrayscale(huffEnc *standard.HuffmanEncoder, pixelData 
 	return nil
 }
 
-// encodeRGB encodes RGB image
+// encodeRGB encodes RGB image with full-resolution YCbCr components.
 func (enc *Encoder) encodeRGB(huffEnc *standard.HuffmanEncoder, pixelData []byte) error {
-	// Convert RGB to YCbCr and encode with 4:2:0 subsampling
+	// Convert RGB to YCbCr and encode with 4:4:4 sampling.
 	ycbcr := enc.rgbToYCbCr(pixelData)
 
 	dcPred := [3]int{0, 0, 0}
 
-	// Process in 16x16 MCUs
-	mcuWide := standard.DivCeil(enc.width, 16)
-	mcuHigh := standard.DivCeil(enc.height, 16)
+	// Process in 8x8 MCUs with one block for each component.
+	blocksWide := standard.DivCeil(enc.width, 8)
+	blocksHigh := standard.DivCeil(enc.height, 8)
+	stride := standard.DivCeil(enc.width, 8) * 8
 
-	yStride := standard.DivCeil(enc.width, 8) * 8
-	cStride := standard.DivCeil(enc.width/2, 8) * 8
-
-	for mcuY := 0; mcuY < mcuHigh; mcuY++ {
-		for mcuX := 0; mcuX < mcuWide; mcuX++ {
-			// Encode Y component (2x2 blocks)
-			for v := 0; v < 2; v++ {
-				for h := 0; h < 2; h++ {
-					bx := mcuX*2 + h
-					by := mcuY*2 + v
-					if err := enc.encodeBlock(huffEnc, ycbcr.Y, bx, by, 0, yStride, &dcPred[0], 0); err != nil {
-						return err
-					}
-				}
-			}
-
-			// Encode Cb component (1 block)
-			if err := enc.encodeBlock(huffEnc, ycbcr.Cb, mcuX, mcuY, 0, cStride, &dcPred[1], 1); err != nil {
+	for blockY := 0; blockY < blocksHigh; blockY++ {
+		for blockX := 0; blockX < blocksWide; blockX++ {
+			if err := enc.encodeBlock(huffEnc, ycbcr.Y, blockX, blockY, 0, stride, &dcPred[0], 0); err != nil {
 				return err
 			}
-
-			// Encode Cr component (1 block)
-			if err := enc.encodeBlock(huffEnc, ycbcr.Cr, mcuX, mcuY, 0, cStride, &dcPred[2], 1); err != nil {
+			if err := enc.encodeBlock(huffEnc, ycbcr.Cb, blockX, blockY, 0, stride, &dcPred[1], 1); err != nil {
+				return err
+			}
+			if err := enc.encodeBlock(huffEnc, ycbcr.Cr, blockX, blockY, 0, stride, &dcPred[2], 1); err != nil {
 				return err
 			}
 		}
@@ -348,16 +339,14 @@ type YCbCrData struct {
 	Cr []byte
 }
 
-// rgbToYCbCr converts RGB to YCbCr with 4:2:0 subsampling
+// rgbToYCbCr converts RGB to full-resolution YCbCr for 4:4:4 sampling.
 func (enc *Encoder) rgbToYCbCr(rgb []byte) *YCbCrData {
-	yStride := standard.DivCeil(enc.width, 8) * 8
-	yHeight := standard.DivCeil(enc.height, 8) * 8
-	cStride := standard.DivCeil(enc.width/2, 8) * 8
-	cHeight := standard.DivCeil(enc.height/2, 8) * 8
+	stride := standard.DivCeil(enc.width, 8) * 8
+	height := standard.DivCeil(enc.height, 8) * 8
 
-	y := make([]byte, yStride*yHeight)
-	cb := make([]byte, cStride*cHeight)
-	cr := make([]byte, cStride*cHeight)
+	y := make([]byte, stride*height)
+	cb := make([]byte, stride*height)
+	cr := make([]byte, stride*height)
 
 	for row := 0; row < enc.height; row++ {
 		for col := 0; col < enc.width; col++ {
@@ -371,14 +360,10 @@ func (enc *Encoder) rgbToYCbCr(rgb []byte) *YCbCrData {
 			cbVal := ((-11056*r - 21712*g + 32768*b + 8421376) >> 16)
 			crVal := ((32768*r - 27440*g - 5328*b + 8421376) >> 16)
 
-			y[row*yStride+col] = byte(standard.Clamp(yy, 0, 255))
-
-			// 4:2:0 subsampling for Cb and Cr
-			if row%2 == 0 && col%2 == 0 {
-				cbIdx := (row/2)*cStride + (col / 2)
-				cb[cbIdx] = byte(standard.Clamp(cbVal, 0, 255))
-				cr[cbIdx] = byte(standard.Clamp(crVal, 0, 255))
-			}
+			index := row*stride + col
+			y[index] = byte(standard.Clamp(yy, 0, 255))
+			cb[index] = byte(standard.Clamp(cbVal, 0, 255))
+			cr[index] = byte(standard.Clamp(crVal, 0, 255))
 		}
 	}
 
@@ -387,32 +372,7 @@ func (enc *Encoder) rgbToYCbCr(rgb []byte) *YCbCrData {
 
 // encodeBlock encodes a single 8x8 block
 func (enc *Encoder) encodeBlock(huffEnc *standard.HuffmanEncoder, data []byte, blockX, blockY, _ int, stride int, dcPred *int, tableIdx int) error {
-	// Extract 8x8 block
-	var block [64]byte
-	for y := 0; y < 8; y++ {
-		srcY := blockY*8 + y
-		if srcY >= len(data)/stride {
-			break
-		}
-		for x := 0; x < 8; x++ {
-			srcX := blockX*8 + x
-			if srcX < stride && srcY*stride+srcX < len(data) {
-				block[y*8+x] = data[srcY*stride+srcX]
-			} else {
-				block[y*8+x] = 0
-			}
-		}
-	}
-
-	// DCT
-	var coef [64]int32
-	standard.DCT(block[:], 8, coef[:])
-
-	// Quantize
-	qtable := &enc.qtables[tableIdx]
-	for i := 0; i < 64; i++ {
-		coef[i] = (coef[i] + qtable[i]/2) / qtable[i]
-	}
+	coef := enc.quantizeBlock(data, blockX, blockY, stride, tableIdx)
 
 	// Encode DC coefficient
 	dcDiff := int(coef[0]) - *dcPred
@@ -473,4 +433,136 @@ func (enc *Encoder) encodeBlock(huffEnc *standard.HuffmanEncoder, data []byte, b
 	}
 
 	return nil
+}
+
+func (enc *Encoder) quantizeBlock(data []byte, blockX, blockY, stride, tableIdx int) [64]int32 {
+	// Extract 8x8 block
+	var block [64]byte
+	for y := 0; y < 8; y++ {
+		srcY := blockY*8 + y
+		if srcY >= len(data)/stride {
+			break
+		}
+		for x := 0; x < 8; x++ {
+			srcX := blockX*8 + x
+			if srcX < stride && srcY*stride+srcX < len(data) {
+				block[y*8+x] = data[srcY*stride+srcX]
+			} else {
+				block[y*8+x] = 0
+			}
+		}
+	}
+
+	// IJG's integer DCT retains an eightfold scale that its quantizer removes.
+	var coef [64]int32
+	standard.DCTISlow(block[:], 8, coef[:])
+
+	// Quantize
+	qtable := &enc.qtables[tableIdx]
+	for i := 0; i < 64; i++ {
+		divisor := qtable[i] * 8
+		if coef[i] < 0 {
+			coef[i] = -((-coef[i] + divisor/2) / divisor)
+		} else {
+			coef[i] = (coef[i] + divisor/2) / divisor
+		}
+	}
+
+	return coef
+}
+
+type huffmanFrequencies struct {
+	dc [2][256]uint64
+	ac [2][256]uint64
+}
+
+func (enc *Encoder) optimizeHuffmanTables(pixelData []byte) error {
+	frequencies := &huffmanFrequencies{}
+
+	if enc.components == 1 {
+		if err := enc.countGrayscale(frequencies, pixelData); err != nil {
+			return err
+		}
+	} else if err := enc.countRGB(frequencies, pixelData); err != nil {
+		return err
+	}
+
+	tableCount := 1
+	if enc.components == 3 {
+		tableCount = 2
+	}
+	for tableIdx := 0; tableIdx < tableCount; tableIdx++ {
+		enc.dcTables[tableIdx] = standard.BuildOptimalHuffmanTable(frequencies.dc[tableIdx])
+		enc.acTables[tableIdx] = standard.BuildOptimalHuffmanTable(frequencies.ac[tableIdx])
+		enc.dcCodes[tableIdx] = standard.BuildHuffmanCodes(enc.dcTables[tableIdx])
+		enc.acCodes[tableIdx] = standard.BuildHuffmanCodes(enc.acTables[tableIdx])
+	}
+
+	return nil
+}
+
+func (enc *Encoder) countGrayscale(frequencies *huffmanFrequencies, pixelData []byte) error {
+	dcPred := 0
+	for blockY := 0; blockY < standard.DivCeil(enc.height, 8); blockY++ {
+		for blockX := 0; blockX < standard.DivCeil(enc.width, 8); blockX++ {
+			enc.countBlock(frequencies, pixelData, blockX, blockY, enc.width, &dcPred, 0)
+		}
+	}
+	return nil
+}
+
+func (enc *Encoder) countRGB(frequencies *huffmanFrequencies, pixelData []byte) error {
+	ycbcr := enc.rgbToYCbCr(pixelData)
+	dcPred := [3]int{}
+	blocksWide := standard.DivCeil(enc.width, 8)
+	blocksHigh := standard.DivCeil(enc.height, 8)
+	stride := standard.DivCeil(enc.width, 8) * 8
+
+	for blockY := 0; blockY < blocksHigh; blockY++ {
+		for blockX := 0; blockX < blocksWide; blockX++ {
+			enc.countBlock(frequencies, ycbcr.Y, blockX, blockY, stride, &dcPred[0], 0)
+			enc.countBlock(frequencies, ycbcr.Cb, blockX, blockY, stride, &dcPred[1], 1)
+			enc.countBlock(frequencies, ycbcr.Cr, blockX, blockY, stride, &dcPred[2], 1)
+		}
+	}
+	return nil
+}
+
+func (enc *Encoder) countBlock(frequencies *huffmanFrequencies, data []byte, blockX, blockY, stride int, dcPred *int, tableIdx int) {
+	coef := enc.quantizeBlock(data, blockX, blockY, stride, tableIdx)
+	dcDiff := int(coef[0]) - *dcPred
+	*dcPred = int(coef[0])
+	frequencies.dc[tableIdx][huffmanCategory(dcDiff)]++
+
+	zeroRun := 0
+	for k := 1; k < 64; k++ {
+		value := int(coef[standard.ZigZag[k]])
+		if value == 0 {
+			zeroRun++
+			continue
+		}
+
+		for zeroRun >= 16 {
+			frequencies.ac[tableIdx][0xF0]++
+			zeroRun -= 16
+		}
+		frequencies.ac[tableIdx][byte((zeroRun<<4)|huffmanCategory(value))]++
+		zeroRun = 0
+	}
+	if zeroRun > 0 {
+		frequencies.ac[tableIdx][0]++
+	}
+}
+
+func huffmanCategory(value int) int {
+	if value < 0 {
+		value = -value
+	}
+
+	category := 0
+	for value > 0 {
+		category++
+		value >>= 1
+	}
+	return category
 }

@@ -32,7 +32,7 @@ type JPEGExtendedParameters struct {
 // NewExtendedParameters creates a new JPEGExtendedParameters with default values
 func NewExtendedParameters() *JPEGExtendedParameters {
 	return &JPEGExtendedParameters{
-		Quality:  85, // Default high quality
+		Quality:  90, // Matches fo-dicom's default DicomJpegParams quality.
 		BitDepth: 12, // Default 12-bit (main feature of Extended)
 		params:   make(map[string]interface{}),
 	}
@@ -72,7 +72,7 @@ func (p *JPEGExtendedParameters) SetParameter(name string, value interface{}) {
 func (p *JPEGExtendedParameters) Validate() error {
 	// Quality must be in range 1-100
 	if p.Quality < 1 || p.Quality > 100 {
-		p.Quality = 85 // Reset to default
+		p.Quality = 90 // Matches fo-dicom's default DicomJpegParams quality.
 	}
 
 	// BitDepth must be 8 or 12

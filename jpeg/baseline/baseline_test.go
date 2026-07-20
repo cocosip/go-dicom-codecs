@@ -2,8 +2,105 @@
 package baseline
 
 import (
+	"bytes"
 	"testing"
+
+	"github.com/cocosip/go-dicom-codec/jpeg/standard"
 )
+
+func TestDefaultQualityMatchesFoDicom(t *testing.T) {
+	if got := NewBaselineParameters().Quality; got != 90 {
+		t.Errorf("NewBaselineParameters().Quality = %d, want 90", got)
+	}
+
+	parameters := &JPEGBaselineParameters{Quality: 0}
+	if err := parameters.Validate(); err != nil {
+		t.Fatalf("JPEGBaselineParameters.Validate() error = %v", err)
+	}
+	if got := parameters.Quality; got != 90 {
+		t.Errorf("JPEGBaselineParameters{Quality: 0}.Validate() quality = %d, want 90", got)
+	}
+
+	if got := NewBaselineCodec(0).GetDefaultParameters().GetParameter("quality"); got != 90 {
+		t.Errorf("NewBaselineCodec(0) default quality = %v, want 90", got)
+	}
+
+	if got := NewBaselineCodec(75).GetDefaultParameters().GetParameter("quality"); got != 75 {
+		t.Errorf("NewBaselineCodec(75) default quality = %v, want 75", got)
+	}
+}
+
+func TestRGBSamplingMatchesFoDicom444(t *testing.T) {
+	const width, height = 16, 16
+	pixelData := make([]byte, width*height*3)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			offset := (y*width + x) * 3
+			if (x+y)%2 == 0 {
+				pixelData[offset] = 255
+				pixelData[offset+2] = 255
+			} else {
+				pixelData[offset+1] = 255
+			}
+		}
+	}
+
+	jpegData, err := Encode(pixelData, width, height, 3, 90)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	sofOffset := bytes.Index(jpegData, []byte{0xff, 0xc0})
+	if sofOffset < 0 || len(jpegData) < sofOffset+19 {
+		t.Fatal("encoded JPEG is missing a complete SOF0 segment")
+	}
+
+	for component := 0; component < 3; component++ {
+		samplingFactor := jpegData[sofOffset+11+component*3]
+		if samplingFactor != 0x11 {
+			t.Errorf("component %d sampling factor = 0x%02x, want 0x11 (4:4:4)", component+1, samplingFactor)
+		}
+	}
+}
+
+func TestQuantizationTablesMatchFoDicomQuality90(t *testing.T) {
+	pixelData := make([]byte, 8*8)
+	jpegData, err := Encode(pixelData, 8, 8, 1, 90)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	firstDQT := bytes.Index(jpegData, []byte{0xff, 0xdb})
+	if firstDQT < 0 || len(jpegData) < firstDQT+69 {
+		t.Fatal("encoded JPEG is missing a complete luminance DQT segment")
+	}
+
+	want := []byte{
+		0x00, 0x03, 0x02, 0x02, 0x03, 0x02, 0x02, 0x03,
+		0x03, 0x03, 0x03, 0x04, 0x03, 0x03, 0x04, 0x05,
+		0x08, 0x05, 0x05, 0x04, 0x04, 0x05, 0x0a, 0x07,
+		0x07, 0x06, 0x08, 0x0c, 0x0a, 0x0c, 0x0c, 0x0b,
+		0x0a, 0x0b, 0x0b, 0x0d, 0x0e, 0x12, 0x10, 0x0d,
+		0x0e, 0x11, 0x0e, 0x0b, 0x0b, 0x10, 0x16, 0x10,
+		0x11, 0x13, 0x14, 0x15, 0x15, 0x15, 0x0c, 0x0f,
+		0x17, 0x18, 0x16, 0x14, 0x18, 0x12, 0x14, 0x15,
+	}
+
+	got := jpegData[firstDQT+4 : firstDQT+4+len(want)]
+	if !bytes.Equal(got, want) {
+		t.Errorf("luminance DQT = %x, want %x", got, want)
+	}
+}
+
+func TestQuantizeBlockRoundsNegativeCoefficientsSymmetrically(t *testing.T) {
+	encoder := &Encoder{}
+	encoder.qtables[0] = standard.ScaleQuantTable(standard.DefaultLuminanceQuantTable, 90)
+
+	coef := encoder.quantizeBlock(bytes.Repeat([]byte{127}, 8*8), 0, 0, 8, 0)
+	if coef[0] != -3 {
+		t.Errorf("quantized DC coefficient = %d, want -3", coef[0])
+	}
+}
 
 func TestEncodeDecodeGrayscale(t *testing.T) {
 	// Create a simple test pattern (grayscale)
@@ -76,9 +173,9 @@ func TestEncodeDecodeRGB(t *testing.T) {
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			offset := (y*width + x) * 3
-			pixelData[offset+0] = byte(x * 4)        // R
-			pixelData[offset+1] = byte(y * 4)        // G
-			pixelData[offset+2] = byte((x + y) * 2)  // B
+			pixelData[offset+0] = byte(x * 4)       // R
+			pixelData[offset+1] = byte(y * 4)       // G
+			pixelData[offset+2] = byte((x + y) * 2) // B
 		}
 	}
 

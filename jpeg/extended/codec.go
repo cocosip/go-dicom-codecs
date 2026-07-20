@@ -19,13 +19,13 @@ type Codec struct {
 
 // NewExtendedCodec creates a new JPEG Extended codec
 // bitDepth: 8 or 12 bits per sample
-// quality: 1-100, where 100 is best quality (default 85)
+// quality: 1-100, where 100 is best quality (default 90)
 func NewExtendedCodec(bitDepth int, quality int) *Codec {
 	if bitDepth != 8 && bitDepth != 12 {
 		bitDepth = 12 // Default to 12-bit (main feature of Extended)
 	}
 	if quality < 1 || quality > 100 {
-		quality = 85 // Default quality
+		quality = 90 // Matches fo-dicom's default DicomJpegParams quality.
 	}
 	return &Codec{
 		quality:  quality,
@@ -181,7 +181,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 // RegisterExtendedCodec registers JPEG Extended codec with the global registry
 // bitDepth: 8 or 12 (default 12)
-// quality: 1-100 (default 85)
+// quality: 1-100 (default 90)
 func RegisterExtendedCodec(bitDepth int, quality int) {
 	c := NewExtendedCodec(bitDepth, quality)
 	registry := codec.GetGlobalRegistry()
@@ -189,5 +189,5 @@ func RegisterExtendedCodec(bitDepth int, quality int) {
 }
 
 func init() {
-	RegisterExtendedCodec(12, 85)
+	RegisterExtendedCodec(12, 90)
 }

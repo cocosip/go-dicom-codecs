@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/jpeg"
 
+	"github.com/cocosip/go-dicom-codec/jpeg/baseline"
 	"github.com/cocosip/go-dicom-codec/jpeg/standard"
 )
 
@@ -25,6 +26,9 @@ func EncodeSimple(pixelData []byte, width, height, components, bitDepth, quality
 
 	if quality < 1 || quality > 100 {
 		return nil, standard.ErrInvalidQuality
+	}
+	if bitDepth == 8 {
+		return baseline.Encode(pixelData, width, height, components, quality)
 	}
 
 	// For 12-bit data, scale to 8-bit for encoding
@@ -116,8 +120,9 @@ func DecodeSimple(jpegData []byte) (pixelData []byte, width, height, components,
 	// Detect bit depth from SOF marker
 	bitDepth = detectBitDepth(jpegData)
 
-	// For 12-bit marked data, convert SOF1 back to SOF0 for standard decoder
-	if bitDepth == 12 {
+	// Go's standard decoder does not accept SOF1. Convert it back to SOF0
+	// locally after retaining the original precision for the return value.
+	if bitDepth == 12 || bytes.Contains(jpegData, []byte{0xff, 0xc1}) {
 		jpegData = convertSOF1ToSOF0(jpegData)
 	}
 

@@ -15,7 +15,8 @@ type Decoder struct {
 	precision  int // Bit depth (2-16)
 	predictor  int // Predictor selection (1-7)
 
-	dcTables [2]*standard.HuffmanTable
+	dcTables         [2]*standard.HuffmanTable
+	dcTableSelectors [3]int
 }
 
 // Decode decodes JPEG Lossless data
@@ -194,6 +195,14 @@ func (d *Decoder) parseSOS(reader *standard.Reader) error {
 		return fmt.Errorf("invalid predictor: %d (must be 1-7)", d.predictor)
 	}
 
+	for component := 0; component < d.components; component++ {
+		selector := int(data[2+component*2] >> 4)
+		if selector >= len(d.dcTables) {
+			return fmt.Errorf("invalid DC Huffman table selector: %d", selector)
+		}
+		d.dcTableSelectors[component] = selector
+	}
+
 	return nil
 }
 
@@ -245,12 +254,7 @@ func (d *Decoder) decodeScan(reader *standard.Reader) ([][]int, error) {
 	for row := 0; row < d.height; row++ {
 		for col := 0; col < d.width; col++ {
 			for comp := 0; comp < d.components; comp++ {
-				// Select Huffman table
-				tableIdx := 0
-				if comp > 0 && d.components > 1 {
-					tableIdx = 1
-				}
-
+				tableIdx := d.dcTableSelectors[comp]
 				table := d.dcTables[tableIdx]
 				if table == nil {
 					return nil, fmt.Errorf("huffman table %d not defined", tableIdx)

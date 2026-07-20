@@ -59,34 +59,7 @@ func Encode(pixelData []byte, width, height, components, bitDepth, predictor int
 	}
 
 	samples := enc.pixelsToSamples(pixelData)
-	maxCat := computeMaxCategory(samples, enc.components, enc.width, enc.height, enc.precision, enc.predictor)
-
-	// Prefer the standard lossless DC tables; fall back to extended when needed.
-	// NOTE: The standard lossless table only has codes for categories: 0,1,2,3,4,5,6,7,8,11,12,15
-	// It's missing categories 9,10,13,14, so we need the Extended table if maxCat >= 9
-	if bitDepth >= 12 && maxCat >= 9 {
-		enc.dcTables[0] = standard.BuildStandardHuffmanTable(
-			standard.ExtendedDCLuminanceBits,
-			standard.ExtendedDCLuminanceValues,
-		)
-		enc.dcTables[1] = standard.BuildStandardHuffmanTable(
-			standard.ExtendedDCChrominanceBits,
-			standard.ExtendedDCChrominanceValues,
-		)
-	} else {
-		enc.dcTables[0] = standard.BuildStandardHuffmanTable(
-			standard.LosslessDCLuminanceBits,
-			standard.LosslessDCLuminanceValues,
-		)
-		enc.dcTables[1] = standard.BuildStandardHuffmanTable(
-			standard.LosslessDCChrominanceBits,
-			standard.LosslessDCChrominanceValues,
-		)
-	}
-
-	// Build Huffman codes
-	enc.dcCodes[0] = standard.BuildHuffmanCodes(enc.dcTables[0])
-	enc.dcCodes[1] = standard.BuildHuffmanCodes(enc.dcTables[1])
+	enc.optimizeHuffmanTables(samples)
 
 	var buf bytes.Buffer
 	writer := standard.NewWriter(&buf)
@@ -122,6 +95,49 @@ func Encode(pixelData []byte, width, height, components, bitDepth, predictor int
 	}
 
 	return buf.Bytes(), nil
+}
+
+func (enc *Encoder) optimizeHuffmanTables(samples [][]int) {
+	var frequencies [256]uint64
+	modulus := 1 << uint(enc.precision)
+	halfModulus := modulus / 2
+	defaultVal := 1 << uint(enc.precision-1)
+
+	for row := 0; row < enc.height; row++ {
+		for col := 0; col < enc.width; col++ {
+			for comp := 0; comp < enc.components; comp++ {
+				sample := samples[comp][row*enc.width+col]
+				ra, rb, rc := defaultVal, defaultVal, defaultVal
+				if col > 0 {
+					ra = samples[comp][row*enc.width+col-1]
+				} else if row > 0 && enc.predictor == 1 {
+					ra = samples[comp][(row-1)*enc.width+col]
+				}
+				if row > 0 {
+					rb = samples[comp][(row-1)*enc.width+col]
+				}
+				if row > 0 && col > 0 {
+					rc = samples[comp][(row-1)*enc.width+col-1]
+				}
+
+				predicted := defaultVal
+				if row != 0 || col != 0 {
+					predicted = Predictor(enc.predictor, ra, rb, rc)
+				}
+				diff := sample - predicted
+				if diff >= halfModulus {
+					diff -= modulus
+				} else if diff < -halfModulus {
+					diff += modulus
+				}
+
+				frequencies[diffCategory(diff)]++
+			}
+		}
+	}
+
+	enc.dcTables[0] = standard.BuildOptimalHuffmanTable(frequencies)
+	enc.dcCodes[0] = standard.BuildHuffmanCodes(enc.dcTables[0])
 }
 
 // writeSOF3 writes Start of Frame (Lossless)
@@ -168,12 +184,7 @@ func (enc *Encoder) writeAPP0(writer *standard.Writer) error {
 
 // writeDHT writes Define Huffman Table segments
 func (enc *Encoder) writeDHT(writer *standard.Writer) error {
-	numTables := 1
-	if enc.components == 3 {
-		numTables = 2
-	}
-
-	for i := 0; i < numTables; i++ {
+	for i := 0; i < 1; i++ {
 		table := enc.dcTables[i]
 		totalValues := 0
 		for _, count := range table.Bits {
@@ -209,11 +220,7 @@ func (enc *Encoder) writeSOS(writer *standard.Writer, samples [][]int) error {
 	} else {
 		for i := 0; i < enc.components; i++ {
 			data[1+i*2] = byte(i + 1) // Component ID
-			if i == 0 {
-				data[2+i*2] = 0x00 // Table 0 for Y
-			} else {
-				data[2+i*2] = 0x01 // Table 1 for Cb/Cr
-			}
+			data[2+i*2] = 0x00        // Native RGB uses the shared DC table 0.
 		}
 	}
 
@@ -294,13 +301,8 @@ func (enc *Encoder) encodeScan(writer *standard.Writer, samples [][]int) error {
 				}
 
 				// Encode difference
-				tableIdx := 0
-				if comp > 0 && enc.components > 1 {
-					tableIdx = 1
-				}
-
 				cat, bits := huffEnc.EncodeCategory(diff)
-				code := enc.dcCodes[tableIdx][cat]
+				code := enc.dcCodes[0][cat]
 				if err := huffEnc.WriteBits(uint32(code.Code), code.Len); err != nil {
 					return err
 				}
@@ -353,58 +355,6 @@ func (enc *Encoder) pixelsToSamples(pixelData []byte) [][]int {
 	}
 
 	return samples
-}
-
-// computeMaxCategory scans differences to decide if extended Huffman tables are needed.
-// IMPORTANT: For P-bit precision, differences wrap around in the range of signed P-bit integers.
-func computeMaxCategory(samples [][]int, components, width, height, precision, predictor int) int {
-	maxCat := 0
-	defaultVal := 1 << uint(precision-1)
-
-	// Compute modulus for wrapping (2^precision)
-	modulus := 1 << uint(precision)
-	halfModulus := modulus / 2
-
-	for comp := 0; comp < components; comp++ {
-		for row := 0; row < height; row++ {
-			for col := 0; col < width; col++ {
-				sample := samples[comp][row*width+col]
-				var ra, rb, rc int
-				ra, rb, rc = defaultVal, defaultVal, defaultVal
-				if col > 0 {
-					ra = samples[comp][row*width+col-1]
-				}
-				if row > 0 {
-					rb = samples[comp][(row-1)*width+col]
-				}
-				if row > 0 && col > 0 {
-					rc = samples[comp][(row-1)*width+col-1]
-				}
-
-				var predicted int
-				if row == 0 && col == 0 {
-					predicted = defaultVal
-				} else {
-					predicted = Predictor(predictor, ra, rb, rc)
-				}
-
-				// Compute difference with wrapping to signed P-bit range
-				diff := sample - predicted
-				// Wrap to range [-2^(P-1), 2^(P-1)-1]
-				if diff >= halfModulus {
-					diff -= modulus
-				} else if diff < -halfModulus {
-					diff += modulus
-				}
-
-				cat := diffCategory(diff)
-				if cat > maxCat {
-					maxCat = cat
-				}
-			}
-		}
-	}
-	return maxCat
 }
 
 func diffCategory(val int) int {

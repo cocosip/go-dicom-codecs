@@ -19,9 +19,11 @@ import (
 	_ "github.com/cocosip/go-dicom-codec/jpegls/nearlossless"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/dataset"
+	"github.com/cocosip/go-dicom/pkg/dicom/element"
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
 	"github.com/cocosip/go-dicom/pkg/dicom/tag"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
+	"github.com/cocosip/go-dicom/pkg/dicom/vr"
 	"github.com/cocosip/go-dicom/pkg/dicom/writer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
 )
@@ -246,6 +248,9 @@ func transcodeDICOMFile(ds *dataset.Dataset, outputPath string, sourceTS, target
 	if err != nil {
 		return fmt.Errorf("transcode failed: %w", err)
 	}
+	if err := applyBaselinePhotometricInterpretation(newDS, targetTS); err != nil {
+		return fmt.Errorf("failed to update JPEG Baseline photometric interpretation: %w", err)
+	}
 
 	// Note: Codec layer automatically handles signed pixel data (PR=1) correctly:
 	// - During encoding: adds offset for signed data if needed
@@ -259,6 +264,14 @@ func transcodeDICOMFile(ds *dataset.Dataset, outputPath string, sourceTS, target
 	}
 
 	return nil
+}
+
+func applyBaselinePhotometricInterpretation(ds *dataset.Dataset, targetTS *transfer.Syntax) error {
+	if targetTS != transfer.JPEGBaseline8Bit || ds.TryGetUInt16(tag.SamplesPerPixel, 0) != 3 {
+		return nil
+	}
+
+	return ds.AddOrUpdate(element.NewString(tag.PhotometricInterpretation, vr.CS, []string{"YBR_FULL_422"}))
 }
 
 // getFileSize returns the size of a file in bytes

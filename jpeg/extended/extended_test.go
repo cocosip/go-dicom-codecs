@@ -1,8 +1,38 @@
 package extended
 
 import (
+	"bytes"
 	"testing"
+
+	"github.com/cocosip/go-dicom-codec/jpeg/baseline"
 )
+
+func TestEncodeUsesNativeBaselineSOF0ForEightBitSequential(t *testing.T) {
+	pixels := make([]byte, 16*16*3)
+	for i := range pixels {
+		pixels[i] = byte(i)
+	}
+
+	encoded, err := Encode(pixels, 16, 16, 3, 8, 90)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	if !bytes.Contains(encoded, []byte{0xff, 0xc0}) {
+		t.Fatal("Encode() did not emit the JPEG Baseline SOF0 marker used by fo-dicom Native")
+	}
+	if bytes.Contains(encoded, []byte{0xff, 0xc1}) {
+		t.Fatal("Encode() emitted an SOF1 marker instead of fo-dicom Native's baseline-compatible SOF0")
+	}
+
+	baselineEncoded, err := baseline.Encode(pixels, 16, 16, 3, 90)
+	if err != nil {
+		t.Fatalf("baseline.Encode() error = %v", err)
+	}
+	if !bytes.Equal(encoded, baselineEncoded) {
+		t.Fatal("Encode() did not use the fo-dicom-compatible baseline sequential encoding configuration")
+	}
+}
 
 // TestEncodeDecode8Bit tests 8-bit grayscale encoding/decoding
 func TestEncodeDecode8Bit(t *testing.T) {
@@ -88,7 +118,7 @@ func TestEncodeDecode12Bit(t *testing.T) {
 		for x := 0; x < width; x++ {
 			val := ((x + y*2) * 16) % 4096 // 12-bit value
 			idx := (y*width + x) * 2
-			pixelData[idx] = byte(val & 0xFF)         // Low byte
+			pixelData[idx] = byte(val & 0xFF)          // Low byte
 			pixelData[idx+1] = byte((val >> 8) & 0xFF) // High byte
 		}
 	}

@@ -11,7 +11,7 @@ var _ codec.Parameters = (*JPEGBaselineParameters)(nil)
 type JPEGBaselineParameters struct {
 	// Quality controls the JPEG compression quality (1-100)
 	// - 100: Best quality, minimal compression
-	// - 85:  High quality (default)
+	// - 90:  High quality (default)
 	// - 75:  Medium quality, good balance
 	// - 50:  Lower quality, higher compression
 	// - 1:   Lowest quality, maximum compression
@@ -24,7 +24,7 @@ type JPEGBaselineParameters struct {
 // NewBaselineParameters creates a new JPEGBaselineParameters with default values
 func NewBaselineParameters() *JPEGBaselineParameters {
 	return &JPEGBaselineParameters{
-		Quality: 85, // Default high quality
+		Quality: 90, // Default high quality
 		params:  make(map[string]interface{}),
 	}
 }
@@ -56,7 +56,7 @@ func (p *JPEGBaselineParameters) SetParameter(name string, value interface{}) {
 // Validate checks if the parameters are valid
 func (p *JPEGBaselineParameters) Validate() error {
 	if p.Quality < 1 || p.Quality > 100 {
-		p.Quality = 85 // Reset to default
+		p.Quality = 90 // Reset to default
 	}
 	return nil
 }

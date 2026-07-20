@@ -217,7 +217,7 @@ func (d *Decoder) parseDQT(reader *standard.Reader) error {
 				return standard.ErrInvalidDQT
 			}
 			for i := 0; i < 64; i++ {
-				d.qtables[tq][i] = int32(data[offset+i])
+				d.qtables[tq][standard.ZigZag[i]] = int32(data[offset+i])
 			}
 			offset += 64
 		} else {
@@ -226,7 +226,7 @@ func (d *Decoder) parseDQT(reader *standard.Reader) error {
 				return standard.ErrInvalidDQT
 			}
 			for i := 0; i < 64; i++ {
-				d.qtables[tq][i] = int32(data[offset+i*2])<<8 | int32(data[offset+i*2+1])
+				d.qtables[tq][standard.ZigZag[i]] = int32(data[offset+i*2])<<8 | int32(data[offset+i*2+1])
 			}
 			offset += 128
 		}
@@ -485,20 +485,14 @@ func (d *Decoder) decodeBlock(huffDec *standard.HuffmanDecoder, comp *Component,
 		}
 	}
 
-	// Dequantize
 	qtable := &d.qtables[comp.Tq]
-	for i := 0; i < 64; i++ {
-		coef[i] *= qtable[i]
-	}
-
-	// IDCT
 	blockOffset := (blockY*comp.width + blockX) * 64
 	if blockOffset+63 >= len(comp.data) {
 		// Block is outside the component data, skip it
 		return nil
 	}
 
-	standard.IDCT(coef[:], comp.data[blockOffset:], 8)
+	standard.IDCTISlow(coef[:], *qtable, comp.data[blockOffset:], 8)
 
 	return nil
 }

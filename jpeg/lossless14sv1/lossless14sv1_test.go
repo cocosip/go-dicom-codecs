@@ -1,8 +1,43 @@
 package lossless14sv1
 
 import (
+	"bytes"
 	"testing"
 )
+
+func TestEncodeUsesOptimizedHuffmanTables(t *testing.T) {
+	pixels := make([]byte, 64*64)
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			pixels[y*64+x] = byte(x + y)
+		}
+	}
+
+	encoded, err := Encode(pixels, 64, 64, 1, 8)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+
+	standardDHT := []byte{0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x02, 0x03, 0x01, 0x01}
+	if bytes.Contains(encoded, standardDHT) {
+		t.Fatal("Encode() used the fixed lossless Huffman table instead of optimized coding")
+	}
+}
+
+func TestRGBEncodeUsesOneSharedHuffmanTable(t *testing.T) {
+	pixels := make([]byte, 16*16*3)
+	for i := range pixels {
+		pixels[i] = byte(i)
+	}
+
+	encoded, err := Encode(pixels, 16, 16, 3, 8)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	if got := bytes.Count(encoded, []byte{0xff, 0xc4}); got != 1 {
+		t.Fatalf("DHT marker count = %d, want 1 for fo-dicom Native RGB lossless", got)
+	}
+}
 
 func TestEncodeDecodeGrayscale8bit(t *testing.T) {
 	// Create test image (8-bit grayscale)
