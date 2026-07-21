@@ -2,17 +2,16 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	// Register all codecs by importing them
 	_ "github.com/cocosip/go-dicom-codec/jpeg/baseline"
 	_ "github.com/cocosip/go-dicom-codec/jpeg/extended"
 	_ "github.com/cocosip/go-dicom-codec/jpeg/lossless"
 	_ "github.com/cocosip/go-dicom-codec/jpeg/lossless14sv1"
+	_ "github.com/cocosip/go-dicom-codec/jpeg2000/htj2k"
 	_ "github.com/cocosip/go-dicom-codec/jpeg2000/lossless"
 	_ "github.com/cocosip/go-dicom-codec/jpeg2000/lossy"
 	_ "github.com/cocosip/go-dicom-codec/jpegls/lossless"
@@ -30,206 +29,150 @@ import (
 )
 
 func main() {
-	fmt.Println("DICOM Transfer Syntax Transcoder")
-	fmt.Println("Converts DICOM files between compression formats")
-	fmt.Println(strings.Repeat("-", 70))
-	fmt.Println()
+	os.Exit(run(os.Args[1:]))
+}
 
-	// Get input file path
-	inputPath := getInputFilePath()
-	if inputPath == "" {
-		fmt.Println("\nNo input file specified. Exiting...")
-		waitForExit()
-		return
+func run(args []string) int {
+	options, err := parseToolOptions(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	if options.showHelp {
+		printUsage()
+		return 0
+	}
+	if options.inputPath == "" {
+		printUsage()
+		return 1
+	}
+	if _, err := os.Stat(options.inputPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: input DICOM file was not found: %v\n", err)
+		return 1
 	}
 
-	// Check if file exists
-	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
-		fmt.Printf("\nFile not found: %s\n", inputPath)
-		waitForExit()
-		return
-	}
-
-	fmt.Printf("\nInput file: %s\n", inputPath)
-
-	// Read DICOM file
-	fmt.Println("\nReading DICOM file...")
-	parseResult, err := parser.ParseFile(inputPath,
+	fmt.Println("DICOM automatic compression tool")
+	fmt.Println("Input: " + options.inputPath)
+	parseResult, err := parser.ParseFile(options.inputPath,
 		parser.WithReadOption(parser.ReadAll),
 		parser.WithLargeObjectSize(100*1024*1024),
 	)
 	if err != nil {
-		fmt.Printf("Failed to read DICOM file: %v\n", err)
-		waitForExit()
-		return
+		fmt.Fprintf(os.Stderr, "Error: failed to read DICOM file: %v\n", err)
+		return 1
 	}
 
-	ds := parseResult.Dataset
-	sourceTS := parseResult.TransferSyntax
+	displayImageInfo(parseResult.Dataset, parseResult.TransferSyntax)
+	plan, results, err := executeCompressionPlan(
+		options.inputPath,
+		options.outputDirectory,
+		options.format,
+		parseResult.Dataset,
+		parseResult.TransferSyntax,
+		codec.GetGlobalRegistry(),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	printCompressionResults(plan.outputDirectory, results)
+	return compressionExitCode(results)
+}
 
-	fmt.Printf("Successfully read DICOM file\n")
-	fmt.Printf("  Source Transfer Syntax: %s\n", sourceTS.UID().UID())
-
-	// Display image information
-	displayImageInfo(ds)
-
-	// Get output directory
-	outputDir := getOutputDirectory(inputPath)
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		fmt.Printf("\nFailed to create output directory: %v\n", err)
-		waitForExit()
-		return
+func executeCompressionPlan(
+	inputPath, outputDirectory, targetSuffix string,
+	ds *dataset.Dataset,
+	sourceTS *transfer.Syntax,
+	registry *codec.Registry,
+) (compressionPlan, []compressionResult, error) {
+	plan, err := createCompressionPlan(inputPath, outputDirectory, jpegSequentialDCTImageInfoFromDataset(ds))
+	if err != nil {
+		return compressionPlan{}, nil, err
+	}
+	items, err := selectCompressionPlanItems(plan, targetSuffix)
+	if err != nil {
+		return compressionPlan{}, nil, err
+	}
+	if err := os.MkdirAll(plan.outputDirectory, 0755); err != nil {
+		return compressionPlan{}, nil, fmt.Errorf("create output directory: %w", err)
 	}
 
-	fmt.Printf("\nOutput directory: %s\n", outputDir)
-
-	// Define target transfer syntaxes
-	targetFormats := []struct {
-		name       string
-		ts         *transfer.Syntax
-		suffix     string
-		isLossless bool
-	}{
-		{"JPEG Baseline (Lossy 8-bit)", transfer.JPEGBaseline8Bit, "jpeg_baseline", false},
-		{"JPEG JPEGProcess2_4", transfer.JPEGProcess2_4, "jpeg_process2_4", true},
-		{"JPEG Lossless", transfer.JPEGLossless, "jpeg_lossless", true},
-		{"JPEG Lossless SV1", transfer.JPEGLosslessSV1, "jpeg_lossless_sv1", true},
-		{"JPEG-LS Lossless", transfer.JPEGLSLossless, "jpegls_lossless", true},
-		{"JPEG-LS NearLossless", transfer.JPEGLSNearLossless, "jpegls_near_lossless", true},
-		{"RLE", transfer.RLELossless, "rle", false},
-		{"JPEG 2000 Lossless", transfer.JPEG2000Lossless, "j2k_lossless", true},
-		{"JPEG 2000 Lossy", transfer.JPEG2000Lossy, "j2k_lossy", false},
+	inputSize, err := getFileSize(inputPath)
+	if err != nil {
+		return compressionPlan{}, nil, fmt.Errorf("read input file size: %w", err)
 	}
-
-	// Get codec registry
-	registry := codec.GetGlobalRegistry()
-
-	// Transcode to each format
-	fmt.Println("\n" + strings.Repeat("-", 70))
-	fmt.Println("Starting transcoding process...")
-	fmt.Println(strings.Repeat("-", 70))
-
-	successCount := 0
-	failCount := 0
-
-	for i, format := range targetFormats {
-		fmt.Printf("\n[%d/%d] Transcoding to %s\n", i+1, len(targetFormats), format.name)
-		fmt.Printf("      Transfer Syntax: %s\n", format.ts.UID().UID())
-
-		// Pre-check for JPEG Baseline 8-bit limitation
-		bitsStored := ds.TryGetUInt16(tag.BitsStored, 0)
-		if format.ts == transfer.JPEGBaseline8Bit && bitsStored > 8 {
-			fmt.Printf("      Skipped: JPEG Baseline only supports 8-bit images (your image is %d-bit)\n", bitsStored)
-			failCount++
+	results := make([]compressionResult, 0, len(items))
+	for _, item := range items {
+		if item.status == compressionResultUnsupported {
+			results = append(results, compressionResult{item: item, status: item.status, message: item.message})
 			continue
 		}
 
-		// Generate output filename
-		baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
-		outputPath := filepath.Join(outputDir, fmt.Sprintf("%s_%s.dcm", baseName, format.suffix))
-
-		// Perform transcoding
-		if err := transcodeDICOMFile(ds, outputPath, sourceTS, format.ts, registry); err != nil {
-			fmt.Printf("      Failed: %v\n", err)
-			failCount++
+		if err := transcodeDICOMFile(ds, item.outputPath, sourceTS, item.format.transfer, registry); err != nil {
+			results = append(results, compressionResult{item: item, status: compressionResultFailed, message: err.Error()})
 			continue
 		}
-
-		// Get file sizes
-		inputSize, _ := getFileSize(inputPath)
-		outputSize, _ := getFileSize(outputPath)
-		ratio := float64(inputSize) / float64(outputSize)
-
-		fmt.Printf("      Success!\n")
-		fmt.Printf("      Size: %s -> %s (%.2fx compression)\n",
-			formatBytes(inputSize), formatBytes(outputSize), ratio)
-		fmt.Printf("      Output: %s\n", filepath.Base(outputPath))
-
-		successCount++
+		outputSize, err := getFileSize(item.outputPath)
+		if err != nil {
+			results = append(results, compressionResult{item: item, status: compressionResultFailed, message: err.Error()})
+			continue
+		}
+		ratio := 0.0
+		if outputSize > 0 {
+			ratio = float64(inputSize) / float64(outputSize)
+		}
+		results = append(results, compressionResult{
+			item:       item,
+			status:     compressionResultSuccess,
+			outputSize: outputSize,
+			message:    fmt.Sprintf("%.2fx compression", ratio),
+		})
 	}
-
-	// Summary
-	fmt.Println("\n" + strings.Repeat("-", 70))
-	fmt.Println("Transcoding Summary")
-	fmt.Println(strings.Repeat("-", 70))
-	fmt.Printf("Success: %d\n", successCount)
-	if failCount > 0 {
-		fmt.Printf("Failed:  %d\n", failCount)
-	}
-	fmt.Printf("Output directory: %s\n", outputDir)
-	fmt.Println(strings.Repeat("-", 70))
-
-	// Wait for user input before exit
-	waitForExit()
+	return plan, results, nil
 }
 
-// getInputFilePath gets the input DICOM file path from command line or user input
-func getInputFilePath() string {
-	// Check command line arguments
-	if len(os.Args) > 1 {
-		return os.Args[1]
-	}
-
-	// Interactive input
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter DICOM file path (or drag and drop file here): ")
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	// Remove quotes if present (from drag and drop)
-	input = strings.Trim(input, "\"'")
-
-	return input
+func displayImageInfo(ds *dataset.Dataset, sourceTS *transfer.Syntax) {
+	fmt.Println("Image:")
+	fmt.Printf("    Rows: %d\n", ds.TryGetUInt16(tag.Rows, 0))
+	fmt.Printf("    Columns: %d\n", ds.TryGetUInt16(tag.Columns, 0))
+	fmt.Printf("    Bits Stored: %d\n", ds.TryGetUInt16(tag.BitsStored, 0))
+	fmt.Printf("    Samples Per Pixel: %d\n", ds.TryGetUInt16(tag.SamplesPerPixel, 0))
+	fmt.Printf("    Photometric Interpretation: %s\n", ds.TryGetString(tag.PhotometricInterpretation))
+	fmt.Printf("    Source Transfer Syntax: %s\n", sourceTS.UID().UID())
 }
 
-// getOutputDirectory determines the output directory based on input file
-func getOutputDirectory(inputPath string) string {
-	// Get the directory of the input file
-	inputDir := filepath.Dir(inputPath)
-
-	// Create output directory name
-	baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
-	outputDir := filepath.Join(inputDir, baseName+"_transcoded")
-
-	return outputDir
+func printCompressionResults(outputDirectory string, results []compressionResult) {
+	fmt.Println("Output directory: " + outputDirectory)
+	fmt.Println()
+	counts := map[compressionResultStatus]int{}
+	for index, result := range results {
+		fmt.Printf("[%d/%d] %s\n", index+1, len(results), result.item.format.name)
+		fmt.Println("    Transfer Syntax: " + result.item.format.transfer.UID().UID())
+		switch result.status {
+		case compressionResultSuccess:
+			fmt.Println("    Success: " + filepath.Base(result.item.outputPath))
+			fmt.Printf("    Size: %s (%s)\n", formatBytes(result.outputSize), result.message)
+		case compressionResultUnsupported:
+			fmt.Println("    Unsupported: " + result.message)
+		case compressionResultSkipped:
+			fmt.Println("    Skipped: " + result.message)
+		case compressionResultFailed:
+			fmt.Println("    Failed: " + result.message)
+		}
+		counts[result.status]++
+	}
+	fmt.Printf(
+		"\nSummary: %d succeeded, %d unsupported, %d skipped, %d failed.\n",
+		counts[compressionResultSuccess],
+		counts[compressionResultUnsupported],
+		counts[compressionResultSkipped],
+		counts[compressionResultFailed],
+	)
 }
 
-// displayImageInfo shows information about the DICOM image
-func displayImageInfo(ds *dataset.Dataset) {
-	fmt.Println("\nImage Information:")
-
-	// Get image dimensions
-	rows := ds.TryGetUInt16(tag.Rows, 0)
-	if rows > 0 {
-		fmt.Printf("  Rows: %d\n", rows)
-	}
-
-	cols := ds.TryGetUInt16(tag.Columns, 0)
-	if cols > 0 {
-		fmt.Printf("  Columns: %d\n", cols)
-	}
-
-	// Get bit depth
-	bits := ds.TryGetUInt16(tag.BitsStored, 0)
-	if bits > 0 {
-		fmt.Printf("  Bits Stored: %d\n", bits)
-	}
-
-	// Get samples per pixel
-	samples := ds.TryGetUInt16(tag.SamplesPerPixel, 0)
-	if samples > 0 {
-		fmt.Printf("  Samples Per Pixel: %d\n", samples)
-	}
-
-	// Get photometric interpretation
-	if pi, ok := ds.GetString(tag.PhotometricInterpretation); ok {
-		fmt.Printf("  Photometric Interpretation: %s\n", pi)
-	}
-
-	// Get modality
-	if modality, ok := ds.GetString(tag.Modality); ok {
-		fmt.Printf("  Modality: %s\n", modality)
-	}
+func printUsage() {
+	fmt.Println("Usage:")
+	fmt.Println("  dicom_transcoder <input-file> [--output-dir <directory>] [--format <format>]")
 }
 
 // transcodeDICOMFile converts a DICOM dataset from one transfer syntax to another
@@ -339,11 +282,4 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
-// waitForExit waits for user input before exiting
-func waitForExit() {
-	fmt.Println("\n" + strings.Repeat("-", 70))
-	fmt.Print("Press Enter to exit...")
-	_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
