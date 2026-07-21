@@ -52,6 +52,16 @@ func (w *Writer) WriteSegment(marker uint16, data []byte) error {
 	return err
 }
 
+// WriteJFIFAPP0 writes the JFIF application marker emitted by fo-dicom Native.
+func (w *Writer) WriteJFIFAPP0() error {
+	return w.WriteSegment(MarkerAPP0, []byte{
+		'J', 'F', 'I', 'F', 0x00,
+		0x01, 0x01, 0x00,
+		0x00, 0x01, 0x00, 0x01,
+		0x00, 0x00,
+	})
+}
+
 // Write writes raw bytes
 func (w *Writer) Write(data []byte) (int, error) {
 	return w.w.Write(data)

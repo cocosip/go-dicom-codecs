@@ -68,6 +68,9 @@ func Encode(pixelData []byte, width, height, components, bitDepth, predictor int
 	if err := writer.WriteMarker(standard.MarkerSOI); err != nil {
 		return nil, err
 	}
+	if err := writer.WriteJFIFAPP0(); err != nil {
+		return nil, err
+	}
 
 	// Write SOF3 (Lossless)
 	if err := enc.writeSOF3(writer); err != nil {

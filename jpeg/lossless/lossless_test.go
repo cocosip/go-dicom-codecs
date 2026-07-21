@@ -24,13 +24,24 @@ func TestEncodeUsesOptimizedHuffmanTables(t *testing.T) {
 	}
 }
 
-func TestEncodeOmitsJFIFAPP0ToMatchFoDicom(t *testing.T) {
+func TestEncodeWritesNativeJFIFAPP0(t *testing.T) {
 	encoded, err := Encode(make([]byte, 8*8), 8, 8, 1, 8, 1)
 	if err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
-	if bytes.Contains(encoded, []byte{0xff, 0xe0}) {
-		t.Fatal("Encode() emitted JFIF APP0, want fo-dicom-compatible marker layout")
+	want := []byte{
+		0xff, 0xd8,
+		0xff, 0xe0, 0x00, 0x10,
+		'J', 'F', 'I', 'F', 0x00,
+		0x01, 0x01, 0x00,
+		0x00, 0x01, 0x00, 0x01,
+		0x00, 0x00,
+	}
+	if len(encoded) < len(want) {
+		t.Fatalf("JPEG header is too short: got %d bytes, want at least %d", len(encoded), len(want))
+	}
+	if !bytes.Equal(encoded[:len(want)], want) {
+		t.Fatalf("JPEG header = %x, want %x", encoded[:len(want)], want)
 	}
 }
 
