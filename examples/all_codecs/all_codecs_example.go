@@ -8,19 +8,21 @@ import (
 	"github.com/cocosip/go-dicom-codecs/jpeg/baseline"
 	"github.com/cocosip/go-dicom-codecs/jpeg/lossless"
 	"github.com/cocosip/go-dicom-codecs/jpeg/lossless14sv1"
+	"github.com/cocosip/go-dicom-codecs/rle"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 func main() {
-	fmt.Println("=== DICOM JPEG Codecs - Complete Example ===")
+	fmt.Println("=== DICOM Image Codecs - Complete Example ===")
 
 	// Register all codecs
-	fmt.Println("Registering all JPEG codecs...")
+	fmt.Println("Registering all JPEG and RLE codecs...")
 	baseline.RegisterBaselineCodec(85)       // Quality 85
 	lossless14sv1.RegisterLosslessSV1Codec() // Predictor 1 only
 	lossless.RegisterLosslessCodec(4)        // Predictor 4
+	rle.RegisterRLECodec()
 	fmt.Println("鉁?All codecs registered")
 
 	// Create test image data (64x64 grayscale)

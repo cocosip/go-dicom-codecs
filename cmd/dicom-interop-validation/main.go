@@ -24,6 +24,7 @@ import (
 	_ "github.com/cocosip/go-dicom-codecs/jpeg2000/lossy"
 	_ "github.com/cocosip/go-dicom-codecs/jpegls/lossless"
 	"github.com/cocosip/go-dicom-codecs/jpegls/nearlossless"
+	_ "github.com/cocosip/go-dicom-codecs/rle"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"

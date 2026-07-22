@@ -4,6 +4,9 @@ A Go library providing image compression/decompression codecs for medical imagin
 
 ## Features
 
+### RLE Family
+- **RLE Lossless** [1.2.840.10008.1.2.5]
+
 ### JPEG Family
 - ✅ **JPEG Baseline** (Process 1) - Lossy, 8-bit [1.2.840.10008.1.2.4.50]
 - ✅ **JPEG Extended** (Process 2 & 4) - Lossy, 8/12-bit [1.2.840.10008.1.2.4.51]
@@ -42,6 +45,7 @@ go get github.com/cocosip/go-dicom-codecs
 The library is organized into the following packages:
 
 - `codec/` - Core codec interfaces and registry
+- `rle/` - DICOM RLE Lossless codec
 - `jpeg/` - JPEG family implementations
   - `jpeg/common/` - Shared utilities (Huffman, DCT, markers, etc.)
   - `jpeg/baseline/` - JPEG Baseline codec
