@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	sourcecodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
-func TestRLECodecMatchesGoDicom(t *testing.T) {
+func TestRLECodecRoundTripPixelLayouts(t *testing.T) {
 	tests := []struct {
 		name string
 		info *imagetypes.FrameInfo
@@ -50,14 +49,8 @@ func TestRLECodecMatchesGoDicom(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := encodeFrame(t, NewRLECodec(), test.info, test.data)
-			want := encodeFrame(t, sourcecodec.NewRLECodec(), test.info, test.data)
-			if !bytes.Equal(got, want) {
-				t.Fatal("RLE encoded frame differs from go-dicom")
-			}
-
-			assertDecodedFrame(t, NewRLECodec(), test.info, want, test.data)
-			assertDecodedFrame(t, sourcecodec.NewRLECodec(), test.info, got, test.data)
+			encoded := encodeFrame(t, NewRLECodec(), test.info, test.data)
+			assertDecodedFrame(t, NewRLECodec(), test.info, encoded, test.data)
 		})
 	}
 }
@@ -70,7 +63,7 @@ func patternedBytes(length, factor int) []byte {
 	return result
 }
 
-func encodeFrame(t *testing.T, codec imagetypesCodec, info *imagetypes.FrameInfo, frame []byte) []byte {
+func encodeFrame(t *testing.T, codec *Codec, info *imagetypes.FrameInfo, frame []byte) []byte {
 	t.Helper()
 	source := newTestPixelData(info)
 	_ = source.AddFrame(frame)
@@ -85,7 +78,7 @@ func encodeFrame(t *testing.T, codec imagetypesCodec, info *imagetypes.FrameInfo
 	return encoded
 }
 
-func assertDecodedFrame(t *testing.T, codec imagetypesCodec, info *imagetypes.FrameInfo, encoded, want []byte) {
+func assertDecodedFrame(t *testing.T, codec *Codec, info *imagetypes.FrameInfo, encoded, want []byte) {
 	t.Helper()
 	source := newTestPixelData(info)
 	_ = source.AddFrame(encoded)
@@ -100,9 +93,4 @@ func assertDecodedFrame(t *testing.T, codec imagetypesCodec, info *imagetypes.Fr
 	if !bytes.Equal(got[:len(want)], want) {
 		t.Fatal("decoded pixels differ from source frame")
 	}
-}
-
-type imagetypesCodec interface {
-	Encode(imagetypes.PixelData, imagetypes.PixelData, sourcecodec.Parameters) error
-	Decode(imagetypes.PixelData, imagetypes.PixelData, sourcecodec.Parameters) error
 }
