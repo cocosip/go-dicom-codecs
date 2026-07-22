@@ -147,7 +147,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsStored),
+		int(frameInfo.BitsAllocated),
 		frameInfo.PixelRepresentation != 0,
 	)
 
@@ -195,7 +195,6 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		if len(frameData) == 0 {
 			return fmt.Errorf("frame %d pixel data is empty", frameIndex)
 		}
-
 		// Encode using full JPEG 2000 pipeline (DWT + HTJ2K block coding + T2)
 		encoded, err := encoder.Encode(frameData)
 		if err != nil {

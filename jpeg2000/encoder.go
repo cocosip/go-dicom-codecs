@@ -436,9 +436,21 @@ func (e *Encoder) buildCodestream() ([]byte, error) {
 
 	e.openJPEGMainHeaderBytes = buf.Len()
 
-	// Write tiles
-	if err := e.writeTiles(buf); err != nil {
-		return nil, fmt.Errorf("failed to write tiles: %w", err)
+	if !e.params.HTJ2KMode {
+		if err := e.writeTiles(buf); err != nil {
+			return nil, fmt.Errorf("failed to write tiles: %w", err)
+		}
+	} else {
+		tileParts := &bytes.Buffer{}
+		if err := e.writeTiles(tileParts); err != nil {
+			return nil, fmt.Errorf("failed to write HTJ2K tile-parts: %w", err)
+		}
+		if err := e.writeTLM(buf, tileParts.Bytes()); err != nil {
+			return nil, fmt.Errorf("failed to write TLM: %w", err)
+		}
+		if _, err := buf.Write(tileParts.Bytes()); err != nil {
+			return nil, fmt.Errorf("failed to write HTJ2K tile-parts: %w", err)
+		}
 	}
 
 	// Write EOC (End of Codestream)
@@ -1178,10 +1190,20 @@ func (e *Encoder) writeCAP(buf *bytes.Buffer) error {
 	}
 
 	capData := &bytes.Buffer{}
+	capability := uint16(0x0002)
+	if e.params.Components > 1 {
+		capability |= 0x0001
+	}
+	if e.params.BitDepth > 8 {
+		capability |= 0x0008
+	}
+	if !e.params.Lossless {
+		capability |= 0x0020
+	}
 	if err := binary.Write(capData, binary.BigEndian, uint32(0x00020000)); err != nil {
 		return err
 	}
-	if err := binary.Write(capData, binary.BigEndian, uint16(0)); err != nil {
+	if err := binary.Write(capData, binary.BigEndian, capability); err != nil {
 		return err
 	}
 	if err := binary.Write(buf, binary.BigEndian, codestream.MarkerCAP); err != nil {
@@ -1192,6 +1214,63 @@ func (e *Encoder) writeCAP(buf *bytes.Buffer) error {
 	}
 	_, err := buf.Write(capData.Bytes())
 	return err
+}
+
+func (e *Encoder) writeTLM(buf *bytes.Buffer, tileParts []byte) error {
+	if !e.params.HTJ2KMode {
+		return nil
+	}
+
+	type tlmEntry struct {
+		tileIndex uint16
+		length    uint32
+	}
+	entries := make([]tlmEntry, 0, e.params.NumLevels+1)
+	for offset := 0; offset < len(tileParts); {
+		if offset+12 > len(tileParts) ||
+			tileParts[offset] != 0xFF || tileParts[offset+1] != 0x90 {
+			return fmt.Errorf("invalid tile-part at offset %d", offset)
+		}
+		length := binary.BigEndian.Uint32(tileParts[offset+6 : offset+10])
+		if length < 14 || uint64(offset)+uint64(length) > uint64(len(tileParts)) {
+			return fmt.Errorf("invalid tile-part length %d at offset %d", length, offset)
+		}
+		entries = append(entries, tlmEntry{
+			tileIndex: binary.BigEndian.Uint16(tileParts[offset+4 : offset+6]),
+			length:    length,
+		})
+		offset += int(length)
+	}
+
+	if len(entries) == 0 {
+		return fmt.Errorf("no tile-parts available for TLM")
+	}
+	if err := binary.Write(buf, binary.BigEndian, codestream.MarkerTLM); err != nil {
+		return err
+	}
+	if err := binary.Write(buf, binary.BigEndian, uint16(4+len(entries)*6)); err != nil {
+		return err
+	}
+	if err := buf.WriteByte(0); err != nil {
+		return err
+	}
+	if err := buf.WriteByte(0x60); err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := binary.Write(buf, binary.BigEndian, entry.tileIndex); err != nil {
+			return err
+		}
+		if err := binary.Write(buf, binary.BigEndian, entry.length); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *Encoder) usesColorTransform() bool {
+	p := e.params
+	return p.EnableMCT && (len(p.MCTBindings) > 0 || (p.MCTMatrix != nil && len(p.MCTMatrix) == p.Components) || p.Components >= 3)
 }
 
 // writeCOD writes the COD (Coding Style Default) segment
@@ -1220,7 +1299,7 @@ func (e *Encoder) writeCOD(buf *bytes.Buffer) error {
 
 	// MCT - Multiple component transformation (1 for RGB, 0 for grayscale)
 	mct := uint8(0)
-	if p.EnableMCT && (len(p.MCTBindings) > 0 || (p.MCTMatrix != nil && len(p.MCTMatrix) == p.Components) || p.Components >= 3) {
+	if e.usesColorTransform() {
 		mct = 1
 	}
 	if err := binary.Write(codData, binary.BigEndian, mct); err != nil {
@@ -1508,7 +1587,23 @@ func (e *Encoder) quantizationInfo() quantizationInfo {
 	p := e.params
 	info := quantizationInfo{}
 
-	if p.Lossless {
+	if p.HTJ2KMode {
+		quantParams := calculateOpenJPHQuantizationParams(p.NumLevels, p.BitDepth, p.Lossless, e.usesColorTransform())
+		info.style = quantParams.Style
+		info.guardBits = quantParams.GuardBits
+		info.steps = quantParams.EncodedSteps
+		if p.Lossless {
+			info.expn = make([]int, len(info.steps))
+			for i, step := range info.steps {
+				info.expn[i] = int(step >> 3)
+			}
+		} else {
+			info.expn = make([]int, len(info.steps))
+			for i, step := range info.steps {
+				info.expn[i] = int(step >> 11)
+			}
+		}
+	} else if p.Lossless {
 		info.style = 0
 		info.guardBits = 2
 		expn := make([]int, 0, 3*p.NumLevels+1)
@@ -1545,6 +1640,9 @@ func (e *Encoder) quantizationInfo() quantizationInfo {
 }
 
 func (e *Encoder) lossyQuantizationParams() *QuantizationParams {
+	if e.params.HTJ2KMode {
+		return CalculateOpenJPHQuantizationParams(e.params.NumLevels, e.params.BitDepth, false)
+	}
 	if len(e.params.CustomQuantSteps) > 0 {
 		steps := encodeQuantStepsFromFloats(e.params.CustomQuantSteps, e.params.BitDepth)
 		return &QuantizationParams{
@@ -1689,7 +1787,10 @@ func (e *Encoder) writeRGN(buf *bytes.Buffer) error {
 // writeVersionCOM writes a COM (Comment) marker with version information.
 // This matches OpenJPEG's behavior of including a version string.
 func (e *Encoder) writeVersionCOM(buf *bytes.Buffer) error {
-	const version = "Created by OpenJPEG version 2.5.4"
+	version := "Created by OpenJPEG version 2.5.4"
+	if e.params.HTJ2KMode {
+		version = "OpenJPH Ver 0.21.2."
+	}
 
 	data := &bytes.Buffer{}
 
@@ -1996,6 +2097,9 @@ func (e *Encoder) writeTile(buf *bytes.Buffer, tileIdx, tileWidth, tileHeight, n
 	actualHeight := y1 - y0
 
 	transformedData := e.transformTile(x0, y0, actualWidth, actualHeight)
+	if e.params.HTJ2KMode {
+		return e.writeHTJ2KTileParts(buf, tileIdx, e.encodeTilePackets(transformedData, actualWidth, actualHeight))
+	}
 
 	// Encode tile data
 	tileBytes := e.encodeTileData(transformedData, actualWidth, actualHeight)
@@ -2027,6 +2131,55 @@ func (e *Encoder) writeTile(buf *bytes.Buffer, tileIdx, tileWidth, tileHeight, n
 	// Write tile data
 	buf.Write(tileBytes)
 
+	return nil
+}
+
+func (e *Encoder) writeHTJ2KTileParts(buf *bytes.Buffer, tileIdx int, packets []t2.Packet) error {
+	partCount := e.params.NumLevels + 1
+	parts := make([][]byte, partCount)
+	for _, packet := range packets {
+		if packet.ResolutionLevel < 0 || packet.ResolutionLevel >= partCount {
+			return fmt.Errorf("packet resolution %d is outside HTJ2K tile-part range", packet.ResolutionLevel)
+		}
+		parts[packet.ResolutionLevel] = append(parts[packet.ResolutionLevel], packet.Header...)
+		parts[packet.ResolutionLevel] = append(parts[packet.ResolutionLevel], packet.Body...)
+	}
+
+	for partIndex, data := range parts {
+		tileHeader := &bytes.Buffer{}
+		if partIndex == 0 {
+			if err := e.writeTileRGN(tileHeader); err != nil {
+				return fmt.Errorf("failed to write tile-part RGN: %w", err)
+			}
+		}
+		if err := binary.Write(buf, binary.BigEndian, codestream.MarkerSOT); err != nil {
+			return err
+		}
+		if err := binary.Write(buf, binary.BigEndian, uint16(10)); err != nil {
+			return err
+		}
+		if err := binary.Write(buf, binary.BigEndian, uint16(tileIdx)); err != nil {
+			return err
+		}
+		if err := binary.Write(buf, binary.BigEndian, uint32(len(data)+tileHeader.Len()+14)); err != nil {
+			return err
+		}
+		if err := buf.WriteByte(byte(partIndex)); err != nil {
+			return err
+		}
+		if err := buf.WriteByte(byte(partCount)); err != nil {
+			return err
+		}
+		if _, err := buf.Write(tileHeader.Bytes()); err != nil {
+			return err
+		}
+		if err := binary.Write(buf, binary.BigEndian, codestream.MarkerSOD); err != nil {
+			return err
+		}
+		if _, err := buf.Write(data); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -2243,6 +2396,7 @@ func (e *Encoder) buildTilePacketEncoder(tileData [][]int32, width, height int) 
 		t2.ProgressionOrder(e.params.ProgressionOrder), // Cast uint8 to ProgressionOrder
 	)
 	packetEnc.SetImageDimensions(width, height)
+	packetEnc.SetHTJ2KMode(e.params.HTJ2KMode)
 	precinctWidths := make([]int, e.params.NumLevels+1)
 	precinctHeights := make([]int, e.params.NumLevels+1)
 	for res := 0; res <= e.params.NumLevels; res++ {
@@ -2306,6 +2460,10 @@ func (e *Encoder) buildTilePacketEncoder(tileData [][]int32, width, height int) 
 
 // encodeTileData encodes tile data using T1 and T2 encoding.
 func (e *Encoder) encodeTileData(tileData [][]int32, width, height int) []byte {
+	return e.packetsToBytes(e.encodeTilePackets(tileData, width, height))
+}
+
+func (e *Encoder) encodeTilePackets(tileData [][]int32, width, height int) []t2.Packet {
 	packetEnc, allBlocks := e.buildTilePacketEncoder(tileData, width, height)
 
 	// Apply rate-distortion optimized allocation (PCRD) if layered or TargetRatio is requested.
@@ -2319,10 +2477,10 @@ func (e *Encoder) encodeTileData(tileData [][]int32, width, height int) []byte {
 	packets, err := packetEnc.EncodePackets()
 	if err != nil {
 		// Fallback to empty packet on error
-		return []byte{0x00}
+		return []t2.Packet{{ResolutionLevel: 0, Header: []byte{0x00}}}
 	}
 
-	return e.packetsToBytes(packets)
+	return packets
 }
 
 func (e *Encoder) packetsToBytes(packets []t2.Packet) []byte {

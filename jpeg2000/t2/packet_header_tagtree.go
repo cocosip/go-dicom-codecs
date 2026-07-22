@@ -149,6 +149,9 @@ func (pe *PacketEncoder) writeInclusionAndZBP(bw *bioWriter, precinct *Precinct,
 // params: precincts - list of precincts; layer - current layer
 // returns: header bytes, block inclusions and error
 func (pe *PacketEncoder) encodePacketHeaderWithTagTreeMulti(precincts []*Precinct, layer int) ([]byte, []CodeBlockIncl, error) {
+	if pe.htj2kMode {
+		return pe.encodeHTJ2KPacketHeader(precincts, layer)
+	}
 	cbIncls := make([]CodeBlockIncl, 0)
 	bitBuf := newBioWriter()
 
@@ -261,6 +264,201 @@ func (pe *PacketEncoder) encodePacketHeaderWithTagTreeMulti(precincts []*Precinc
 	}
 
 	return bitBuf.flush(), cbIncls, nil
+}
+
+// encodeHTJ2KPacketHeader is a direct Go translation of OpenJPH's
+// precinct::prepare_precinct. HTJ2K uses one cleanup pass, but OpenJPH's
+// inclusion and missing-MSB tag trees intentionally differ from the generic
+// multi-layer JPEG 2000 packet writer.
+func (pe *PacketEncoder) encodeHTJ2KPacketHeader(precincts []*Precinct, layer int) ([]byte, []CodeBlockIncl, error) {
+	bb := newBioWriter()
+	incls := make([]CodeBlockIncl, 0)
+	coded := false
+	skippedBands := 0
+
+	for _, precinct := range precincts {
+		if precinct == nil || len(precinct.CodeBlocks) == 0 {
+			continue
+		}
+		tree := newHTJ2KPrecinctTree(precinct, layer, pe)
+		if !tree.hasCoded {
+			if coded {
+				bb.writeBit(0)
+			} else {
+				skippedBands++
+			}
+			for range tree.blocks {
+				incls = append(incls, CodeBlockIncl{})
+			}
+			continue
+		}
+		if !coded {
+			coded = true
+			bb.writeBit(1)
+			for range skippedBands {
+				bb.writeBit(0)
+			}
+		}
+
+		for _, cb := range tree.blocks {
+			included := cb != nil && tree.encodeInclusion(bb, cb.CBX, cb.CBY)
+			incl := CodeBlockIncl{Included: included, FirstInclusion: included}
+			if !included {
+				incls = append(incls, incl)
+				continue
+			}
+			tree.encodeMissingMSBs(bb, cb.CBX, cb.CBY)
+			_, passes, data := pe.layerContribution(cb, layer)
+			incl.NumPasses = passes
+			if err := encodeNumPasses(bb, passes); err != nil {
+				return nil, nil, err
+			}
+			incl.Data = data
+			incl.DataLength = len(data)
+			prev, _ := pe.computePrevAndTotalPasses(cb, layer, passes)
+			encodeCodeBlockLengths(bb, cb, incl.DataLength, prev, passes, false, nil)
+			cb.Included = true
+			incls = append(incls, incl)
+		}
+	}
+	if !coded {
+		bb.writeBit(0)
+	}
+	return bb.flush(), incls, nil
+}
+
+type htj2kPrecinctTree struct {
+	width, height int
+	levels        int
+	blocks        []*PrecinctCodeBlock
+	inclusion     [][]int
+	missing       [][]int
+	inclusionSent [][]bool
+	missingSent   [][]bool
+	hasCoded      bool
+}
+
+func newHTJ2KPrecinctTree(precinct *Precinct, layer int, pe *PacketEncoder) *htj2kPrecinctTree {
+	t := &htj2kPrecinctTree{width: precinct.NumCodeBlocksX, height: precinct.NumCodeBlocksY}
+	if t.width < 1 {
+		t.width = 1
+	}
+	if t.height < 1 {
+		t.height = 1
+	}
+	t.levels = 1
+	for w, h := t.width, t.height; w > 1 || h > 1; {
+		t.levels++
+		w = (w + 1) >> 1
+		h = (h + 1) >> 1
+	}
+	t.inclusion = make([][]int, t.levels+1)
+	t.missing = make([][]int, t.levels+1)
+	t.inclusionSent = make([][]bool, t.levels)
+	t.missingSent = make([][]bool, t.levels)
+	for level := 0; level < t.levels; level++ {
+		w, h := t.dimension(level)
+		t.inclusion[level] = make([]int, w*h)
+		t.missing[level] = make([]int, w*h)
+		t.inclusionSent[level] = make([]bool, w*h)
+		t.missingSent[level] = make([]bool, w*h)
+		for i := range t.inclusion[level] {
+			t.inclusion[level][i] = 255
+			t.missing[level][i] = 255
+		}
+	}
+	t.inclusion[t.levels] = []int{0}
+	t.missing[t.levels] = []int{0}
+	byPosition := make(map[int]*PrecinctCodeBlock, len(precinct.CodeBlocks))
+	for _, cb := range precinct.CodeBlocks {
+		byPosition[cb.CBY*t.width+cb.CBX] = cb
+	}
+	for y := 0; y < t.height; y++ {
+		for x := 0; x < t.width; x++ {
+			cb := byPosition[y*t.width+x]
+			t.blocks = append(t.blocks, cb)
+			included := false
+			if cb != nil {
+				included, _, _ = pe.layerContribution(cb, layer)
+				t.missing[0][y*t.width+x] = cb.ZeroBitPlanes
+			}
+			if included {
+				t.inclusion[0][y*t.width+x] = 0
+				t.hasCoded = true
+			} else {
+				t.inclusion[0][y*t.width+x] = 1
+			}
+		}
+	}
+	for level := 1; level < t.levels; level++ {
+		w, h := t.dimension(level)
+		pw, ph := t.dimension(level - 1)
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				minIncl, minMissing := 255, 255
+				for dy := 0; dy < 2; dy++ {
+					for dx := 0; dx < 2; dx++ {
+						cx, cy := x*2+dx, y*2+dy
+						if cx < pw && cy < ph {
+							idx := cy*pw + cx
+							if t.inclusion[level-1][idx] < minIncl {
+								minIncl = t.inclusion[level-1][idx]
+							}
+							if t.missing[level-1][idx] < minMissing {
+								minMissing = t.missing[level-1][idx]
+							}
+						}
+					}
+				}
+				t.inclusion[level][y*w+x], t.missing[level][y*w+x] = minIncl, minMissing
+			}
+		}
+	}
+	return t
+}
+
+func (t *htj2kPrecinctTree) dimension(level int) (int, int) {
+	return (t.width + (1 << level) - 1) >> level, (t.height + (1 << level) - 1) >> level
+}
+func (t *htj2kPrecinctTree) value(values [][]int, level, x, y int) int {
+	w, _ := t.dimension(level)
+	return values[level][y*w+x]
+}
+func (t *htj2kPrecinctTree) sent(flags [][]bool, level, x, y int) *bool {
+	w, _ := t.dimension(level)
+	return &flags[level][y*w+x]
+}
+
+func (t *htj2kPrecinctTree) encodeInclusion(bb *bioWriter, x, y int) bool {
+	for level := t.levels; level > 0; level-- {
+		child := level - 1
+		cx, cy := x>>child, y>>child
+		sent := t.sent(t.inclusionSent, child, cx, cy)
+		if !*sent {
+			bb.writeBit(1 - (t.value(t.inclusion, child, cx, cy) - t.value(t.inclusion, level, x>>level, y>>level)))
+			*sent = true
+		}
+		if t.value(t.inclusion, child, cx, cy) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *htj2kPrecinctTree) encodeMissingMSBs(bb *bioWriter, x, y int) {
+	for level := t.levels; level > 0; level-- {
+		child := level - 1
+		cx, cy := x>>child, y>>child
+		sent := t.sent(t.missingSent, child, cx, cy)
+		if !*sent {
+			zeros := t.value(t.missing, child, cx, cy) - t.value(t.missing, level, x>>level, y>>level)
+			for range zeros {
+				bb.writeBit(0)
+			}
+			bb.writeBit(1)
+			*sent = true
+		}
+	}
 }
 
 // layerPassLengths computes per-layer pass lengths slice.

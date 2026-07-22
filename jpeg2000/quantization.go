@@ -235,6 +235,67 @@ func CalculateOpenJPEGQuantizationParams(numLevels, bitDepth int) *QuantizationP
 	return params
 }
 
+var openJPH97LowGain = []float64{1, 1.4021, 2.0304, 2.9012, 4.1153, 5.8245, 8.2388}
+var openJPH97HighGain = []float64{1.4425, 1.9669, 2.8839, 4.1475, 5.8946, 8.3472}
+var openJPH53LowBIBO = []float64{1, 1.5, 1.625, 1.6875, 1.6963, 1.7067, 1.7116}
+var openJPH53HighBIBO = []float64{2, 2.5, 2.75, 2.8047, 2.8198, 2.8410}
+
+// CalculateOpenJPHQuantizationParams mirrors OpenJPH param_qcd for HTJ2K.
+func CalculateOpenJPHQuantizationParams(numLevels, bitDepth int, lossless bool) *QuantizationParams {
+	return calculateOpenJPHQuantizationParams(numLevels, bitDepth, lossless, false)
+}
+
+// calculateOpenJPHQuantizationParams mirrors OpenJPH param_qcd for HTJ2K.
+// OpenJPH reserves one extra magnitude bit when COD enables RCT.
+func calculateOpenJPHQuantizationParams(numLevels, bitDepth int, lossless, usesRCT bool) *QuantizationParams {
+	if numLevels < 0 {
+		numLevels = 0
+	}
+	if numLevels > 6 {
+		numLevels = 6
+	}
+	if lossless {
+		precision := bitDepth
+		if usesRCT {
+			precision++
+		}
+		values := make([]float64, 0, 3*numLevels+1)
+		appendExponent := func(v float64) { values = append(values, float64(precision)+math.Ceil(math.Log2(v*v))-1) }
+		appendExponent(openJPH53LowBIBO[numLevels])
+		for d := numLevels; d > 0; d-- {
+			appendExponent(math.Sqrt(openJPH53LowBIBO[d] * openJPH53HighBIBO[d-1]))
+			appendExponent(math.Sqrt(openJPH53LowBIBO[d] * openJPH53HighBIBO[d-1]))
+			appendExponent(openJPH53HighBIBO[d-1])
+		}
+		encoded := make([]uint16, len(values))
+		for i, v := range values {
+			encoded[i] = uint16(int(v) << 3)
+		}
+		return &QuantizationParams{Style: 0, GuardBits: 1, EncodedSteps: encoded}
+	}
+	base := math.Ldexp(1, -min(16, bitDepth))
+	steps := make([]uint16, 0, 3*numLevels+1)
+	appendStep := func(delta float64) {
+		exp := 0
+		for delta < 1 {
+			exp++
+			delta *= 2
+		}
+		mant := int(math.Round(delta*2048)) - 2048
+		if mant >= 2048 {
+			mant = 2047
+		}
+		steps = append(steps, uint16(exp<<11|mant))
+	}
+	appendStep(base / (openJPH97LowGain[numLevels] * openJPH97LowGain[numLevels]))
+	for d := numLevels; d > 0; d-- {
+		appendStep(base / (openJPH97LowGain[d] * openJPH97HighGain[d-1]))
+		appendStep(base / (openJPH97LowGain[d] * openJPH97HighGain[d-1]))
+		appendStep(base / (openJPH97HighGain[d-1] * openJPH97HighGain[d-1]))
+	}
+	return &QuantizationParams{Style: 2, GuardBits: 1, EncodedSteps: steps}
+}
+
 // DecodeQuantizationStep decodes a JPEG 2000 quantization step from 16-bit encoded format.
 // encoded: 16-bit value with bits 11-15 = exponent, bits 0-10 = mantissa
 // bitDepth: original bit depth of the image

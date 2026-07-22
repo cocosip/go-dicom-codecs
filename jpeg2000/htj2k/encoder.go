@@ -20,8 +20,8 @@ type HTEncoder struct {
 	data []int32 // Wavelet coefficients
 
 	// Encoding state
-	roishift int
-	kmax     int
+	roishift    int
+	kmax        int
 
 	// Dimensions in quads
 	qw int // width in quads
@@ -34,10 +34,10 @@ func NewHTEncoder(width, height int) *HTEncoder {
 	qh := (height + 1) / 2
 
 	enc := &HTEncoder{
-		width:  width,
-		height: height,
-		qw:     qw,
-		qh:     qh,
+		width:       width,
+		height:      height,
+		qw:          qw,
+		qh:          qh,
 	}
 
 	return enc
@@ -48,6 +48,7 @@ func NewHTEncoder(width, height int) *HTEncoder {
 func (h *HTEncoder) SetKMax(kmax int) {
 	h.kmax = kmax
 }
+
 
 // Encode encodes a code-block using HTJ2K HT cleanup pass
 // Reference: ITU-T T.814 | ISO/IEC 15444-15:2019

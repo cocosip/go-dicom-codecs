@@ -14,6 +14,7 @@ type PacketEncoder struct {
 	numLayers      int
 	numResolutions int
 	progression    ProgressionOrder
+	htj2kMode      bool
 
 	// Precinct information
 	precincts map[int]map[int]map[int][]*Precinct // [component][resolution][precinct]
@@ -71,6 +72,11 @@ func (pe *PacketEncoder) SetImageDimensions(width, height int) {
 	pe.tileY0 = 0
 	pe.tileX1 = width
 	pe.tileY1 = height
+}
+
+// SetHTJ2KMode selects OpenJPH's HTJ2K precinct-header coding rules.
+func (pe *PacketEncoder) SetHTJ2KMode(enabled bool) {
+	pe.htj2kMode = enabled
 }
 
 // SetTileBounds sets the tile bounds in reference grid coordinates.
