@@ -32,9 +32,25 @@ import (
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
 )
 
-const defaultParallelFormats = 4
+const (
+	defaultParallelFormats     = 4
+	defaultNativeWorkerProject = "cmd/fo-dicom-native-worker/fo-dicom-native-worker.csproj"
 
-const defaultNativeWorkerProject = "cmd/fo-dicom-native-worker/fo-dicom-native-worker.csproj"
+	optionFormat = "--format"
+	optionStage  = "--stage"
+	optionInput  = "--input"
+	optionOutput = "--output"
+
+	stagePrepare = "prepare"
+	stageEncode  = "encode"
+	stageDecode  = "decode"
+
+	formatJPEGProcess1       = "jpeg-process-1"
+	formatJPEGProcess2_4     = "jpeg-process-2-4"
+	formatJPEGLosslessSV1    = "jpeg-lossless-14-sv1"
+	formatJPEGLSLossless     = "jpeg-ls-lossless"
+	formatJPEGLSNearLossless = "jpeg-ls-near-lossless"
+)
 
 type options struct {
 	format        string
@@ -56,12 +72,12 @@ type formatDefinition struct {
 
 var formatDefinitions = []formatDefinition{
 	{key: "rle"},
-	{key: "jpeg-process-1", tolerance: 64},
-	{key: "jpeg-process-2-4", tolerance: 64},
+	{key: formatJPEGProcess1, tolerance: 64},
+	{key: formatJPEGProcess2_4, tolerance: 64},
 	{key: "jpeg-lossless-14"},
-	{key: "jpeg-lossless-14-sv1"},
-	{key: "jpeg-ls-lossless"},
-	{key: "jpeg-ls-near-lossless", tolerance: 2},
+	{key: formatJPEGLosslessSV1},
+	{key: formatJPEGLSLossless},
+	{key: formatJPEGLSNearLossless, tolerance: 2},
 	{key: "jpeg2000-lossless"},
 	{key: "jpeg2000-lossy", tolerance: 58},
 	{key: "htj2k-lossless"},
@@ -114,7 +130,7 @@ func parseOptions(args []string) (options, error) {
 		}
 		value := strings.Trim(strings.TrimSpace(args[i]), "\"'")
 		switch arg {
-		case "--format":
+		case optionFormat:
 			if !isKnownFormat(value) {
 				return options{}, fmt.Errorf("unknown format %q", value)
 			}
@@ -135,14 +151,14 @@ func parseOptions(args []string) (options, error) {
 				return options{}, fmt.Errorf("unknown worker format %q", value)
 			}
 			result.worker = value
-		case "--stage":
-			if value != "prepare" && value != "encode" && value != "decode" {
+		case optionStage:
+			if value != stagePrepare && value != stageEncode && value != stageDecode {
 				return options{}, fmt.Errorf("--stage must be prepare, encode, or decode")
 			}
 			result.stage = value
-		case "--input":
+		case optionInput:
 			result.input = value
-		case "--output":
+		case optionOutput:
 			result.output = value
 		case "--fixture-dir":
 			result.fixtureDir = value
@@ -163,15 +179,15 @@ func parseOptions(args []string) (options, error) {
 
 func childArgs(stage, format, input, output string) []string {
 	return []string{
-		"--stage", stage,
-		"--format", format,
-		"--input", input,
-		"--output", output,
+		optionStage, stage,
+		optionFormat, format,
+		optionInput, input,
+		optionOutput, output,
 	}
 }
 
 func nativeDecodeArgs(projectPath, input, output string) []string {
-	return []string{"run", "--project", projectPath, "--", "decode", input, output}
+	return []string{"run", "--project", projectPath, "--", stageDecode, input, output}
 }
 
 func printUsage() {
@@ -237,18 +253,18 @@ func registerInteropCodecs() {
 
 func formatTransferSyntax(key string) (*transfer.Syntax, error) {
 	syntaxes := map[string]*transfer.Syntax{
-		"rle":                   transfer.RLELossless,
-		"jpeg-process-1":        transfer.JPEGBaseline8Bit,
-		"jpeg-process-2-4":      transfer.JPEGProcess2_4,
-		"jpeg-lossless-14":      transfer.JPEGLossless,
-		"jpeg-lossless-14-sv1":  transfer.JPEGLosslessSV1,
-		"jpeg-ls-lossless":      transfer.JPEGLSLossless,
-		"jpeg-ls-near-lossless": transfer.JPEGLSNearLossless,
-		"jpeg2000-lossless":     transfer.JPEG2000Lossless,
-		"jpeg2000-lossy":        transfer.JPEG2000Lossy,
-		"htj2k-lossless":        transfer.HTJ2KLossless,
-		"htj2k-lossless-rpcl":   transfer.HTJ2KLosslessRPCL,
-		"htj2k-lossy":           transfer.HTJ2K,
+		"rle":                    transfer.RLELossless,
+		formatJPEGProcess1:       transfer.JPEGBaseline8Bit,
+		formatJPEGProcess2_4:     transfer.JPEGProcess2_4,
+		"jpeg-lossless-14":       transfer.JPEGLossless,
+		formatJPEGLosslessSV1:    transfer.JPEGLosslessSV1,
+		formatJPEGLSLossless:     transfer.JPEGLSLossless,
+		formatJPEGLSNearLossless: transfer.JPEGLSNearLossless,
+		"jpeg2000-lossless":      transfer.JPEG2000Lossless,
+		"jpeg2000-lossy":         transfer.JPEG2000Lossy,
+		"htj2k-lossless":         transfer.HTJ2KLossless,
+		"htj2k-lossless-rpcl":    transfer.HTJ2KLosslessRPCL,
+		"htj2k-lossy":            transfer.HTJ2K,
 	}
 	syntax, ok := syntaxes[key]
 	if !ok {
@@ -288,8 +304,8 @@ func loadImage(path string) (imageData, error) {
 	}
 	info := pixelData.Info
 	result := imageData{
-		width: uint16(info.Width), height: uint16(info.Height), bitsAllocated: uint16(info.BitsAllocated),
-		bitsStored: uint16(info.BitsStored), samples: uint16(info.SamplesPerPixel), representation: uint16(info.PixelRepresentation),
+		width: info.Width, height: info.Height, bitsAllocated: info.BitsAllocated,
+		bitsStored: info.BitsStored, samples: info.SamplesPerPixel, representation: uint16(info.PixelRepresentation),
 		frames: make([][]byte, pixelData.FrameCount()),
 	}
 	for frame := range result.frames {
@@ -308,12 +324,12 @@ func supportsFormat(image imageData, format string) bool {
 	if image.samples != 1 && image.samples != 3 {
 		return false
 	}
-	return format != "jpeg-process-1" && format != "jpeg-process-2-4" ||
+	return format != formatJPEGProcess1 && format != formatJPEGProcess2_4 ||
 		(image.bitsAllocated == 8 && image.bitsStored == 8)
 }
 
 func supportsNativeDecode(image imageData, format string) bool {
-	if format != "jpeg-ls-lossless" && format != "jpeg-ls-near-lossless" {
+	if format != formatJPEGLSLossless && format != formatJPEGLSNearLossless {
 		return true
 	}
 	return len(image.frames) == 1
@@ -507,7 +523,7 @@ func runWorker(options options) error {
 			fmt.Printf("INTEROP|skip|fixture=%s|format=%s|direction=go-to-native|reason=native-jpeg-ls-multiframe-baseline-corruption\n", name, definition.key)
 			continue
 		}
-		if err := runChildStage("encode", definition.key, prepared, encoded); err != nil {
+		if err := runChildStage(stageEncode, definition.key, prepared, encoded); err != nil {
 			return fmt.Errorf("%s %s encode: %w", definition.key, name, err)
 		}
 		if err := runNativeDecode(options.nativeProject, encoded, decoded); err != nil {

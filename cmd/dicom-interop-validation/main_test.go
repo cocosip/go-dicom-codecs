@@ -20,11 +20,11 @@ func TestParseOptionsRejectsInvalidParallelism(t *testing.T) {
 }
 
 func TestParseOptionsSelectsOneFormat(t *testing.T) {
-	got, err := parseOptions([]string{"--format", "jpeg-lossless-14-sv1"})
+	got, err := parseOptions([]string{optionFormat, formatJPEGLosslessSV1})
 	if err != nil {
 		t.Fatalf("parseOptions() error = %v", err)
 	}
-	if got.format != "jpeg-lossless-14-sv1" {
+	if got.format != formatJPEGLosslessSV1 {
 		t.Fatalf("format = %q, want jpeg-lossless-14-sv1", got.format)
 	}
 	if got.parallel != 4 {
@@ -36,7 +36,7 @@ func TestParseOptionsSelectsOneFormat(t *testing.T) {
 }
 
 func TestParseOptionsRejectsUnknownFormat(t *testing.T) {
-	_, err := parseOptions([]string{"--format", "not-a-codec"})
+	_, err := parseOptions([]string{optionFormat, "not-a-codec"})
 	if err == nil || !strings.Contains(err.Error(), "unknown format") {
 		t.Fatalf("parseOptions() error = %v, want unknown format error", err)
 	}
@@ -87,8 +87,8 @@ func TestCompareImagesUses16BitSampleDifference(t *testing.T) {
 }
 
 func TestChildArgsCarryStageAndPaths(t *testing.T) {
-	got := childArgs("encode", "jpeg-lossless-14-sv1", "source.dcm", "encoded.dcm")
-	want := []string{"--stage", "encode", "--format", "jpeg-lossless-14-sv1", "--input", "source.dcm", "--output", "encoded.dcm"}
+	got := childArgs(stageEncode, formatJPEGLosslessSV1, "source.dcm", "encoded.dcm")
+	want := []string{optionStage, stageEncode, optionFormat, formatJPEGLosslessSV1, optionInput, "source.dcm", optionOutput, "encoded.dcm"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("childArgs() = %v, want %v", got, want)
 	}
@@ -96,7 +96,7 @@ func TestChildArgsCarryStageAndPaths(t *testing.T) {
 
 func TestNativeDecodeArgsUseFoDicomWorker(t *testing.T) {
 	got := nativeDecodeArgs("worker.csproj", "input.dcm", "output.dcm")
-	want := []string{"run", "--project", "worker.csproj", "--", "decode", "input.dcm", "output.dcm"}
+	want := []string{"run", "--project", "worker.csproj", "--", stageDecode, "input.dcm", "output.dcm"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("nativeDecodeArgs() = %v, want %v", got, want)
 	}
@@ -148,13 +148,13 @@ func TestJPEG2000LossyToleranceMatchesPureReference(t *testing.T) {
 func TestSupportsNativeDecodeSkipsMultiFrameJPEGLS(t *testing.T) {
 	singleFrame := imageData{bitsAllocated: 8, samples: 1, frames: [][]byte{{1}}}
 	multiFrame := imageData{bitsAllocated: 8, samples: 1, frames: [][]byte{{1}, {2}}}
-	if !supportsNativeDecode(singleFrame, "jpeg-ls-lossless") {
+	if !supportsNativeDecode(singleFrame, formatJPEGLSLossless) {
 		t.Fatal("single-frame JPEG-LS should be supported by Native")
 	}
-	if supportsNativeDecode(multiFrame, "jpeg-ls-lossless") {
+	if supportsNativeDecode(multiFrame, formatJPEGLSLossless) {
 		t.Fatal("multi-frame JPEG-LS lossless should be skipped for Native")
 	}
-	if supportsNativeDecode(multiFrame, "jpeg-ls-near-lossless") {
+	if supportsNativeDecode(multiFrame, formatJPEGLSNearLossless) {
 		t.Fatal("multi-frame JPEG-LS near-lossless should be skipped for Native")
 	}
 	if !supportsNativeDecode(multiFrame, "jpeg2000-lossless") {
@@ -173,7 +173,7 @@ func TestPrepareStageNormalizesCompressedFixture(t *testing.T) {
 	if err := os.WriteFile(source, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	stageOptions, err := parseOptions([]string{"--stage", "prepare", "--format", "jpeg-lossless-14-sv1", "--input", source, "--output", prepared})
+	stageOptions, err := parseOptions([]string{optionStage, stagePrepare, optionFormat, formatJPEGLosslessSV1, optionInput, source, optionOutput, prepared})
 	if err != nil {
 		t.Fatalf("parseOptions() error = %v", err)
 	}
