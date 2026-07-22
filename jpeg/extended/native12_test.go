@@ -1,6 +1,7 @@
 package extended
 
 import (
+	"bytes"
 	"encoding/binary"
 	"os"
 	"testing"
@@ -11,6 +12,67 @@ import (
 
 const native12BitProcess24Path = `D:\6-native\6_jpeg_process2_4.dcm`
 const native12BitSourcePath = `D:\6.dcm`
+
+func TestEncode12BitWritesNativeJFIFAPP0(t *testing.T) {
+	encoded, err := Encode(make([]byte, 8*8*2), 8, 8, 1, 12, 90)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	if !bytes.HasPrefix(encoded, []byte{
+		0xff, 0xd8,
+		0xff, 0xe0, 0x00, 0x10,
+		'J', 'F', 'I', 'F', 0x00,
+		0x01, 0x01, 0x00,
+		0x00, 0x01, 0x00, 0x01,
+		0x00, 0x00,
+	}) {
+		t.Fatal("Encode() did not emit Native's JFIF APP0 segment")
+	}
+}
+
+func TestEncodeNative12BitProcess24FramesMatchNativeCodestream(t *testing.T) {
+	if _, err := os.Stat(native12BitProcess24Path); os.IsNotExist(err) {
+		t.Skipf("Native JPEG Extended fixture is unavailable: %s", native12BitProcess24Path)
+	}
+	if _, err := os.Stat(native12BitSourcePath); os.IsNotExist(err) {
+		t.Skipf("source fixture is unavailable: %s", native12BitSourcePath)
+	}
+
+	sourceResult, err := parser.ParseFile(native12BitSourcePath, parser.WithReadOption(parser.ReadAll))
+	if err != nil {
+		t.Fatalf("ParseFile(source) error = %v", err)
+	}
+	sourcePixelData, err := imaging.CreatePixelData(sourceResult.Dataset)
+	if err != nil {
+		t.Fatalf("CreatePixelData(source) error = %v", err)
+	}
+	nativeResult, err := parser.ParseFile(native12BitProcess24Path, parser.WithReadOption(parser.ReadAll))
+	if err != nil {
+		t.Fatalf("ParseFile(native) error = %v", err)
+	}
+	nativePixelData, err := imaging.CreatePixelData(nativeResult.Dataset)
+	if err != nil {
+		t.Fatalf("CreatePixelData(native) error = %v", err)
+	}
+
+	for frameIndex := 0; frameIndex < 7; frameIndex++ {
+		source, err := sourcePixelData.GetFrame(frameIndex)
+		if err != nil {
+			t.Fatalf("GetFrame(source, %d) error = %v", frameIndex, err)
+		}
+		got, err := Encode(source, 288, 288, 1, 12, 90)
+		if err != nil {
+			t.Fatalf("Encode(frame %d) error = %v", frameIndex, err)
+		}
+		want, err := nativePixelData.GetFrame(frameIndex)
+		if err != nil {
+			t.Fatalf("GetFrame(native, %d) error = %v", frameIndex, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("frame %d JPEG codestream differs from Native: got %d bytes, want %d", frameIndex, len(got), len(want))
+		}
+	}
+}
 
 func TestDecodeNative12BitProcess24Frame(t *testing.T) {
 	if _, err := os.Stat(native12BitProcess24Path); os.IsNotExist(err) {

@@ -50,6 +50,9 @@ func encodeSequential12(pixelData []byte, width, height, components, quality int
 	if err := writer.WriteMarker(standard.MarkerSOI); err != nil {
 		return nil, err
 	}
+	if err := writer.WriteJFIFAPP0(); err != nil {
+		return nil, err
+	}
 	if err := encoder.writeDQT(writer); err != nil {
 		return nil, err
 	}
@@ -205,37 +208,145 @@ func (e *sequential12Encoder) encodeBlock(encoder *standard.HuffmanEncoder, bloc
 }
 
 func (e *sequential12Encoder) quantizeBlock(blockX, blockY int) [64]int32 {
-	var samples [64]float64
+	var transformed [64]int32
 	for y := 0; y < 8; y++ {
 		sourceY := min(blockY*8+y, e.height-1)
 		for x := 0; x < 8; x++ {
 			sourceX := min(blockX*8+x, e.width-1)
 			offset := (sourceY*e.width + sourceX) * 2
 			value := int(e.pixels[offset]) | int(e.pixels[offset+1])<<8
-			samples[y*8+x] = float64(value - 2048)
+			transformed[y*8+x] = int32(value - 2048)
 		}
 	}
+	sequential12DCTISlow(&transformed)
 
 	var result [64]int32
-	for v := 0; v < 8; v++ {
-		for u := 0; u < 8; u++ {
-			sum := 0.0
-			for y := 0; y < 8; y++ {
-				for x := 0; x < 8; x++ {
-					sum += samples[y*8+x] * sequential12Cos[u][x] * sequential12Cos[v][y]
-				}
-			}
-			scale := 0.25
-			if u == 0 {
-				scale /= math.Sqrt2
-			}
-			if v == 0 {
-				scale /= math.Sqrt2
-			}
-			result[v*8+u] = int32(math.Round(sum * scale / float64(e.qtable[v*8+u])))
-		}
+	for i, coefficient := range transformed {
+		result[i] = sequential12Quantize(coefficient, e.qtable[i]<<3)
 	}
 	return result
+}
+
+func sequential12Quantize(coefficient, divisor int32) int32 {
+	if coefficient < 0 {
+		return -((-coefficient + divisor/2) / divisor)
+	}
+	return (coefficient + divisor/2) / divisor
+}
+
+// sequential12DCTISlow is a direct port of libjpeg-turbo's 12-bit
+// _jpeg_fdct_islow path. Its output retains libjpeg's factor-of-eight scale.
+func sequential12DCTISlow(data *[64]int32) {
+	const (
+		constBits = 13
+		pass1Bits = 1
+
+		fix0298631336 = 2446
+		fix0390180644 = 3196
+		fix0541196100 = 4433
+		fix0765366865 = 6270
+		fix0899976223 = 7373
+		fix1175875602 = 9633
+		fix1501321110 = 12299
+		fix1847759065 = 15137
+		fix1961570560 = 16069
+		fix2053119869 = 16819
+		fix2562915447 = 20995
+		fix3072711026 = 25172
+	)
+
+	for y := 0; y < 8; y++ {
+		row := y * 8
+		tmp0 := data[row] + data[row+7]
+		tmp7 := data[row] - data[row+7]
+		tmp1 := data[row+1] + data[row+6]
+		tmp6 := data[row+1] - data[row+6]
+		tmp2 := data[row+2] + data[row+5]
+		tmp5 := data[row+2] - data[row+5]
+		tmp3 := data[row+3] + data[row+4]
+		tmp4 := data[row+3] - data[row+4]
+
+		tmp10 := tmp0 + tmp3
+		tmp13 := tmp0 - tmp3
+		tmp11 := tmp1 + tmp2
+		tmp12 := tmp1 - tmp2
+
+		data[row] = (tmp10 + tmp11) << pass1Bits
+		data[row+4] = (tmp10 - tmp11) << pass1Bits
+
+		z1 := (tmp12 + tmp13) * fix0541196100
+		data[row+2] = sequential12Descale(z1+tmp13*fix0765366865, constBits-pass1Bits)
+		data[row+6] = sequential12Descale(z1-tmp12*fix1847759065, constBits-pass1Bits)
+
+		z1 = tmp4 + tmp7
+		z2 := tmp5 + tmp6
+		z3 := tmp4 + tmp6
+		z4 := tmp5 + tmp7
+		z5 := (z3 + z4) * fix1175875602
+		tmp4 *= fix0298631336
+		tmp5 *= fix2053119869
+		tmp6 *= fix3072711026
+		tmp7 *= fix1501321110
+		z1 *= -fix0899976223
+		z2 *= -fix2562915447
+		z3 *= -fix1961570560
+		z4 *= -fix0390180644
+		z3 += z5
+		z4 += z5
+
+		data[row+7] = sequential12Descale(tmp4+z1+z3, constBits-pass1Bits)
+		data[row+5] = sequential12Descale(tmp5+z2+z4, constBits-pass1Bits)
+		data[row+3] = sequential12Descale(tmp6+z2+z3, constBits-pass1Bits)
+		data[row+1] = sequential12Descale(tmp7+z1+z4, constBits-pass1Bits)
+	}
+
+	for x := 0; x < 8; x++ {
+		tmp0 := data[x] + data[56+x]
+		tmp7 := data[x] - data[56+x]
+		tmp1 := data[8+x] + data[48+x]
+		tmp6 := data[8+x] - data[48+x]
+		tmp2 := data[16+x] + data[40+x]
+		tmp5 := data[16+x] - data[40+x]
+		tmp3 := data[24+x] + data[32+x]
+		tmp4 := data[24+x] - data[32+x]
+
+		tmp10 := tmp0 + tmp3
+		tmp13 := tmp0 - tmp3
+		tmp11 := tmp1 + tmp2
+		tmp12 := tmp1 - tmp2
+
+		data[x] = sequential12Descale(tmp10+tmp11, pass1Bits)
+		data[32+x] = sequential12Descale(tmp10-tmp11, pass1Bits)
+
+		z1 := (tmp12 + tmp13) * fix0541196100
+		data[16+x] = sequential12Descale(z1+tmp13*fix0765366865, constBits+pass1Bits)
+		data[48+x] = sequential12Descale(z1-tmp12*fix1847759065, constBits+pass1Bits)
+
+		z1 = tmp4 + tmp7
+		z2 := tmp5 + tmp6
+		z3 := tmp4 + tmp6
+		z4 := tmp5 + tmp7
+		z5 := (z3 + z4) * fix1175875602
+		tmp4 *= fix0298631336
+		tmp5 *= fix2053119869
+		tmp6 *= fix3072711026
+		tmp7 *= fix1501321110
+		z1 *= -fix0899976223
+		z2 *= -fix2562915447
+		z3 *= -fix1961570560
+		z4 *= -fix0390180644
+		z3 += z5
+		z4 += z5
+
+		data[56+x] = sequential12Descale(tmp4+z1+z3, constBits+pass1Bits)
+		data[40+x] = sequential12Descale(tmp5+z2+z4, constBits+pass1Bits)
+		data[24+x] = sequential12Descale(tmp6+z2+z3, constBits+pass1Bits)
+		data[8+x] = sequential12Descale(tmp7+z1+z4, constBits+pass1Bits)
+	}
+}
+
+func sequential12Descale(value int32, shift uint) int32 {
+	return (value + (1 << (shift - 1))) >> shift
 }
 
 func sequential12Category(value int) int {
