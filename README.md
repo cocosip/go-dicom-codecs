@@ -1,16 +1,16 @@
 # go-dicom-codecs
 
-A Go library providing image compression/decompression codecs for medical imaging (DICOM), including JPEG, JPEG-LS, and JPEG 2000 families.
+A Go library providing image compression/decompression codecs for medical imaging (DICOM), including RLE, JPEG, JPEG-LS, and JPEG 2000 families.
 
 ## Features
 
 ### RLE Family
-- **RLE Lossless** [1.2.840.10008.1.2.5]
+- ✅ **RLE Lossless** [1.2.840.10008.1.2.5]
 
 ### JPEG Family
 - ✅ **JPEG Baseline** (Process 1) - Lossy, 8-bit [1.2.840.10008.1.2.4.50]
 - ✅ **JPEG Extended** (Process 2 & 4) - Lossy, 8/12-bit [1.2.840.10008.1.2.4.51]
-- ✅ **JPEG Lossless** (Process 14, Selection 1) - All 7 predictors [1.2.840.10008.1.2.4.57]
+- ✅ **JPEG Lossless** (Process 14) - All 7 predictors [1.2.840.10008.1.2.4.57]
 - ✅ **JPEG Lossless SV1** (Process 14, Selection 1) - Predictor 1 only [1.2.840.10008.1.2.4.70]
 
 ### JPEG-LS Family
@@ -29,10 +29,12 @@ A Go library providing image compression/decompression codecs for medical imagin
 - 🔬 **HTJ2K** (Lossy/Lossless) [1.2.840.10008.1.2.4.203] - *Experimental*
 
 > **⚠️ HTJ2K Implementation Note**: The HTJ2K codecs are currently in **experimental/research status**.
-> The implementation includes spec-compliant MEL (adaptive run-length) encoder/decoder and VLC tables
-> extracted from OpenJPEG. Core decoding components are functional but not production-ready. For production
-> use, consider established libraries like [OpenJPH](https://github.com/aous72/OpenJPH) or
-> OpenJPEG 2.5+. See [`jpeg2000/htj2k/README.md`](jpeg2000/htj2k/README.md) for implementation details.
+> The implementation covers MEL, MagSgn, and VLC tables ported from OpenJPH, with a full encode/decode
+> pipeline wired into the JPEG 2000 Tier-1/Tier-2 infrastructure. Internal Go-to-Go round-trips pass,
+> and the encoder output matches OpenJPH header contracts (CAP, TLM, QCD markers). However, VLC
+> integration remains partial and external decoder compatibility (e.g. fo-dicom.Codecs/OpenJPH) has
+> not been fully validated. For production use, consider [OpenJPH](https://github.com/aous72/OpenJPH)
+> or OpenJPEG 2.5+. See [`jpeg2000/htj2k/README.md`](jpeg2000/htj2k/README.md) for details.
 
 ## Installation
 
@@ -44,22 +46,383 @@ go get github.com/cocosip/go-dicom-codecs
 
 The library is organized into the following packages:
 
-- `codec/` - Core codec interfaces and registry
-- `rle/` - DICOM RLE Lossless codec
+- `codec/` - Shared errors and test helpers
+- `rle/` - DICOM RLE Lossless codec (DICOM Part 5, Annex G)
 - `jpeg/` - JPEG family implementations
-  - `jpeg/common/` - Shared utilities (Huffman, DCT, markers, etc.)
-  - `jpeg/baseline/` - JPEG Baseline codec
+  - `jpeg/standard/` - Shared low-level primitives: DCT, IDCT, Huffman tables/encoder/decoder, JPEG markers, bit reader/writer
+  - `jpeg/baseline/` - JPEG Baseline codec (8-bit)
   - `jpeg/extended/` - JPEG Extended codec (8/12-bit)
   - `jpeg/lossless/` - JPEG Lossless codec (all 7 predictors)
   - `jpeg/lossless14sv1/` - JPEG Lossless SV1 codec (predictor 1 only)
 - `jpegls/` - JPEG-LS implementations
-  - `jpegls/lossless/` - JPEG-LS Lossless codec
+  - `jpegls/runmode/` - Shared run-mode coding utilities
+  - `jpegls/lossless/` - JPEG-LS Lossless codec (LOCO-I + Golomb-Rice)
   - `jpegls/nearlossless/` - JPEG-LS Near-Lossless codec
-- `jpeg2000/` - JPEG 2000 implementations (planned)
+- `jpeg2000/` - JPEG 2000 core engine and sub-packages
+  - `jpeg2000/lossless/` - JPEG 2000 Lossless codec (UIDs .90, .92)
+  - `jpeg2000/lossy/` - JPEG 2000 Lossy codec (UIDs .91, .93)
+  - `jpeg2000/htj2k/` - HTJ2K codecs (UIDs .201–.203, experimental)
+  - `jpeg2000/codestream/` - Codestream marker parser (SIZ, COD, QCD, SOT, MCT, MCC, MCO, etc.)
+  - `jpeg2000/colorspace/` - RGB/YCbCr colorspace conversion (RCT/ICT)
+  - `jpeg2000/mqc/` - MQ arithmetic coder/decoder (47-state machine)
+  - `jpeg2000/t1/` - Tier-1: EBCOT block coder (bit-plane coding, coding passes)
+  - `jpeg2000/t2/` - Tier-2: packet builder/parser, tag trees, progression orders
+  - `jpeg2000/wavelet/` - 5/3 (lossless) and 9/7 (lossy) DWT implementations
+
+Auto-registration happens via blank imports. Including any codec package side-effect registers it with the go-dicom global registry:
+
+```go
+import _ "github.com/cocosip/go-dicom-codecs/jpeg/baseline"
+```
 
 ## Usage
 
-### Local Process-Isolated Validation
+### Using the Codec Registry
+
+Codecs integrate with [go-dicom](https://github.com/cocosip/go-dicom)'s global codec registry:
+
+```go
+package main
+
+import (
+    _ "github.com/cocosip/go-dicom-codecs/jpeg/baseline" // Auto-register
+
+    "github.com/cocosip/go-dicom/pkg/dicom/transfer"
+    "github.com/cocosip/go-dicom/pkg/imaging/codec"
+)
+
+func main() {
+    registry := codec.GetGlobalRegistry()
+    c, exists := registry.GetCodec(transfer.JPEGBaseline)
+    if !exists {
+        panic("codec not found")
+    }
+
+    // Encode: c.Encode(srcPixelData, dstPixelData, parameters)
+    // Decode: c.Decode(srcPixelData, dstPixelData, parameters)
+}
+```
+
+### Direct Package Usage
+
+Each codec package exposes low-level `Encode`/`Decode` functions that work with raw `[]byte` pixel data.
+
+#### JPEG Baseline
+
+```go
+import "github.com/cocosip/go-dicom-codecs/jpeg/baseline"
+
+// Encode with quality 85 (1-100)
+jpegData, err := baseline.Encode(pixelData, width, height, components, 85)
+
+// Decode
+decoded, w, h, comp, err := baseline.Decode(jpegData)
+```
+
+#### JPEG Extended (8/12-bit)
+
+```go
+import "github.com/cocosip/go-dicom-codecs/jpeg/extended"
+
+// Encode 12-bit grayscale with quality 80
+jpegData, err := extended.Encode(pixelData, width, height, 1, 12, 80)
+
+// Decode
+decoded, w, h, comp, bitDepth, err := extended.Decode(jpegData)
+```
+
+#### JPEG Lossless (All Predictors)
+
+```go
+import "github.com/cocosip/go-dicom-codecs/jpeg/lossless"
+
+// Encode with predictor 4 (recommended, best compression)
+jpegData, err := lossless.Encode(pixelData, width, height, components, bitDepth, 4)
+
+// Decode
+decoded, w, h, comp, bits, err := lossless.Decode(jpegData)
+```
+
+#### JPEG Lossless SV1 (Predictor 1 only)
+
+```go
+import "github.com/cocosip/go-dicom-codecs/jpeg/lossless14sv1"
+
+// Encode (perfect reconstruction)
+jpegData, err := lossless14sv1.Encode(pixelData, width, height, components, bitDepth)
+
+// Decode
+decoded, w, h, comp, bits, err := lossless14sv1.Decode(jpegData)
+```
+
+#### JPEG-LS Lossless
+
+```go
+import "github.com/cocosip/go-dicom-codecs/jpegls/lossless"
+
+// LOCO-I algorithm
+jpegLSData, err := lossless.Encode(pixelData, width, height, components, bitDepth)
+
+// Decode
+decoded, w, h, comp, bits, err := lossless.Decode(jpegLSData)
+```
+
+#### JPEG-LS Near-Lossless
+
+```go
+import "github.com/cocosip/go-dicom-codecs/jpegls/nearlossless"
+
+// NEAR=3 guarantees maximum error of ±3 per pixel
+jpegLSData, err := nearlossless.Encode(pixelData, width, height, components, bitDepth, 3)
+
+// Decode — returns (pixels, w, h, comp, bits, actualNear, err)
+decoded, w, h, comp, bits, actualNear, err := nearlossless.Decode(jpegLSData)
+```
+
+#### RLE Lossless
+
+```go
+import _ "github.com/cocosip/go-dicom-codecs/rle" // Auto-register
+
+// Use via the go-dicom registry (transfer.RLELossless)
+```
+
+### JPEG 2000
+
+JPEG 2000 encoding and decoding are available through the low-level `jpeg2000` package or the codec sub-packages.
+
+#### Via codec sub-packages (DICOM registry)
+
+```go
+import (
+    _ "github.com/cocosip/go-dicom-codecs/jpeg2000/lossless" // DICOM UIDs .90, .92
+    _ "github.com/cocosip/go-dicom-codecs/jpeg2000/lossy"    // DICOM UIDs .91, .93
+)
+```
+
+#### Direct encoding
+
+```go
+import "github.com/cocosip/go-dicom-codecs/jpeg2000"
+
+params := jpeg2000.DefaultEncodeParams(width, height, components, bitDepth, false)
+params.Lossless = true
+params.NumLevels = 5
+
+encoder := jpeg2000.NewEncoder(params)
+compressed, err := encoder.Encode(pixelData)
+
+decoder := jpeg2000.NewDecoder()
+err = decoder.Decode(compressed)
+```
+
+#### Lossy with quality control
+
+```go
+params := jpeg2000.DefaultEncodeParams(width, height, 1, 8, false)
+params.Lossless = false
+params.Quality = 80       // 1–100
+params.NumLevels = 5
+params.TargetRatio = 10.0 // 10:1 compression ratio
+params.UsePCRDOpt = true  // PCRD-opt rate-distortion truncation
+```
+
+#### Region of Interest (ROI)
+
+```go
+// Single rectangle ROI — higher quality than background
+params.ROI = &jpeg2000.ROIParams{
+    X0: 156, Y0: 156, Width: 200, Height: 200,
+    Shift: 5, // Background compressed 2^5× more aggressively
+}
+
+// Multiple ROI regions
+params.ROIConfig = &jpeg2000.ROIConfig{
+    DefaultShift: 5,
+    ROIs: []jpeg2000.ROIRegion{
+        {ID: "lesion1", Rect: &jpeg2000.ROIParams{X0: 100, Y0: 100, Width: 80, Height: 80}, Shift: 6},
+        {ID: "lesion2", Rect: &jpeg2000.ROIParams{X0: 300, Y0: 200, Width: 60, Height: 60}, Shift: 5},
+    },
+}
+
+// Mask-based ROI (arbitrary shape)
+params.ROIConfig = &jpeg2000.ROIConfig{
+    ROIs: []jpeg2000.ROIRegion{
+        {Shape: jpeg2000.ROIShapeMask, MaskWidth: width, MaskHeight: height, MaskData: mask, Shift: 5},
+    },
+}
+```
+
+#### Multi-layer and progressive
+
+```go
+params.NumLayers = 4
+params.ProgressionOrder = 2 // RPCL — resolution-first progression
+params.AppendLosslessLayer = true
+```
+
+## Codec Details
+
+### JPEG Baseline
+- **UID**: 1.2.840.10008.1.2.4.50
+- **Compression**: Lossy DCT-based
+- **Bit Depth**: 8-bit
+- **Color Spaces**: Grayscale, RGB (auto-converted to YCbCr)
+- **Options**: Quality (1-100)
+- **Typical Compression**: 4-10x (quality dependent)
+
+### JPEG Extended
+- **UID**: 1.2.840.10008.1.2.4.51
+- **Compression**: Lossy DCT-based
+- **Bit Depth**: 8-bit and 12-bit
+- **Color Spaces**: Grayscale, RGB
+- **Options**: Quality (1-100)
+- **Typical Compression**: 2-13x (quality and bit-depth dependent)
+- **Status**: ✅ Production ready
+
+### JPEG Lossless (All Predictors)
+- **UID**: 1.2.840.10008.1.2.4.57
+- **Compression**: Lossless prediction-based (7 predictors)
+- **Bit Depth**: 2-16 bits (8-11 bit fully tested)
+- **Color Spaces**: Grayscale, RGB
+- **Predictors**:
+  - Predictor 1 (Left): 1.90x compression
+  - Predictor 2 (Above): 1.53x compression
+  - Predictor 3 (Above-Left): 1.50x compression
+  - **Predictor 4 (Ra+Rb-Rc): 3.64x compression** ⭐ Recommended
+  - Predictor 5 (Adaptive): 1.91x compression
+  - Predictor 6 (Adaptive): 1.89x compression
+  - Predictor 7 (Average): 1.52x compression
+- **Perfect Reconstruction**: Yes (0 errors)
+- **Status**: ✅ Production ready
+
+### JPEG Lossless SV1
+- **UID**: 1.2.840.10008.1.2.4.70
+- **Compression**: Lossless prediction-based (Predictor 1 only)
+- **Bit Depth**: 2-16 bits
+- **Color Spaces**: Grayscale, RGB
+- **Typical Compression**: 1.90x
+- **Perfect Reconstruction**: Yes (0 errors)
+- **Status**: ✅ Production ready
+
+### JPEG-LS Lossless
+- **UID**: 1.2.840.10008.1.2.4.80
+- **Compression**: Lossless context-adaptive (LOCO-I algorithm)
+- **Bit Depth**: 2-16 bits
+- **Color Spaces**: Grayscale, RGB
+- **Algorithm**: Context modeling + Golomb-Rice coding + MED predictor
+- **Typical Compression**:
+  - Grayscale 8-bit: 4.17x
+  - RGB 8-bit: 2.51x
+  - 12-bit: 2.94x
+- **Perfect Reconstruction**: Yes (0 errors)
+- **Advantages**: Better compression than JPEG Lossless, lower complexity than JPEG 2000
+- **Status**: ✅ Production ready
+
+### JPEG-LS Near-Lossless
+- **UID**: 1.2.840.10008.1.2.4.81
+- **Compression**: Near-lossless with configurable error bound (NEAR parameter)
+- **Bit Depth**: 2-16 bits
+- **Color Spaces**: Grayscale, RGB
+- **NEAR Parameter**: 0-255 (maximum error per pixel)
+  - NEAR=0: Lossless (identical to JPEG-LS Lossless)
+  - NEAR=1-3: Visually lossless with high compression
+  - NEAR=7+: Higher compression with visible differences
+- **Typical Compression** (64x64 grayscale):
+  - NEAR=0: 4.17x (lossless)
+  - NEAR=1: 4.53x
+  - NEAR=3: 5.79x
+  - NEAR=7: 4.56x
+  - NEAR=10: 5.08x
+- **Error Guarantee**: |reconstructed - original| ≤ NEAR for every pixel
+- **Status**: ✅ Production ready (all NEAR values 0-255 supported)
+
+### JPEG 2000
+- **UIDs**: 1.2.840.10008.1.2.4.90–.93
+- **Wavelet**: 5/3 (lossless), 9/7 (lossy)
+- **Bit Depth**: 8-16 bits, signed/unsigned
+- **Color Spaces**: Grayscale, RGB (RCT/ICT transform)
+- **Advanced features**:
+  - Multi-tile encoding (`TileWidth`/`TileHeight`)
+  - Multi-layer quality progression (`NumLayers`, `LayerRates`)
+  - PCRD-opt rate-distortion truncation (`UsePCRDOpt`, `TargetRatio`)
+  - Progression orders: LRCP, RLCP, RPCL, PCRL, CPRL
+  - Region of Interest (ROI): rectangle, multiple regions, bitmap mask
+  - Multi-component transforms (Part 2 MCT/MCC/MCO markers)
+  - Custom precinct sizes and code-block dimensions
+- **Status**: ✅ Production ready
+
+### RLE Lossless
+- **UID**: 1.2.840.10008.1.2.5
+- **Compression**: Lossless run-length encoding (DICOM Part 5, Annex G)
+- **Bit Depth**: Any (8/16-bit typical)
+- **Color Spaces**: Grayscale, RGB, multi-channel
+- **Supports**: Interleaved and planar pixel organization
+- **Status**: ✅ Production ready
+
+## Performance
+
+Benchmarks measured on **Intel Core Ultra 9 185H**, Windows, `go test -bench=BenchmarkCodec -benchtime=3s`.
+Images are **512×512 grayscale 8-bit** unless noted.
+
+### RLE
+
+| Operation | Time/op | Throughput |
+|-----------|---------|-----------|
+| Encode    | ~0.86ms | 306 MB/s  |
+| Decode    | ~0.07ms | 3998 MB/s |
+
+### JPEG Family
+
+| Codec              | Encode time | Encode MB/s | Decode time | Decode MB/s |
+|--------------------|-------------|-------------|-------------|-------------|
+| JPEG Baseline      | ~6.8ms      | 38 MB/s     | ~30.7ms     | 9 MB/s      |
+| JPEG Extended      | ~5.7ms      | 46 MB/s     | ~3.0ms      | 88 MB/s     |
+| JPEG Lossless      | ~7.7ms      | 34 MB/s     | ~23ms       | 11 MB/s     |
+| JPEG Lossless SV1  | ~7.7ms      | 34 MB/s     | ~22ms       | 12 MB/s     |
+
+### JPEG-LS Family
+
+| Codec                    | Encode time | Encode MB/s | Decode time | Decode MB/s |
+|--------------------------|-------------|-------------|-------------|-------------|
+| JPEG-LS Lossless         | ~6.2ms      | 42 MB/s     | ~7.9ms      | 33 MB/s     |
+| JPEG-LS Near-Lossless    | ~10ms       | 26 MB/s     | ~8.5ms      | 31 MB/s     |
+
+### JPEG 2000 Family
+
+| Codec              | Encode time | Encode MB/s | Decode time | Decode MB/s |
+|--------------------|-------------|-------------|-------------|-------------|
+| JPEG 2000 Lossless | ~15.8ms     | 4.2 MB/s    | ~9.3ms      | 7.0 MB/s    |
+| JPEG 2000 Lossy    | ~25.3ms     | 2.6 MB/s    | ~6.8ms      | 9.6 MB/s    |
+
+### HTJ2K Family (256×256 images)
+
+| Codec              | Encode time | Encode MB/s | Decode time | Decode MB/s |
+|--------------------|-------------|-------------|-------------|-------------|
+| HTJ2K Lossless     | ~2.9ms      | 22 MB/s     | ~12.5ms     | 5.2 MB/s    |
+| HTJ2K RPCL Lossless| ~2.8ms      | 23 MB/s     | ~12.3ms     | 5.3 MB/s    |
+| HTJ2K Lossy        | ~4.2ms      | 16 MB/s     | ~21.3ms     | 3.1 MB/s    |
+
+Run `go test -bench=BenchmarkCodec -benchtime=3s ./...` to reproduce on your platform.
+
+## Examples
+
+See the [examples/](examples/) directory for complete working examples:
+
+- `basic/` - Basic JPEG Baseline encode/decode (grayscale and RGB)
+- `lossless/` - JPEG Lossless usage
+- `all_codecs/` - Comprehensive example using all codecs
+- `jpeg2000_basic/` - JPEG 2000 encode/decode fundamentals
+- `jpeg2000_lossless/` - JPEG 2000 Lossless via codec registry
+- `jpeg2000_progressive/` - Progressive decode and multi-layer encoding
+- `jpeg2000_roi/` - Region of Interest encoding (rectangle, multiple, mask)
+- `jpeg2000_part2_multicomponent/` - Multi-component (Part 2) encoding
+- `export_png/` - Export decoded DICOM frames to PNG
+- `extract_pixels/` - Extract raw pixel data from DICOM
+- `dicom_transcoder/` - Transcode between DICOM transfer syntaxes
+- `external_codec/` - Register a custom external codec
+
+## Local Process-Isolated Validation
 
 `cmd/dicom-interop-validation` is a manually run diagnostic tool. It embeds
 five anonymized DICOM fixtures and validates Go encoders against fo-dicom
@@ -133,260 +496,17 @@ output).
 The default run directory is removed after success and retained after failure.
 Use `--workdir` to retain compressed and decoded DICOM artifacts explicitly.
 
-### Using the Codec Registry
-
-```go
-package main
-
-import (
-    "github.com/cocosip/go-dicom-codecs/codec"
-    _ "github.com/cocosip/go-dicom-codecs/jpeg/baseline" // Auto-register
-)
-
-func main() {
-    // Get codec by UID
-    c, err := codec.Get("1.2.840.10008.1.2.4.50")
-    if err != nil {
-        panic(err)
-    }
-
-    // Encode
-    params := codec.EncodeParams{
-        PixelData:  pixelData,
-        Width:      512,
-        Height:     512,
-        Components: 1, // Grayscale
-        BitDepth:   8,
-        Options:    nil, // Use defaults
-    }
-
-    compressed, err := c.Encode(params)
-    if err != nil {
-        panic(err)
-    }
-
-    // Decode
-    result, err := c.Decode(compressed)
-    if err != nil {
-        panic(err)
-    }
-}
-```
-
-### Direct Package Usage
-
-```go
-import "github.com/cocosip/go-dicom-codecs/jpeg/baseline"
-
-func main() {
-    // Encode with quality 85
-    jpegData, err := baseline.Encode(pixelData, width, height, components, bitDepth, 85)
-    if err != nil {
-        panic(err)
-    }
-
-    // Decode
-    decoded, w, h, comp, bits, err := baseline.Decode(jpegData)
-    if err != nil {
-        panic(err)
-    }
-}
-```
-
-### JPEG Lossless (All Predictors)
-
-```go
-import "github.com/cocosip/go-dicom-codecs/jpeg/lossless"
-
-func main() {
-    // Lossless encoding with predictor 4 (best compression)
-    predictor := 4 // 1-7, or 0 for auto-select
-    jpegData, err := lossless.Encode(pixelData, width, height, components, bitDepth, predictor)
-    if err != nil {
-        panic(err)
-    }
-
-    // Decode
-    decoded, w, h, comp, bits, err := lossless.Decode(jpegData)
-    if err != nil {
-        panic(err)
-    }
-}
-```
-
-### JPEG Lossless SV1 (Predictor 1 only)
-
-```go
-import "github.com/cocosip/go-dicom-codecs/jpeg/lossless14sv1"
-
-func main() {
-    // Lossless encoding (perfect reconstruction)
-    jpegData, err := lossless14sv1.Encode(pixelData, width, height, components, bitDepth)
-    if err != nil {
-        panic(err)
-    }
-
-    // Decode
-    decoded, w, h, comp, bits, err := lossless14sv1.Decode(jpegData)
-    if err != nil {
-        panic(err)
-    }
-}
-```
-
-### JPEG-LS Lossless
-
-```go
-import "github.com/cocosip/go-dicom-codecs/jpegls/lossless"
-
-func main() {
-    // JPEG-LS lossless encoding (LOCO-I algorithm)
-    jpegLSData, err := lossless.Encode(pixelData, width, height, components, bitDepth)
-    if err != nil {
-        panic(err)
-    }
-
-    // Decode
-    decoded, w, h, comp, bits, err := lossless.Decode(jpegLSData)
-    if err != nil {
-        panic(err)
-    }
-}
-```
-
-### JPEG-LS Near-Lossless
-
-```go
-import "github.com/cocosip/go-dicom-codecs/jpegls/nearlossless"
-
-func main() {
-    // JPEG-LS near-lossless encoding with NEAR=3
-    // Guarantees maximum error of ±3 per pixel
-    near := 3 // Error bound (0-255), 0 = lossless
-    jpegLSData, err := nearlossless.Encode(pixelData, width, height, components, bitDepth, near)
-    if err != nil {
-        panic(err)
-    }
-
-    // Decode
-    decoded, w, h, comp, bits, actualNear, err := nearlossless.Decode(jpegLSData)
-    if err != nil {
-        panic(err)
-    }
-}
-```
-
-## Codec Details
-
-### JPEG Baseline
-- **UID**: 1.2.840.10008.1.2.4.50
-- **Compression**: Lossy DCT-based
-- **Bit Depth**: 8-bit
-- **Color Spaces**: Grayscale, RGB (auto-converted to YCbCr)
-- **Options**: Quality (1-100)
-- **Typical Compression**: 4-10x (quality dependent)
-
-### JPEG Lossless (All Predictors)
-- **UID**: 1.2.840.10008.1.2.4.57
-- **Compression**: Lossless prediction-based (7 predictors)
-- **Bit Depth**: 2-16 bits (8-11 bit fully tested)
-- **Color Spaces**: Grayscale, RGB
-- **Predictors**:
-  - Predictor 1 (Left): 1.90x compression
-  - Predictor 2 (Above): 1.53x compression
-  - Predictor 3 (Above-Left): 1.50x compression
-  - **Predictor 4 (Ra+Rb-Rc): 3.64x compression** ⭐ **Recommended**
-  - Predictor 5 (Adaptive): 1.91x compression
-  - Predictor 6 (Adaptive): 1.89x compression
-  - Predictor 7 (Average): 1.52x compression
-- **Perfect Reconstruction**: Yes (0 errors)
-- **Status**: ✅ Production ready
-
-### JPEG Lossless SV1
-- **UID**: 1.2.840.10008.1.2.4.70
-- **Compression**: Lossless prediction-based (Predictor 1 only)
-- **Bit Depth**: 2-16 bits
-- **Color Spaces**: Grayscale, RGB
-- **Typical Compression**: 1.90x
-- **Perfect Reconstruction**: Yes (0 errors)
-- **Status**: ✅ Production ready
-
-### JPEG Extended
-- **UID**: 1.2.840.10008.1.2.4.51
-- **Compression**: Lossy DCT-based
-- **Bit Depth**: 8-bit and 12-bit
-- **Color Spaces**: Grayscale, RGB
-- **Options**: Quality (1-100)
-- **Typical Compression**: 2-13x (quality and bit-depth dependent)
-- **Status**: ✅ Production ready
-
-### JPEG-LS Lossless
-- **UID**: 1.2.840.10008.1.2.4.80
-- **Compression**: Lossless context-adaptive (LOCO-I algorithm)
-- **Bit Depth**: 2-16 bits
-- **Color Spaces**: Grayscale, RGB
-- **Algorithm**: Context modeling + Golomb-Rice coding + MED predictor
-- **Typical Compression**:
-  - Grayscale 8-bit: 4.17x
-  - RGB 8-bit: 2.51x
-  - 12-bit: 2.94x
-- **Perfect Reconstruction**: Yes (0 errors)
-- **Advantages**: Better compression than JPEG Lossless, lower complexity than JPEG 2000
-- **Status**: ✅ Production ready
-
-### JPEG-LS Near-Lossless
-- **UID**: 1.2.840.10008.1.2.4.81
-- **Compression**: Near-lossless with configurable error bound (NEAR parameter)
-- **Bit Depth**: 2-16 bits
-- **Color Spaces**: Grayscale, RGB
-- **NEAR Parameter**: 0-255 (maximum error per pixel)
-  - NEAR=0: Lossless (identical to JPEG-LS Lossless)
-  - NEAR=1-3: Visually lossless with high compression
-  - NEAR=7+: Higher compression with visible differences
-- **Typical Compression** (64x64 grayscale):
-  - NEAR=0: 4.17x (lossless)
-  - NEAR=1: 4.53x
-  - NEAR=3: 5.79x
-  - NEAR=7: 4.56x
-  - NEAR=10: 5.08x
-- **Error Guarantee**: |reconstructed - original| ≤ NEAR for every pixel
-- **Use Cases**: Medical imaging with acceptable error tolerance, archival with space constraints
-- **Status**: ✅ Production ready (all NEAR values 0-255 supported)
-
-## Performance
-
-Benchmarks on 512x512 grayscale images:
-
-### JPEG Family
-- **JPEG Baseline** - Encode: ~1.17ms, Decode: ~2.97ms
-- **JPEG Extended** - Encode: ~1.2ms, Decode: ~3.0ms (8-bit)
-- **JPEG Lossless** - Encode: ~12.5ms, Decode: ~8.3ms (predictor 1)
-- **JPEG Lossless SV1** - Encode: ~3.65ms, Decode: ~40.2ms
-
-### JPEG-LS Family
-- **JPEG-LS Lossless** - Encode: ~15ms, Decode: ~12ms
-- **JPEG-LS Near-Lossless** - Encode: ~14ms, Decode: ~11ms (NEAR=3)
-
-*Note: Benchmarks may vary by hardware and image characteristics. Run `go test -bench=.` for your platform.*
-
-## Examples
-
-See the [examples/](examples/) directory for complete working examples:
-
-- `all_codecs_example.go` - Comprehensive example using all three codecs
-- `codec_usage.go` - Basic codec registry usage
-- `complete_example.go` - Complete DICOM integration example
-
-Run examples:
-```bash
-go run examples/all_codecs_example.go
-```
-
 ## Testing
 
 ```bash
 # Run all tests
 go test ./...
+
+# Run a single package's tests
+go test ./jpeg/baseline/...
+
+# Run a specific test
+go test -run TestName ./jpeg/baseline/...
 
 # Run with verbose output
 go test -v ./...
@@ -397,7 +517,7 @@ go test -bench=. ./...
 
 ## Note
 
-This library focuses solely on codec implementation. DICOM-specific concerns (encapsulation, fragmentation, metadata) are handled by external DICOM libraries.
+This library focuses solely on codec implementation. DICOM-specific concerns (encapsulation, fragmentation, metadata) are handled by [go-dicom](https://github.com/cocosip/go-dicom).
 
 ## Roadmap
 
