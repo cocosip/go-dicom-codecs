@@ -1,5 +1,5 @@
-github.com/cocosip/go-dicom v0.6.1 h1:glceH0+A8Sn0CJ1WLfpynZ0p75dkpDHZ6ZiCqzWnB7c=
-github.com/cocosip/go-dicom v0.6.1/go.mod h1:w29kd5uQL9hVRfvhvTv0njIK1hQXlghc/aSFCI3VWRQ=
+github.com/cocosip/go-dicom v0.6.2 h1:FbTUwhErFfHGcBvPp6NTzu1y5QkCy3qEhiuoSFWXNbw=
+github.com/cocosip/go-dicom v0.6.2/go.mod h1:w29kd5uQL9hVRfvhvTv0njIK1hQXlghc/aSFCI3VWRQ=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 golang.org/x/text v0.40.0 h1:Ub2Z6/xjgF1WrYQz2nuITOEegKFtiIy+rieRJ5lHZKs=
