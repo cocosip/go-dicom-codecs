@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: '1.25.x'
+  GO_VERSION: '1.25'
   GO_PACKAGES: ./codec/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
 
 jobs:
@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -43,12 +43,13 @@ jobs:
         shell: bash
         run: go test -v -race -short -timeout 30m -coverprofile=coverage.out -covermode=atomic $GO_PACKAGES
 
-      - name: Upload coverage artifact
+      - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
+        uses: codecov/codecov-action@v7
         with:
-          name: coverage-${{ matrix.os }}
-          path: coverage.out
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
 
   vet:
     name: Vet
@@ -56,10 +57,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -74,10 +75,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -85,7 +86,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.6.1
+          version: v2.12.2
           args: --timeout=10m ${{ env.GO_PACKAGES }}
 
   build:
@@ -94,10 +95,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -113,10 +114,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -127,7 +128,8 @@ jobs:
           go test ./jpeg/... ./jpeg2000/... ./jpegls/... -bench=. -benchmem -run=^$ > benchmark.txt
 
       - name: Upload benchmark artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: benchmark.txt
+          retention-days: 90
