@@ -1,4 +1,4 @@
-﻿name: CodeQL
+name: CodeQL
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
           cache: true
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: go
 
@@ -41,4 +41,4 @@ jobs:
         run: go build $GO_PACKAGES
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
