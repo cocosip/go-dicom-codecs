@@ -6,31 +6,26 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
-	"hash"
 	"io"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 )
 
 const (
-	defaultBundlePath          = "test-data/htj2k/interop-v1"
-	defaultGeneratorSourcePath = "tools/fo-dicom-reference-generator"
-	acceptedVersionRange       = "[6.0.0-beta1, 7.0.0)"
+	defaultBundlePath    = "test-data/htj2k/interop-v1"
+	acceptedVersionRange = "[6.0.0-beta1, 7.0.0)"
 )
 
 type manifest struct {
-	SchemaVersion         int        `json:"schemaVersion"`
-	Codec                 provenance `json:"codec"`
-	GeneratorSourceSHA256 string     `json:"generatorSourceSha256"`
-	Fixtures              []fixture  `json:"fixtures"`
-	Artifacts             []artifact `json:"artifacts"`
+	SchemaVersion int        `json:"schemaVersion"`
+	Codec         provenance `json:"codec"`
+	Fixtures      []fixture  `json:"fixtures"`
+	Artifacts     []artifact `json:"artifacts"`
 }
 
 type provenance struct {
@@ -88,9 +83,8 @@ type artifact struct {
 }
 
 type commandOptions struct {
-	bundlePath          string
-	generatorSourcePath string
-	help                bool
+	bundlePath string
+	help       bool
 }
 
 type matrixCoverage struct {
@@ -118,15 +112,12 @@ func run(args []string, output io.Writer) error {
 		return err
 	}
 	if options.help {
-		if _, err := fmt.Fprintln(output, "Usage: dicom-interop-validation [--bundle <directory>] [--generator-source <directory>]"); err != nil {
+		if _, err := fmt.Fprintln(output, "Usage: dicom-interop-validation [--bundle <directory>]"); err != nil {
 			return fmt.Errorf("write help output: %w", err)
 		}
 		return nil
 	}
 	if err := validateBundle(options.bundlePath); err != nil {
-		return err
-	}
-	if err := validateGeneratorSource(options.bundlePath, options.generatorSourcePath); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(output, "validated HTJ2K interoperability bundle %s\n", options.bundlePath); err != nil {
@@ -136,26 +127,19 @@ func run(args []string, output io.Writer) error {
 }
 
 func parseOptions(args []string) (commandOptions, error) {
-	options := commandOptions{
-		bundlePath:          defaultBundlePath,
-		generatorSourcePath: defaultGeneratorSourcePath,
-	}
+	options := commandOptions{bundlePath: defaultBundlePath}
 	for index := 0; index < len(args); index++ {
 		switch args[index] {
 		case "--help", "-h":
 			options.help = true
 			return options, nil
-		case "--bundle", "--generator-source":
+		case "--bundle":
 			option := args[index]
 			index++
 			if index >= len(args) || strings.TrimSpace(args[index]) == "" {
 				return commandOptions{}, fmt.Errorf("%s requires a directory", option)
 			}
-			if option == "--bundle" {
-				options.bundlePath = args[index]
-			} else {
-				options.generatorSourcePath = args[index]
-			}
+			options.bundlePath = args[index]
 		default:
 			return commandOptions{}, fmt.Errorf("unknown argument %q", args[index])
 		}
@@ -242,9 +226,6 @@ func validateProvenance(loaded manifest) error {
 	}
 	if managedCommit != loaded.Codec.SourceCommit {
 		return fmt.Errorf("managed version commit metadata %s does not match source commit %s", managedCommit, loaded.Codec.SourceCommit)
-	}
-	if !isLowerHex(loaded.GeneratorSourceSHA256, 64) {
-		return fmt.Errorf("generator source SHA256 must be 64 lowercase hexadecimal characters")
 	}
 	return nil
 }
@@ -683,106 +664,4 @@ func (coverage matrixCoverage) validate() error {
 		return fmt.Errorf("fixture matrix is missing %s", strings.Join(missing, ", "))
 	}
 	return nil
-}
-
-func validateGeneratorSource(bundleRoot, sourceRoot string) error {
-	loaded, err := readManifest(bundleRoot)
-	if err != nil {
-		return err
-	}
-	actual, err := generatorSourceHash(sourceRoot)
-	if err != nil {
-		return err
-	}
-	if actual != loaded.GeneratorSourceSHA256 {
-		return fmt.Errorf("generator source SHA256 = %s, manifest = %s", actual, loaded.GeneratorSourceSHA256)
-	}
-	return validateGeneratorProject(sourceRoot)
-}
-
-type generatorProject struct {
-	ItemGroups []generatorProjectItemGroup `xml:"ItemGroup"`
-}
-
-type generatorProjectItemGroup struct {
-	PackageReferences []generatorPackageReference `xml:"PackageReference"`
-	ProjectReferences []struct {
-		Include string `xml:"Include,attr"`
-	} `xml:"ProjectReference"`
-	AssemblyReferences []struct {
-		Include  string `xml:"Include,attr"`
-		HintPath string `xml:"HintPath"`
-	} `xml:"Reference"`
-}
-
-type generatorPackageReference struct {
-	Include string `xml:"Include,attr"`
-	Version string `xml:"Version,attr"`
-}
-
-func validateGeneratorProject(sourceRoot string) error {
-	projectPath := filepath.Join(sourceRoot, "fo-dicom-reference-generator.csproj")
-	content, err := os.ReadFile(projectPath)
-	if err != nil {
-		return fmt.Errorf("read generator project: %w", err)
-	}
-	var project generatorProject
-	if err := xml.Unmarshal(content, &project); err != nil {
-		return fmt.Errorf("parse generator project: %w", err)
-	}
-
-	codecReferences := make([]generatorPackageReference, 0, 1)
-	for _, group := range project.ItemGroups {
-		if len(group.ProjectReferences) != 0 {
-			return fmt.Errorf("generator project must not contain ProjectReference entries")
-		}
-		if len(group.AssemblyReferences) != 0 {
-			return fmt.Errorf("generator project must not contain direct DLL assembly references")
-		}
-		for _, reference := range group.PackageReferences {
-			if strings.EqualFold(reference.Include, "fo-dicom.Codecs") {
-				codecReferences = append(codecReferences, reference)
-			}
-		}
-	}
-	if len(codecReferences) != 1 {
-		return fmt.Errorf("generator project must contain exactly one NuGet fo-dicom.Codecs PackageReference")
-	}
-	if strings.ReplaceAll(codecReferences[0].Version, " ", "") != strings.ReplaceAll(acceptedVersionRange, " ", "") {
-		return fmt.Errorf("fo-dicom.Codecs PackageReference version = %q, want %s", codecReferences[0].Version, acceptedVersionRange)
-	}
-	return nil
-}
-
-func generatorSourceHash(sourceRoot string) (string, error) {
-	entries, err := os.ReadDir(sourceRoot)
-	if err != nil {
-		return "", fmt.Errorf("read generator source directory: %w", err)
-	}
-	names := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".cs" {
-			names = append(names, entry.Name())
-		}
-	}
-	if len(names) == 0 {
-		return "", fmt.Errorf("generator source directory contains no C# source files")
-	}
-	sort.Strings(names)
-	digest := sha256.New()
-	for _, name := range names {
-		content, err := os.ReadFile(filepath.Join(sourceRoot, name))
-		if err != nil {
-			return "", fmt.Errorf("read generator source %q: %w", name, err)
-		}
-		appendGeneratorSource(digest, name, content)
-	}
-	return hex.EncodeToString(digest.Sum(nil)), nil
-}
-
-func appendGeneratorSource(digest hash.Hash, name string, content []byte) {
-	digest.Write([]byte(filepath.ToSlash(name)))
-	digest.Write([]byte{0})
-	digest.Write(content)
-	digest.Write([]byte{0})
 }

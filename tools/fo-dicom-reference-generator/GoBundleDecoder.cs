@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
@@ -50,7 +49,6 @@ public static class GoBundleDecoder
             .ToArray();
         var updated = manifest with
         {
-            GeneratorSourceSha256 = GeneratorSourceHasher.FromAssembly(Assembly.GetExecutingAssembly()),
             Fixtures = fixtures,
             Artifacts = artifacts
         };

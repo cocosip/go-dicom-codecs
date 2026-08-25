@@ -422,8 +422,8 @@ See the [examples/](examples/) directory for complete working examples:
 
 `cmd/dicom-interop-validation` validates the committed schema-v2 HTJ2K bundle
 without executing C#, dotnet, or a native library. It verifies the accepted
-fo-dicom.Codecs version and source provenance, the complete fixture and transfer
-syntax matrix, safe relative artifact paths, file lengths, and SHA256 hashes.
+fo-dicom.Codecs version provenance, the complete fixture and transfer syntax
+matrix, safe relative artifact paths, file lengths, and artifact SHA256 hashes.
 
 Run it from the repository root:
 
@@ -431,17 +431,15 @@ Run it from the repository root:
 go run ./cmd/dicom-interop-validation
 ```
 
-The defaults are `test-data/htj2k/interop-v1` for the bundle and
-`tools/fo-dicom-reference-generator` for the generator source. Override either
-path when validating a staged bundle:
+The default bundle is `test-data/htj2k/interop-v1`. Override its path when
+validating a staged bundle:
 
 ```powershell
-go run ./cmd/dicom-interop-validation --bundle <bundle-directory> --generator-source <generator-directory>
+go run ./cmd/dicom-interop-validation --bundle <bundle-directory>
 ```
 
-The generator source is hashed with the same filename/content ordering and
-separator rules as the managed generator. The validator contains no process
-launcher and also works as a compiled executable when `PATH` is empty.
+The validator contains no process launcher and also works as a compiled
+executable when `PATH` is empty.
 
 ## Testing
 

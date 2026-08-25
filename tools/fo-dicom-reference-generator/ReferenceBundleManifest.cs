@@ -5,7 +5,6 @@ namespace FoDicomReferenceGenerator;
 public sealed record ReferenceBundleManifest(
     int SchemaVersion,
     CodecProvenance Codec,
-    string GeneratorSourceSha256,
     IReadOnlyList<ReferenceFixtureArtifacts> Fixtures,
     IReadOnlyList<ArtifactDigest> Artifacts);
 

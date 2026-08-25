@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using FellowOakDicom;
 using FellowOakDicom.Imaging;
@@ -41,8 +40,6 @@ public static class ReferenceBundleGenerator
         var codec = CodecProvenance.FromAssembly(
             typeof(NativeTranscoderManager).Assembly,
             options.SourceCommit);
-        var sourceHash = GeneratorSourceHasher.FromAssembly(Assembly.GetExecutingAssembly());
-
         new DicomSetupBuilder()
             .RegisterServices(services => services
                 .AddFellowOakDicom()
@@ -69,7 +66,6 @@ public static class ReferenceBundleGenerator
         var manifest = new ReferenceBundleManifest(
             2,
             codec,
-            sourceHash,
             fixtures,
             store.Artifacts.OrderBy(artifact => artifact.Path, StringComparer.Ordinal).ToArray());
 

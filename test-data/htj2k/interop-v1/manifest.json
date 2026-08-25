@@ -5,7 +5,6 @@
     "managedVersion": "6.0.0\u002Bfc2df0efaa9acdee7b3640f821665107630933e8",
     "sourceCommit": "fc2df0efaa9acdee7b3640f821665107630933e8"
   },
-  "generatorSourceSha256": "980c33218cbc2801be50b1a2329100e2a8ff43f68eb0a0eff0686be0a7fe9bb6",
   "fixtures": [
     {
       "image": {

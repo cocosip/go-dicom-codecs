@@ -176,36 +176,11 @@ public sealed class ReferenceGeneratorContractTests
     }
 
     [TestMethod]
-    public void GeneratorSourceHashIsOrderIndependentAndContentSensitive()
-    {
-        var first = GeneratorSourceHasher.Compute(new[]
-        {
-            new GeneratorSourceFile("b.cs", new byte[] { 2 }),
-            new GeneratorSourceFile("a.cs", new byte[] { 1 })
-        });
-        var reordered = GeneratorSourceHasher.Compute(new[]
-        {
-            new GeneratorSourceFile("a.cs", new byte[] { 1 }),
-            new GeneratorSourceFile("b.cs", new byte[] { 2 })
-        });
-        var changed = GeneratorSourceHasher.Compute(new[]
-        {
-            new GeneratorSourceFile("a.cs", new byte[] { 1 }),
-            new GeneratorSourceFile("b.cs", new byte[] { 3 })
-        });
-
-        Assert.AreEqual(first, reordered);
-        Assert.AreNotEqual(first, changed);
-        Assert.AreEqual(64, first.Length);
-    }
-
-    [TestMethod]
     public void ReferenceManifestJsonRecordsProvenanceSyntaxFramesAndHashes()
     {
         var manifest = new ReferenceBundleManifest(
             SchemaVersion: 2,
             Codec: CodecProvenance.Create("fo-dicom.Codecs", "6.0.0", new string('a', 40)),
-            GeneratorSourceSha256: new string('b', 64),
             Fixtures: new[]
             {
                 new ReferenceFixtureArtifacts(

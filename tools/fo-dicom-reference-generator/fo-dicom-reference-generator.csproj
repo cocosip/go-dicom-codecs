@@ -9,7 +9,6 @@
 
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
-    <EmbeddedResource Include="*.cs" LogicalName="generator-source/%(Filename)%(Extension)" />
     <PackageReference Include="fo-dicom" Version="5.2.6" />
     <PackageReference Include="fo-dicom.Codecs" Version="[6.0.0-beta1,7.0.0)" />
   </ItemGroup>

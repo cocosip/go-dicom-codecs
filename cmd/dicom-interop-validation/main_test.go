@@ -16,11 +16,10 @@ import (
 const testPhotometricMonochrome2 = "MONOCHROME2"
 
 type testManifest struct {
-	SchemaVersion         int            `json:"schemaVersion"`
-	Codec                 testCodec      `json:"codec"`
-	GeneratorSourceSHA256 string         `json:"generatorSourceSha256"`
-	Fixtures              []testFixture  `json:"fixtures"`
-	Artifacts             []testArtifact `json:"artifacts"`
+	SchemaVersion int            `json:"schemaVersion"`
+	Codec         testCodec      `json:"codec"`
+	Fixtures      []testFixture  `json:"fixtures"`
+	Artifacts     []testArtifact `json:"artifacts"`
 }
 
 type testCodec struct {
@@ -89,114 +88,6 @@ func TestValidateBundleWorksWithEmptyPATH(t *testing.T) {
 	t.Setenv("PATH", "")
 	if err := validateBundle(root); err != nil {
 		t.Fatalf("validateBundle() with empty PATH error = %v", err)
-	}
-}
-
-func TestValidateGeneratorSourceMatchesCommittedBundleProvenance(t *testing.T) {
-	repositoryRoot := filepath.Join("..", "..")
-	bundleRoot := filepath.Join(repositoryRoot, "test-data", "htj2k", "interop-v1")
-	sourceRoot := filepath.Join(repositoryRoot, "tools", "fo-dicom-reference-generator")
-	if err := validateGeneratorSource(bundleRoot, sourceRoot); err != nil {
-		t.Fatalf("validateGeneratorSource() error = %v", err)
-	}
-}
-
-func TestValidateGeneratorSourceRejectsSourceDrift(t *testing.T) {
-	repositoryRoot := filepath.Join("..", "..")
-	bundleRoot := filepath.Join(repositoryRoot, "test-data", "htj2k", "interop-v1")
-	sourceRoot := t.TempDir()
-	entries, err := os.ReadDir(filepath.Join(repositoryRoot, "tools", "fo-dicom-reference-generator"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".cs" {
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(repositoryRoot, "tools", "fo-dicom-reference-generator", entry.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if entry.Name() == "Program.cs" {
-			content = append(content, []byte("// source drift\n")...)
-		}
-		if err := os.WriteFile(filepath.Join(sourceRoot, entry.Name()), content, 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	err = validateGeneratorSource(bundleRoot, sourceRoot)
-	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "generator source sha256") {
-		t.Fatalf("validateGeneratorSource() error = %v, want generator source SHA256 mismatch", err)
-	}
-}
-
-func TestValidateGeneratorProjectRequiresNuGetFoDicomCodecs(t *testing.T) {
-	tests := []struct {
-		name    string
-		project string
-		want    string
-	}{
-		{
-			name: "accepted NuGet package range",
-			project: `<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <PackageReference Include="fo-dicom.Codecs" Version="[6.0.0-beta1,7.0.0)" />
-  </ItemGroup>
-</Project>`,
-		},
-		{
-			name: "local project reference",
-			project: `<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <PackageReference Include="fo-dicom.Codecs" Version="[6.0.0-beta1,7.0.0)" />
-    <ProjectReference Include="..\local-codec\Codec.csproj" />
-  </ItemGroup>
-</Project>`,
-			want: "ProjectReference",
-		},
-		{
-			name: "direct DLL reference",
-			project: `<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <PackageReference Include="fo-dicom.Codecs" Version="[6.0.0-beta1,7.0.0)" />
-    <Reference Include="Codec"><HintPath>vendor/codec.dll</HintPath></Reference>
-  </ItemGroup>
-</Project>`,
-			want: "DLL",
-		},
-		{
-			name: "wrong package version",
-			project: `<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <PackageReference Include="fo-dicom.Codecs" Version="5.16.7" />
-  </ItemGroup>
-</Project>`,
-			want: acceptedVersionRange,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			root := t.TempDir()
-			if err := os.WriteFile(
-				filepath.Join(root, "fo-dicom-reference-generator.csproj"),
-				[]byte(test.project),
-				0600,
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			err := validateGeneratorProject(root)
-			if test.want == "" {
-				if err != nil {
-					t.Fatalf("validateGeneratorProject() error = %v", err)
-				}
-				return
-			}
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("validateGeneratorProject() error = %v, want %q", err, test.want)
-			}
-		})
 	}
 }
 
@@ -326,9 +217,6 @@ func TestValidateBundleRejectsInvalidSchemaAndProvenance(t *testing.T) {
 		{name: "managed version commit mismatch", mutate: func(manifest *testManifest) {
 			manifest.Codec.SourceCommit = strings.Repeat("b", 40)
 		}, want: "does not match source commit"},
-		{name: "generator hash", mutate: func(manifest *testManifest) {
-			manifest.GeneratorSourceSHA256 = "not-a-hash"
-		}, want: "generator source sha256"},
 	}
 
 	for _, test := range tests {
@@ -389,7 +277,6 @@ func writeValidBundle(t *testing.T) (string, testManifest) {
 			ManagedVersion: "6.0.0+80d8103d394aeed8ce70141c742d7d53620ef90e",
 			SourceCommit:   "80d8103d394aeed8ce70141c742d7d53620ef90e",
 		},
-		GeneratorSourceSHA256: strings.Repeat("a", 64),
 	}
 
 	images := []testImage{

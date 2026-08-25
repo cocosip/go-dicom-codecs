@@ -244,7 +244,7 @@ test-data/htj2k/interop-v1/
 ```
 
 The manifest records the exact resolved package version, fo-dicom.Codecs
-source commit, generator source hash, transfer syntax, frame metadata, and
+source commit, transfer syntax, frame metadata, and
 every whole-file and per-frame hash. The version range controls compatibility;
 the exact manifest version preserves reproducibility for each generated
 bundle.
@@ -545,7 +545,7 @@ go test -count=1 ./cmd/dicom-interop-validation
 go test -count=1 ./...
 go vet ./codec/... ./cmd/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
 golangci-lint run --timeout=10m ./codec/... ./cmd/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
-go run ./cmd/dicom-interop-validation --bundle test-data/htj2k/interop-v1 --generator-source tools/fo-dicom-reference-generator
+go run ./cmd/dicom-interop-validation --bundle test-data/htj2k/interop-v1
 git diff --check
 ```
 
@@ -753,7 +753,7 @@ classic/HTJ2K benchmark matrix.
   duplicate artifacts, missing source/encoded/decoded frames, missing `.201`,
   `.202`, or `.203` directions, incorrect lengths and SHA256 values, invalid
   schema/provenance/version values, incomplete fixture coverage, undeclared
-  files, unreferenced digests, generator source drift, and empty `PATH`.
+  files, unreferenced digests, and empty `PATH`.
   `go test -count=1 ./cmd/dicom-interop-validation` passed after GREEN.
 - The validator independently checked all 114 artifacts in
   `test-data/htj2k/interop-v1`, including safe canonical paths, exact file
@@ -763,9 +763,6 @@ classic/HTJ2K benchmark matrix.
   `6.0.0+80d8103d394aeed8ce70141c742d7d53620ef90e` within
   `[6.0.0-beta1, 7.0.0)` and source commit
   `80d8103d394aeed8ce70141c742d7d53620ef90e`.
-- The Go validator recomputed the generator source digest with the exact C#
-  filename/content ordering and NUL separators and matched
-  `4a31aa58d24fc2e2d84007929ec76e8631f882ed7915f5bc2b242a86ac2a14d5`.
   A compiled validator also passed against the real bundle with `PATH` empty.
 - The A10 completion gate executes only Go. It does not run C#, dotnet, C++, or
   `Dicom.Native.dll`; the local generator is provenance for the already saved

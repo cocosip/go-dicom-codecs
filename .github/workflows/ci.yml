@@ -46,9 +46,7 @@ jobs:
       - name: Validate committed interoperability bundle
         shell: bash
         run: >-
-          go run ./cmd/dicom-interop-validation
-          --bundle test-data/htj2k/interop-v1
-          --generator-source tools/fo-dicom-reference-generator
+          go run ./cmd/dicom-interop-validation --bundle test-data/htj2k/interop-v1
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest'

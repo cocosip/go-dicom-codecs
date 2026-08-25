@@ -28,11 +28,10 @@ import (
 const defaultBundleRoot = "test-data/htj2k/interop-v1"
 
 type bundleManifest struct {
-	SchemaVersion         int              `json:"schemaVersion"`
-	Codec                 bundleProvenance `json:"codec"`
-	GeneratorSourceSHA256 string           `json:"generatorSourceSha256"`
-	Fixtures              []bundleFixture  `json:"fixtures"`
-	Artifacts             []artifactDigest `json:"artifacts"`
+	SchemaVersion int              `json:"schemaVersion"`
+	Codec         bundleProvenance `json:"codec"`
+	Fixtures      []bundleFixture  `json:"fixtures"`
+	Artifacts     []artifactDigest `json:"artifacts"`
 }
 
 type bundleProvenance struct {
