@@ -1,0 +1,2360 @@
+{
+  "schemaVersion": 2,
+  "codec": {
+    "assemblyName": "fo-dicom.Codecs",
+    "managedVersion": "6.0.0\u002Bfc2df0efaa9acdee7b3640f821665107630933e8",
+    "sourceCommit": "fc2df0efaa9acdee7b3640f821665107630933e8"
+  },
+  "generatorSourceSha256": "980c33218cbc2801be50b1a2329100e2a8ff43f68eb0a0eff0686be0a7fe9bb6",
+  "fixtures": [
+    {
+      "image": {
+        "name": "sample-01",
+        "width": 888,
+        "height": 459,
+        "samplesPerPixel": 1,
+        "bitsAllocated": 16,
+        "bitsStored": 16,
+        "signed": true,
+        "photometricInterpretation": "MONOCHROME2",
+        "frameCount": 1
+      },
+      "source": {
+        "dicom": "sources/sample-01.dcm",
+        "frames": [
+          "sources/frames/sample-01-frame-0000.raw"
+        ],
+        "encoderInputFrames": [
+          "sources/frames/sample-01-frame-0000.raw"
+        ]
+      },
+      "syntaxes": [
+        {
+          "name": "htj2k-lossless",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.201",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/sample-01-htj2k-lossless.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/sample-01-htj2k-lossless-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/sample-01-htj2k-lossless.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/sample-01-htj2k-lossless-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/sample-01-htj2k-lossless.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/sample-01-htj2k-lossless-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/sample-01-htj2k-lossless.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/sample-01-htj2k-lossless-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/sample-01-htj2k-lossless.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/sample-01-htj2k-lossless-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/sample-01-htj2k-lossless.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/sample-01-htj2k-lossless-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossless-rpcl",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.202",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/sample-01-htj2k-lossless-rpcl.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/sample-01-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/sample-01-htj2k-lossless-rpcl.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/sample-01-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/sample-01-htj2k-lossless-rpcl.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/sample-01-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/sample-01-htj2k-lossless-rpcl.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/sample-01-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/sample-01-htj2k-lossless-rpcl.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/sample-01-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/sample-01-htj2k-lossless-rpcl.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/sample-01-htj2k-lossless-rpcl-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossy",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.203",
+          "lossless": false,
+          "encodedDicom": "fo-encoded/sample-01-htj2k-lossy.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/sample-01-htj2k-lossy-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/sample-01-htj2k-lossy.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/sample-01-htj2k-lossy-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/sample-01-htj2k-lossy.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/sample-01-htj2k-lossy-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/sample-01-htj2k-lossy.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/sample-01-htj2k-lossy-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/sample-01-htj2k-lossy.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/sample-01-htj2k-lossy-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/sample-01-htj2k-lossy.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/sample-01-htj2k-lossy-frame-0000.raw"
+          ]
+        }
+      ]
+    },
+    {
+      "image": {
+        "name": "matrix-mono-u8",
+        "width": 96,
+        "height": 80,
+        "samplesPerPixel": 1,
+        "bitsAllocated": 8,
+        "bitsStored": 8,
+        "signed": false,
+        "photometricInterpretation": "MONOCHROME2",
+        "frameCount": 1
+      },
+      "source": {
+        "dicom": "sources/matrix-mono-u8.dcm",
+        "frames": [
+          "sources/frames/matrix-mono-u8-frame-0000.raw"
+        ],
+        "encoderInputFrames": [
+          "sources/frames/matrix-mono-u8-frame-0000.raw"
+        ]
+      },
+      "syntaxes": [
+        {
+          "name": "htj2k-lossless",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.201",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-mono-u8-htj2k-lossless.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-mono-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-mono-u8-htj2k-lossless.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-mono-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-mono-u8-htj2k-lossless.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-mono-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossless-rpcl",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.202",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossy",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.203",
+          "lossless": false,
+          "encodedDicom": "fo-encoded/matrix-mono-u8-htj2k-lossy.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-mono-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossy.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-mono-u8-htj2k-lossy.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-mono-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-mono-u8-htj2k-lossy.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-mono-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossy.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-mono-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossy.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-mono-u8-htj2k-lossy-frame-0000.raw"
+          ]
+        }
+      ]
+    },
+    {
+      "image": {
+        "name": "matrix-mono-u16-multiframe",
+        "width": 96,
+        "height": 80,
+        "samplesPerPixel": 1,
+        "bitsAllocated": 16,
+        "bitsStored": 16,
+        "signed": false,
+        "photometricInterpretation": "MONOCHROME2",
+        "frameCount": 3
+      },
+      "source": {
+        "dicom": "sources/matrix-mono-u16-multiframe.dcm",
+        "frames": [
+          "sources/frames/matrix-mono-u16-multiframe-frame-0000.raw",
+          "sources/frames/matrix-mono-u16-multiframe-frame-0001.raw",
+          "sources/frames/matrix-mono-u16-multiframe-frame-0002.raw"
+        ],
+        "encoderInputFrames": [
+          "sources/frames/matrix-mono-u16-multiframe-frame-0000.raw",
+          "sources/frames/matrix-mono-u16-multiframe-frame-0001.raw",
+          "sources/frames/matrix-mono-u16-multiframe-frame-0002.raw"
+        ]
+      },
+      "syntaxes": [
+        {
+          "name": "htj2k-lossless",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.201",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.j2c",
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.j2c",
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.j2c",
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.j2c",
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossless-rpcl",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.202",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.j2c",
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.j2c",
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.j2c",
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.j2c",
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossy",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.203",
+          "lossless": false,
+          "encodedDicom": "fo-encoded/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.j2c",
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.j2c",
+            "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+            "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.j2c",
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.j2c",
+            "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+            "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+            "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+            "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw"
+          ]
+        }
+      ]
+    },
+    {
+      "image": {
+        "name": "matrix-rgb-u8",
+        "width": 96,
+        "height": 80,
+        "samplesPerPixel": 3,
+        "bitsAllocated": 8,
+        "bitsStored": 8,
+        "signed": false,
+        "photometricInterpretation": "RGB",
+        "frameCount": 1
+      },
+      "source": {
+        "dicom": "sources/matrix-rgb-u8.dcm",
+        "frames": [
+          "sources/frames/matrix-rgb-u8-frame-0000.raw"
+        ],
+        "encoderInputFrames": [
+          "sources/frames/matrix-rgb-u8-frame-0000.raw"
+        ]
+      },
+      "syntaxes": [
+        {
+          "name": "htj2k-lossless",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.201",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-rgb-u8-htj2k-lossless.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-rgb-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-rgb-u8-htj2k-lossless.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-rgb-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossless-rpcl",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.202",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossy",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.203",
+          "lossless": false,
+          "encodedDicom": "fo-encoded/matrix-rgb-u8-htj2k-lossy.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-rgb-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossy.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-rgb-u8-htj2k-lossy.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-rgb-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossy.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-rgb-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossy.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossy.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossy-frame-0000.raw"
+          ]
+        }
+      ]
+    },
+    {
+      "image": {
+        "name": "matrix-rgb-u16",
+        "width": 96,
+        "height": 80,
+        "samplesPerPixel": 3,
+        "bitsAllocated": 16,
+        "bitsStored": 16,
+        "signed": false,
+        "photometricInterpretation": "RGB",
+        "frameCount": 1
+      },
+      "source": {
+        "dicom": "sources/matrix-rgb-u16.dcm",
+        "frames": [
+          "sources/frames/matrix-rgb-u16-frame-0000.raw"
+        ],
+        "encoderInputFrames": [
+          "sources/frames/matrix-rgb-u16-frame-0000.raw"
+        ]
+      },
+      "syntaxes": [
+        {
+          "name": "htj2k-lossless",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.201",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-rgb-u16-htj2k-lossless.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-rgb-u16-htj2k-lossless-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-rgb-u16-htj2k-lossless.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-rgb-u16-htj2k-lossless-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossless-rpcl",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.202",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossy",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.203",
+          "lossless": false,
+          "encodedDicom": "fo-encoded/matrix-rgb-u16-htj2k-lossy.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-rgb-u16-htj2k-lossy-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossy.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossy-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-rgb-u16-htj2k-lossy.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-rgb-u16-htj2k-lossy-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossy.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-rgb-u16-htj2k-lossy-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossy.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossy-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossy.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossy-frame-0000.raw"
+          ]
+        }
+      ]
+    },
+    {
+      "image": {
+        "name": "matrix-ybr-full-u8",
+        "width": 96,
+        "height": 80,
+        "samplesPerPixel": 3,
+        "bitsAllocated": 8,
+        "bitsStored": 8,
+        "signed": false,
+        "photometricInterpretation": "YBR_FULL",
+        "frameCount": 1
+      },
+      "source": {
+        "dicom": "sources/matrix-ybr-full-u8.dcm",
+        "frames": [
+          "sources/frames/matrix-ybr-full-u8-frame-0000.raw"
+        ],
+        "encoderInputFrames": [
+          "sources/encoder-input-frames/matrix-ybr-full-u8-frame-0000.rgb"
+        ]
+      },
+      "syntaxes": [
+        {
+          "name": "htj2k-lossless",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.201",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-ybr-full-u8-htj2k-lossless.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-ybr-full-u8-htj2k-lossless.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossless-rpcl",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.202",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossy",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.203",
+          "lossless": false,
+          "encodedDicom": "fo-encoded/matrix-ybr-full-u8-htj2k-lossy.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-ybr-full-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossy.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-ybr-full-u8-htj2k-lossy.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-ybr-full-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossy.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossy.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossy.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw"
+          ]
+        }
+      ]
+    },
+    {
+      "image": {
+        "name": "matrix-ybr-full-422-u8",
+        "width": 96,
+        "height": 80,
+        "samplesPerPixel": 3,
+        "bitsAllocated": 8,
+        "bitsStored": 8,
+        "signed": false,
+        "photometricInterpretation": "YBR_FULL_422",
+        "frameCount": 1
+      },
+      "source": {
+        "dicom": "sources/matrix-ybr-full-422-u8.dcm",
+        "frames": [
+          "sources/frames/matrix-ybr-full-422-u8-frame-0000.raw"
+        ],
+        "encoderInputFrames": [
+          "sources/encoder-input-frames/matrix-ybr-full-422-u8-frame-0000.rgb"
+        ]
+      },
+      "syntaxes": [
+        {
+          "name": "htj2k-lossless",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.201",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossless-rpcl",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.202",
+          "lossless": true,
+          "encodedDicom": "fo-encoded/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw"
+          ]
+        },
+        {
+          "name": "htj2k-lossy",
+          "transferSyntaxUid": "1.2.840.10008.1.2.4.203",
+          "lossless": false,
+          "encodedDicom": "fo-encoded/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+          "encodedFrames": [
+            "fo-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "decodedDicom": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+          "decodedFrames": [
+            "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goEncodedDicom": "go-encoded/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+          "goEncodedFrames": [
+            "go-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.j2c"
+          ],
+          "goFromGoDicom": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+          "goFromGoFrames": [
+            "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "goFromFoDicom": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+          "goFromFoFrames": [
+            "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw"
+          ],
+          "foFromGoDicom": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+          "foFromGoFrames": [
+            "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw"
+          ]
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+      "length": 46714,
+      "sha256": "55e05cf7eb29b482cd878fcf0137a459717a6f6d43d8d93e565885303a242911"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+      "length": 46714,
+      "sha256": "55e05cf7eb29b482cd878fcf0137a459717a6f6d43d8d93e565885303a242911"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+      "length": 15360,
+      "sha256": "e2298a004c43c1fb05b26de2d7fc092493beb361c3a04911483815810f655073"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+      "length": 15360,
+      "sha256": "30fb59eadcd93b9a388a9540b71967dda874ac276077c6e7ddeaa2a716478d3d"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+      "length": 46758,
+      "sha256": "f857949f95b22857e0b96f27b6ff7c82d1bdb4e8ff4c548c59206f32ca432e3b"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+      "length": 8314,
+      "sha256": "bbe54bf19cedd52d9e0372445825a122129abde1105a2451230a1eb4640d65cb"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossless.dcm",
+      "length": 8314,
+      "sha256": "bbe54bf19cedd52d9e0372445825a122129abde1105a2451230a1eb4640d65cb"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossy-frame-0000.raw",
+      "length": 7680,
+      "sha256": "3553bbe3624cd033e048039b3d7e62b919f5bab37602c594cc720dd4dcf0f508"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-mono-u8-htj2k-lossy.dcm",
+      "length": 8358,
+      "sha256": "bd53e2905e412b49368b39a2cc02e8ae716631edc9fc1619a274e22f27fdcec9"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+      "length": 46716,
+      "sha256": "594f03c664be69a4f7f995898e10011c338cf7c3a54060e85cd6da34079e7e98"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossless.dcm",
+      "length": 46716,
+      "sha256": "594f03c664be69a4f7f995898e10011c338cf7c3a54060e85cd6da34079e7e98"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossy-frame-0000.raw",
+      "length": 46080,
+      "sha256": "7abf35e9c4e9f0306b5e369934bd1ad7f0cd80f19d829c8e156788107cc068fd"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u16-htj2k-lossy.dcm",
+      "length": 46760,
+      "sha256": "170415477e83d175bf5b09c3fe07c7f30b2505c0af9f7f1d24e24bb48d9c848c"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23676,
+      "sha256": "0c8e12c3479bb27ed3902207cb7ea00906e3429483fd79043441443eb955dab4"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossless.dcm",
+      "length": 23676,
+      "sha256": "0c8e12c3479bb27ed3902207cb7ea00906e3429483fd79043441443eb955dab4"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "64cab33e8bb4fa8d973d114b82e595d5ea9efecbb616416120dd49431aef8312"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-rgb-u8-htj2k-lossy.dcm",
+      "length": 23720,
+      "sha256": "b77d5c4454dde081d396369402a9e37de8dcc90db2b58c34a1eba0fd1cb7b399"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23676,
+      "sha256": "bb7cd2d5d14c2201e8d96b96aa395a724db555e663090a37b3ae17b35c2d4c59"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+      "length": 23676,
+      "sha256": "bb7cd2d5d14c2201e8d96b96aa395a724db555e663090a37b3ae17b35c2d4c59"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "8519ef7782a1c3c5c835658b9935ab74c6f264332e034b683caeddf5e03df40f"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+      "length": 23720,
+      "sha256": "bcc8f01cd8e633b26bebb0ed99ff113a1ac1ab77f79a9a831c5aced334f4c864"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23676,
+      "sha256": "0bd4624f568acacd197b69e90c5b19842832a78ef371e861a15f3ed860dbd923"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossless.dcm",
+      "length": 23676,
+      "sha256": "0bd4624f568acacd197b69e90c5b19842832a78ef371e861a15f3ed860dbd923"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "696a1c704f102bd8ef7613053f9be14f7e5c165564a3cfd2ee52447f962811da"
+    },
+    {
+      "path": "decoded/fo-from-fo/matrix-ybr-full-u8-htj2k-lossy.dcm",
+      "length": 23720,
+      "sha256": "a852e25db44f937a00c2fb101aea8eef3c810ab43dc4fb7baa1a1f4737922298"
+    },
+    {
+      "path": "decoded/fo-from-fo/sample-01-htj2k-lossless-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/fo-from-fo/sample-01-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/fo-from-fo/sample-01-htj2k-lossless-rpcl.dcm",
+      "length": 816726,
+      "sha256": "55ce5212715f83b5c89ea35ade7129682169395440717ed5326a68ab204bb2e3"
+    },
+    {
+      "path": "decoded/fo-from-fo/sample-01-htj2k-lossless.dcm",
+      "length": 816726,
+      "sha256": "55ce5212715f83b5c89ea35ade7129682169395440717ed5326a68ab204bb2e3"
+    },
+    {
+      "path": "decoded/fo-from-fo/sample-01-htj2k-lossy-frame-0000.raw",
+      "length": 815184,
+      "sha256": "23c398c4182561801390f0477dea764022e89833699853f60cb2ffa020d964a2"
+    },
+    {
+      "path": "decoded/fo-from-fo/sample-01-htj2k-lossy.dcm",
+      "length": 816770,
+      "sha256": "67f1a472528a5b598289f036519fb6c5245d95a8667ffc86c56aeea3845a2ca1"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+      "length": 46714,
+      "sha256": "55e05cf7eb29b482cd878fcf0137a459717a6f6d43d8d93e565885303a242911"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+      "length": 46714,
+      "sha256": "55e05cf7eb29b482cd878fcf0137a459717a6f6d43d8d93e565885303a242911"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+      "length": 15360,
+      "sha256": "e2298a004c43c1fb05b26de2d7fc092493beb361c3a04911483815810f655073"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+      "length": 15360,
+      "sha256": "30fb59eadcd93b9a388a9540b71967dda874ac276077c6e7ddeaa2a716478d3d"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+      "length": 46714,
+      "sha256": "efe93e16ca950710f96f360139ff0f87467bbae1f6e0804331030524fb96adc9"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+      "length": 8314,
+      "sha256": "bbe54bf19cedd52d9e0372445825a122129abde1105a2451230a1eb4640d65cb"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossless.dcm",
+      "length": 8314,
+      "sha256": "bbe54bf19cedd52d9e0372445825a122129abde1105a2451230a1eb4640d65cb"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossy-frame-0000.raw",
+      "length": 7680,
+      "sha256": "3553bbe3624cd033e048039b3d7e62b919f5bab37602c594cc720dd4dcf0f508"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-mono-u8-htj2k-lossy.dcm",
+      "length": 8314,
+      "sha256": "6ad9461b629cb08e82023e31d9965a8054ba261cc7117c07986859813bb1fe39"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+      "length": 46716,
+      "sha256": "594f03c664be69a4f7f995898e10011c338cf7c3a54060e85cd6da34079e7e98"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossless.dcm",
+      "length": 46716,
+      "sha256": "594f03c664be69a4f7f995898e10011c338cf7c3a54060e85cd6da34079e7e98"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossy-frame-0000.raw",
+      "length": 46080,
+      "sha256": "7abf35e9c4e9f0306b5e369934bd1ad7f0cd80f19d829c8e156788107cc068fd"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u16-htj2k-lossy.dcm",
+      "length": 46716,
+      "sha256": "2cf08dcfc40b8d72a123c106aec64d98a7739f71ba7b71eb5a4a35623050f3ea"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23676,
+      "sha256": "0c8e12c3479bb27ed3902207cb7ea00906e3429483fd79043441443eb955dab4"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossless.dcm",
+      "length": 23676,
+      "sha256": "0c8e12c3479bb27ed3902207cb7ea00906e3429483fd79043441443eb955dab4"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "64cab33e8bb4fa8d973d114b82e595d5ea9efecbb616416120dd49431aef8312"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-rgb-u8-htj2k-lossy.dcm",
+      "length": 23676,
+      "sha256": "7b7529bb88f1adc52caa617a8d295d1194a1eaf25f2f8b4c16aeadd8d6665581"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23676,
+      "sha256": "bb7cd2d5d14c2201e8d96b96aa395a724db555e663090a37b3ae17b35c2d4c59"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+      "length": 23676,
+      "sha256": "bb7cd2d5d14c2201e8d96b96aa395a724db555e663090a37b3ae17b35c2d4c59"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "8519ef7782a1c3c5c835658b9935ab74c6f264332e034b683caeddf5e03df40f"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+      "length": 23676,
+      "sha256": "7788c2f2641bd003d2b3fb174183f2debcde94986547c49b4dddad6c291c8c6c"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23676,
+      "sha256": "0bd4624f568acacd197b69e90c5b19842832a78ef371e861a15f3ed860dbd923"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossless.dcm",
+      "length": 23676,
+      "sha256": "0bd4624f568acacd197b69e90c5b19842832a78ef371e861a15f3ed860dbd923"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "696a1c704f102bd8ef7613053f9be14f7e5c165564a3cfd2ee52447f962811da"
+    },
+    {
+      "path": "decoded/fo-from-go/matrix-ybr-full-u8-htj2k-lossy.dcm",
+      "length": 23676,
+      "sha256": "18a8a70bd1e8043c3a4ade7737adf418dfaa1075101db39fb7e0c62d7e73cf72"
+    },
+    {
+      "path": "decoded/fo-from-go/sample-01-htj2k-lossless-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/fo-from-go/sample-01-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/fo-from-go/sample-01-htj2k-lossless-rpcl.dcm",
+      "length": 816726,
+      "sha256": "55ce5212715f83b5c89ea35ade7129682169395440717ed5326a68ab204bb2e3"
+    },
+    {
+      "path": "decoded/fo-from-go/sample-01-htj2k-lossless.dcm",
+      "length": 816726,
+      "sha256": "55ce5212715f83b5c89ea35ade7129682169395440717ed5326a68ab204bb2e3"
+    },
+    {
+      "path": "decoded/fo-from-go/sample-01-htj2k-lossy-frame-0000.raw",
+      "length": 815184,
+      "sha256": "23c398c4182561801390f0477dea764022e89833699853f60cb2ffa020d964a2"
+    },
+    {
+      "path": "decoded/fo-from-go/sample-01-htj2k-lossy.dcm",
+      "length": 816726,
+      "sha256": "3864021b7dff046a5285f1246aa974c37f8ccf41ac808a065d516fe6bd30e729"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+      "length": 46720,
+      "sha256": "28c4468c550f21f4c5c7227e3021b1371ada2c16a978f2d89cf1435efc8706df"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+      "length": 46720,
+      "sha256": "28c4468c550f21f4c5c7227e3021b1371ada2c16a978f2d89cf1435efc8706df"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+      "length": 15360,
+      "sha256": "e2298a004c43c1fb05b26de2d7fc092493beb361c3a04911483815810f655073"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+      "length": 15360,
+      "sha256": "30fb59eadcd93b9a388a9540b71967dda874ac276077c6e7ddeaa2a716478d3d"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+      "length": 46764,
+      "sha256": "b8ffa2c7616dd407fd3a9c99bb7f40154d2f8281f4659b2a6d4bdb18b2382f7d"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+      "length": 8320,
+      "sha256": "d198ec2d0c55e08d36aee0292a9a76ae5ae2bd6f1f9e8e376edd8534f6df30dd"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossless.dcm",
+      "length": 8320,
+      "sha256": "d198ec2d0c55e08d36aee0292a9a76ae5ae2bd6f1f9e8e376edd8534f6df30dd"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossy-frame-0000.raw",
+      "length": 7680,
+      "sha256": "3553bbe3624cd033e048039b3d7e62b919f5bab37602c594cc720dd4dcf0f508"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-mono-u8-htj2k-lossy.dcm",
+      "length": 8364,
+      "sha256": "af9d6347ada555ba65c7ff609f3ad1d3432990035673f1b76a4ae19fb84a91ce"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+      "length": 46722,
+      "sha256": "cd06f3da7febc880bf8db5ecc9f92f946d17dfc07b37358328d8f72ac8ff7ca2"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossless.dcm",
+      "length": 46722,
+      "sha256": "cd06f3da7febc880bf8db5ecc9f92f946d17dfc07b37358328d8f72ac8ff7ca2"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossy-frame-0000.raw",
+      "length": 46080,
+      "sha256": "7abf35e9c4e9f0306b5e369934bd1ad7f0cd80f19d829c8e156788107cc068fd"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u16-htj2k-lossy.dcm",
+      "length": 46766,
+      "sha256": "8a1d8de6b7dc2ee8318708ebc52728f92113598dce05e0984b0dfe6fada30eea"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23682,
+      "sha256": "9db0eee427cee335175fa26a63adb3954ef4f7c3878eb0f9ff417ed5f483d769"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossless.dcm",
+      "length": 23682,
+      "sha256": "9db0eee427cee335175fa26a63adb3954ef4f7c3878eb0f9ff417ed5f483d769"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "64cab33e8bb4fa8d973d114b82e595d5ea9efecbb616416120dd49431aef8312"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-rgb-u8-htj2k-lossy.dcm",
+      "length": 23726,
+      "sha256": "385a2621fa60395534ad890d10dff3090860d2491e1deb2c8cdbf54c90dae6b6"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23682,
+      "sha256": "4c43df435cb5409a4a5b8488583ddb9d30b187a450aa64936068b7c6e62fdc0d"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+      "length": 23682,
+      "sha256": "4c43df435cb5409a4a5b8488583ddb9d30b187a450aa64936068b7c6e62fdc0d"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "8519ef7782a1c3c5c835658b9935ab74c6f264332e034b683caeddf5e03df40f"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+      "length": 23726,
+      "sha256": "af3e9e7ff426cf63590e9b740a4fb78698fbcbcb3ac74296292700c83068f237"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23682,
+      "sha256": "4188895c11887acd2b5f978e816f618c93e638cfb6e4a310026a0203e022bda3"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossless.dcm",
+      "length": 23682,
+      "sha256": "4188895c11887acd2b5f978e816f618c93e638cfb6e4a310026a0203e022bda3"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "696a1c704f102bd8ef7613053f9be14f7e5c165564a3cfd2ee52447f962811da"
+    },
+    {
+      "path": "decoded/go-from-fo/matrix-ybr-full-u8-htj2k-lossy.dcm",
+      "length": 23726,
+      "sha256": "1a341b9e251dfd5b46eb2587ff59db415ed98078209e778d2176c931f490454f"
+    },
+    {
+      "path": "decoded/go-from-fo/sample-01-htj2k-lossless-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/go-from-fo/sample-01-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/go-from-fo/sample-01-htj2k-lossless-rpcl.dcm",
+      "length": 816732,
+      "sha256": "2f23c1bb6305ba8f83acb3e0540b06d880b6a916b4e67086b3ae853075fa7b48"
+    },
+    {
+      "path": "decoded/go-from-fo/sample-01-htj2k-lossless.dcm",
+      "length": 816732,
+      "sha256": "2f23c1bb6305ba8f83acb3e0540b06d880b6a916b4e67086b3ae853075fa7b48"
+    },
+    {
+      "path": "decoded/go-from-fo/sample-01-htj2k-lossy-frame-0000.raw",
+      "length": 815184,
+      "sha256": "23c398c4182561801390f0477dea764022e89833699853f60cb2ffa020d964a2"
+    },
+    {
+      "path": "decoded/go-from-fo/sample-01-htj2k-lossy.dcm",
+      "length": 816776,
+      "sha256": "694ac17c2a5ff4bcd97ce585d9a77178060e17673dc82b58075ab9e306696a2e"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+      "length": 46720,
+      "sha256": "28c4468c550f21f4c5c7227e3021b1371ada2c16a978f2d89cf1435efc8706df"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+      "length": 46720,
+      "sha256": "28c4468c550f21f4c5c7227e3021b1371ada2c16a978f2d89cf1435efc8706df"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.raw",
+      "length": 15360,
+      "sha256": "e2298a004c43c1fb05b26de2d7fc092493beb361c3a04911483815810f655073"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.raw",
+      "length": 15360,
+      "sha256": "30fb59eadcd93b9a388a9540b71967dda874ac276077c6e7ddeaa2a716478d3d"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+      "length": 46720,
+      "sha256": "165134856a021e0a280577bf224899fa955aff1bc4062f6c1b77960ad3bdf520"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u8-htj2k-lossless-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+      "length": 8320,
+      "sha256": "d198ec2d0c55e08d36aee0292a9a76ae5ae2bd6f1f9e8e376edd8534f6df30dd"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u8-htj2k-lossless.dcm",
+      "length": 8320,
+      "sha256": "d198ec2d0c55e08d36aee0292a9a76ae5ae2bd6f1f9e8e376edd8534f6df30dd"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u8-htj2k-lossy-frame-0000.raw",
+      "length": 7680,
+      "sha256": "3553bbe3624cd033e048039b3d7e62b919f5bab37602c594cc720dd4dcf0f508"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-mono-u8-htj2k-lossy.dcm",
+      "length": 8320,
+      "sha256": "2dafe003e8284d4a0a2ac87d3a80a46af1c6ae71ab080e06efcbaa7a2d7eee72"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 46080,
+      "sha256": "f1b7def8fdf3cc2bd88c1f8dfbd0b0786ebea712ba18b1b4d48dc1cfd19b5c6d"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+      "length": 46722,
+      "sha256": "cd06f3da7febc880bf8db5ecc9f92f946d17dfc07b37358328d8f72ac8ff7ca2"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossless.dcm",
+      "length": 46722,
+      "sha256": "cd06f3da7febc880bf8db5ecc9f92f946d17dfc07b37358328d8f72ac8ff7ca2"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossy-frame-0000.raw",
+      "length": 46080,
+      "sha256": "7abf35e9c4e9f0306b5e369934bd1ad7f0cd80f19d829c8e156788107cc068fd"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u16-htj2k-lossy.dcm",
+      "length": 46722,
+      "sha256": "2ad5b3acd0130648c64469b6e0c2afa3b63be0e88b3abc86382672c6d648fea2"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23682,
+      "sha256": "9db0eee427cee335175fa26a63adb3954ef4f7c3878eb0f9ff417ed5f483d769"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossless.dcm",
+      "length": 23682,
+      "sha256": "9db0eee427cee335175fa26a63adb3954ef4f7c3878eb0f9ff417ed5f483d769"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "64cab33e8bb4fa8d973d114b82e595d5ea9efecbb616416120dd49431aef8312"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-rgb-u8-htj2k-lossy.dcm",
+      "length": 23682,
+      "sha256": "83ddd64decd05868122bfe5967d742c418c4d7a29899b22a1b62a4fc0e6d4e7d"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23682,
+      "sha256": "4c43df435cb5409a4a5b8488583ddb9d30b187a450aa64936068b7c6e62fdc0d"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+      "length": 23682,
+      "sha256": "4c43df435cb5409a4a5b8488583ddb9d30b187a450aa64936068b7c6e62fdc0d"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "8519ef7782a1c3c5c835658b9935ab74c6f264332e034b683caeddf5e03df40f"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+      "length": 23682,
+      "sha256": "a977147648317da28d60ea7fdc542b04307fc9f7d347a938d73c5368e8b32e3d"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+      "length": 23682,
+      "sha256": "4188895c11887acd2b5f978e816f618c93e638cfb6e4a310026a0203e022bda3"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossless.dcm",
+      "length": 23682,
+      "sha256": "4188895c11887acd2b5f978e816f618c93e638cfb6e4a310026a0203e022bda3"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossy-frame-0000.raw",
+      "length": 23040,
+      "sha256": "696a1c704f102bd8ef7613053f9be14f7e5c165564a3cfd2ee52447f962811da"
+    },
+    {
+      "path": "decoded/go-from-go/matrix-ybr-full-u8-htj2k-lossy.dcm",
+      "length": 23682,
+      "sha256": "e9e66b3419fff2665a83a280049ccc8bdc161a5f5584acfcf40263563952419d"
+    },
+    {
+      "path": "decoded/go-from-go/sample-01-htj2k-lossless-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/go-from-go/sample-01-htj2k-lossless-rpcl-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "decoded/go-from-go/sample-01-htj2k-lossless-rpcl.dcm",
+      "length": 816722,
+      "sha256": "59590ff9d7e026016edb8065a3c0b4eb369a00db722361e024eba2c960b3700d"
+    },
+    {
+      "path": "decoded/go-from-go/sample-01-htj2k-lossless.dcm",
+      "length": 816722,
+      "sha256": "59590ff9d7e026016edb8065a3c0b4eb369a00db722361e024eba2c960b3700d"
+    },
+    {
+      "path": "decoded/go-from-go/sample-01-htj2k-lossy-frame-0000.raw",
+      "length": 815184,
+      "sha256": "23c398c4182561801390f0477dea764022e89833699853f60cb2ffa020d964a2"
+    },
+    {
+      "path": "decoded/go-from-go/sample-01-htj2k-lossy.dcm",
+      "length": 816722,
+      "sha256": "ec14d4c06fd01fce1e374feba10719da80c168952d1dbd122702b31bdb57b425"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.j2c",
+      "length": 3845,
+      "sha256": "a75eb20eb6b5ee30539b98fa7aace1bd9664066d7c41c487a2dbe5614a430733"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.j2c",
+      "length": 3845,
+      "sha256": "d53b4f9dc5baebeeab3967bfa830322e3b5fabd5277221d46f4f88c2cfc39231"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.j2c",
+      "length": 3845,
+      "sha256": "cf2791d034cfbe8b10dc5b97abf6923ffdeefbc86f375bc7e25670632a214289"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 3845,
+      "sha256": "a75eb20eb6b5ee30539b98fa7aace1bd9664066d7c41c487a2dbe5614a430733"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.j2c",
+      "length": 3845,
+      "sha256": "d53b4f9dc5baebeeab3967bfa830322e3b5fabd5277221d46f4f88c2cfc39231"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.j2c",
+      "length": 3845,
+      "sha256": "cf2791d034cfbe8b10dc5b97abf6923ffdeefbc86f375bc7e25670632a214289"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.j2c",
+      "length": 5331,
+      "sha256": "acfa2485a71a5a9b232020dcba9d349535278d7a724a40950ffcb3d3a4ce2df4"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.j2c",
+      "length": 5329,
+      "sha256": "390af9345d0309300897770602d4337ef00941797b309cd32d28358788468191"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.j2c",
+      "length": 5329,
+      "sha256": "5ebc134b72898823f60fd731d9492ef3ce38c6a5ca3021cb2b1ffb79b55ba963"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 1517,
+      "sha256": "3524ace013b9de49e496fdd3e5f023ba1b4d7762fdebd95f5c03fc60f457dd67"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 1517,
+      "sha256": "3524ace013b9de49e496fdd3e5f023ba1b4d7762fdebd95f5c03fc60f457dd67"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-mono-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 1792,
+      "sha256": "73a6bf49a7304c8f536a6972526b91b729a3e3b42e6ddfabc026fc9a98a685ce"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-rgb-u16-htj2k-lossless-frame-0000.j2c",
+      "length": 13760,
+      "sha256": "d9129566aca3a57d4baab63f3584a0f532492530c94953f912d75fc31f47b9b3"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 13760,
+      "sha256": "d9129566aca3a57d4baab63f3584a0f532492530c94953f912d75fc31f47b9b3"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-rgb-u16-htj2k-lossy-frame-0000.j2c",
+      "length": 13990,
+      "sha256": "b0e37c0e33f82e8797c4c71e6098c0a8f78efa4b44427ede07b3cce78f43324d"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-rgb-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 7673,
+      "sha256": "8a7dc640ab0aa026b505f5e345dbd55fc7fc4b1bd82f6e8dc44bd88d0f9122e4"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 7673,
+      "sha256": "8a7dc640ab0aa026b505f5e345dbd55fc7fc4b1bd82f6e8dc44bd88d0f9122e4"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-rgb-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 5166,
+      "sha256": "281f0b267280db30e2504abd464795202cab8dc14e26d739f66ba55fe772677a"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 2924,
+      "sha256": "edc30cb877bc8d86c13e13924a872426a71ba5465d33d4e26b76da8344bb1511"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 2924,
+      "sha256": "edc30cb877bc8d86c13e13924a872426a71ba5465d33d4e26b76da8344bb1511"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 2668,
+      "sha256": "c81a2eb48ef5066a7a15b6642d51b3b3af1a809f0ed3237cacf4ec8c25e830b6"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 3032,
+      "sha256": "0122714730d93bc47bb99eb8b77186ca84d13dea1f664124fe1bfcf130b9b01b"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 3032,
+      "sha256": "0122714730d93bc47bb99eb8b77186ca84d13dea1f664124fe1bfcf130b9b01b"
+    },
+    {
+      "path": "fo-encoded/frames/matrix-ybr-full-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 2608,
+      "sha256": "8ade32fe9129db3fe4325234279347c99161ab0464646998b2720013aead3e19"
+    },
+    {
+      "path": "fo-encoded/frames/sample-01-htj2k-lossless-frame-0000.j2c",
+      "length": 185351,
+      "sha256": "2c5722a3821073fa803f46f29f2497f63415a3c75db42a1afd7ce7a44c292faa"
+    },
+    {
+      "path": "fo-encoded/frames/sample-01-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 185351,
+      "sha256": "2c5722a3821073fa803f46f29f2497f63415a3c75db42a1afd7ce7a44c292faa"
+    },
+    {
+      "path": "fo-encoded/frames/sample-01-htj2k-lossy-frame-0000.j2c",
+      "length": 153093,
+      "sha256": "2d8b6a29fe97478d3bfc8e6d23d4cfa703cede50d3fda4167df5dfdba74caeae"
+    },
+    {
+      "path": "fo-encoded/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+      "length": 12978,
+      "sha256": "76579da8cc9f11bc017d6bd9404a6642c9497b04a619a95f582d12b5b621b4b0"
+    },
+    {
+      "path": "fo-encoded/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+      "length": 12978,
+      "sha256": "2545a83ac992a32acb99c7fabcaadfd524f1ab5a020051ee310ee11f8fbd7b7e"
+    },
+    {
+      "path": "fo-encoded/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+      "length": 25310,
+      "sha256": "2f268ddfea4c05894591f7025d482b56fc1ab090141716b324cc2387ba595d36"
+    },
+    {
+      "path": "fo-encoded/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+      "length": 2714,
+      "sha256": "609e3d5a96589843721100b3d53a1ee82d8d6ff0e60c91eb576d8f57aa5f8b4e"
+    },
+    {
+      "path": "fo-encoded/matrix-mono-u8-htj2k-lossless.dcm",
+      "length": 2714,
+      "sha256": "f8bbe446e117ddb3b8a7447f55a031b582f5ca3c73f08b05ce2a566fbd3d8dcc"
+    },
+    {
+      "path": "fo-encoded/matrix-mono-u8-htj2k-lossy.dcm",
+      "length": 2758,
+      "sha256": "7ad2337c903c9730100cd9fb889686fac5fe4887c5374e3204dd04479c555826"
+    },
+    {
+      "path": "fo-encoded/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+      "length": 17052,
+      "sha256": "2e88545a3bc6e85949cf2df5264745b2c2fd10d494f849a1294cf1a82a102403"
+    },
+    {
+      "path": "fo-encoded/matrix-rgb-u16-htj2k-lossless.dcm",
+      "length": 17052,
+      "sha256": "d7f521887be4da10e47ba88e9f1d747b3abb77da566253df18d37e118d3f1c6c"
+    },
+    {
+      "path": "fo-encoded/matrix-rgb-u16-htj2k-lossy.dcm",
+      "length": 17096,
+      "sha256": "75d9defb2038d75e539e2174e60e1f45a8c01279bd41ee982827e7759907f735"
+    },
+    {
+      "path": "fo-encoded/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+      "length": 8860,
+      "sha256": "dfec7481ae537a0db3b5d7f85c96eeb4148bc4cc129786939bef33d50bac5461"
+    },
+    {
+      "path": "fo-encoded/matrix-rgb-u8-htj2k-lossless.dcm",
+      "length": 8860,
+      "sha256": "42a7a14279b78ca27615261523055260efdae952b9eb5ef217bc26c3ce867419"
+    },
+    {
+      "path": "fo-encoded/matrix-rgb-u8-htj2k-lossy.dcm",
+      "length": 8904,
+      "sha256": "8395ea514b191113280c68dc73f54a27caf80ec45afcef9b836f06e5288ee4ee"
+    },
+    {
+      "path": "fo-encoded/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+      "length": 4772,
+      "sha256": "a378675659031b5568882f51ddf0c82e1934ba1d7c6938cbc382d2d60bb0c679"
+    },
+    {
+      "path": "fo-encoded/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+      "length": 4772,
+      "sha256": "8f02e4231922c1061bc07c9fedb94c3d245ec6ecf9c4ecccf8c266e46e22ea0f"
+    },
+    {
+      "path": "fo-encoded/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+      "length": 4816,
+      "sha256": "97f0e540ace409b37bfa7284917cb5c0c1df8be278bf166ffcdc1d960cc56b75"
+    },
+    {
+      "path": "fo-encoded/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+      "length": 4768,
+      "sha256": "e0ca5299a9ce19b0ca3836fcec67af0111a3efbf7beb5c48ac96d7b65331a38e"
+    },
+    {
+      "path": "fo-encoded/matrix-ybr-full-u8-htj2k-lossless.dcm",
+      "length": 4768,
+      "sha256": "6f733efcaca1706fc7a25d94378f11776b7fb1164114dae7b9f103baba934f4d"
+    },
+    {
+      "path": "fo-encoded/matrix-ybr-full-u8-htj2k-lossy.dcm",
+      "length": 4812,
+      "sha256": "f05211aec5eb14c88fcc86e2c0c2fa9a53296b855ba49fe279e241b66a6306d8"
+    },
+    {
+      "path": "fo-encoded/sample-01-htj2k-lossless-rpcl.dcm",
+      "length": 263732,
+      "sha256": "03f1297634e4941dd30f4e62a0d13e61a36f8574f1f4ab4eb94ae2aa85d031e7"
+    },
+    {
+      "path": "fo-encoded/sample-01-htj2k-lossless.dcm",
+      "length": 263732,
+      "sha256": "115d3883ad576cd17f13d5e642ed9527d060229918f4226f0362d0af299890e1"
+    },
+    {
+      "path": "fo-encoded/sample-01-htj2k-lossy.dcm",
+      "length": 263776,
+      "sha256": "cc25a992ca6f817aea06a1dec6c4297f383ec5136b4593dca7e8474c635fa25a"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0000.j2c",
+      "length": 3845,
+      "sha256": "a75eb20eb6b5ee30539b98fa7aace1bd9664066d7c41c487a2dbe5614a430733"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0001.j2c",
+      "length": 3845,
+      "sha256": "d53b4f9dc5baebeeab3967bfa830322e3b5fabd5277221d46f4f88c2cfc39231"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-frame-0002.j2c",
+      "length": 3845,
+      "sha256": "cf2791d034cfbe8b10dc5b97abf6923ffdeefbc86f375bc7e25670632a214289"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 3845,
+      "sha256": "a75eb20eb6b5ee30539b98fa7aace1bd9664066d7c41c487a2dbe5614a430733"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0001.j2c",
+      "length": 3845,
+      "sha256": "d53b4f9dc5baebeeab3967bfa830322e3b5fabd5277221d46f4f88c2cfc39231"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossless-rpcl-frame-0002.j2c",
+      "length": 3845,
+      "sha256": "cf2791d034cfbe8b10dc5b97abf6923ffdeefbc86f375bc7e25670632a214289"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0000.j2c",
+      "length": 5331,
+      "sha256": "acfa2485a71a5a9b232020dcba9d349535278d7a724a40950ffcb3d3a4ce2df4"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0001.j2c",
+      "length": 5329,
+      "sha256": "390af9345d0309300897770602d4337ef00941797b309cd32d28358788468191"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u16-multiframe-htj2k-lossy-frame-0002.j2c",
+      "length": 5329,
+      "sha256": "5ebc134b72898823f60fd731d9492ef3ce38c6a5ca3021cb2b1ffb79b55ba963"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 1517,
+      "sha256": "3524ace013b9de49e496fdd3e5f023ba1b4d7762fdebd95f5c03fc60f457dd67"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 1517,
+      "sha256": "3524ace013b9de49e496fdd3e5f023ba1b4d7762fdebd95f5c03fc60f457dd67"
+    },
+    {
+      "path": "go-encoded/frames/matrix-mono-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 1792,
+      "sha256": "73a6bf49a7304c8f536a6972526b91b729a3e3b42e6ddfabc026fc9a98a685ce"
+    },
+    {
+      "path": "go-encoded/frames/matrix-rgb-u16-htj2k-lossless-frame-0000.j2c",
+      "length": 13760,
+      "sha256": "d9129566aca3a57d4baab63f3584a0f532492530c94953f912d75fc31f47b9b3"
+    },
+    {
+      "path": "go-encoded/frames/matrix-rgb-u16-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 13760,
+      "sha256": "d9129566aca3a57d4baab63f3584a0f532492530c94953f912d75fc31f47b9b3"
+    },
+    {
+      "path": "go-encoded/frames/matrix-rgb-u16-htj2k-lossy-frame-0000.j2c",
+      "length": 13990,
+      "sha256": "b0e37c0e33f82e8797c4c71e6098c0a8f78efa4b44427ede07b3cce78f43324d"
+    },
+    {
+      "path": "go-encoded/frames/matrix-rgb-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 7673,
+      "sha256": "8a7dc640ab0aa026b505f5e345dbd55fc7fc4b1bd82f6e8dc44bd88d0f9122e4"
+    },
+    {
+      "path": "go-encoded/frames/matrix-rgb-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 7673,
+      "sha256": "8a7dc640ab0aa026b505f5e345dbd55fc7fc4b1bd82f6e8dc44bd88d0f9122e4"
+    },
+    {
+      "path": "go-encoded/frames/matrix-rgb-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 5166,
+      "sha256": "281f0b267280db30e2504abd464795202cab8dc14e26d739f66ba55fe772677a"
+    },
+    {
+      "path": "go-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 2924,
+      "sha256": "edc30cb877bc8d86c13e13924a872426a71ba5465d33d4e26b76da8344bb1511"
+    },
+    {
+      "path": "go-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 2924,
+      "sha256": "edc30cb877bc8d86c13e13924a872426a71ba5465d33d4e26b76da8344bb1511"
+    },
+    {
+      "path": "go-encoded/frames/matrix-ybr-full-422-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 2668,
+      "sha256": "c81a2eb48ef5066a7a15b6642d51b3b3af1a809f0ed3237cacf4ec8c25e830b6"
+    },
+    {
+      "path": "go-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-frame-0000.j2c",
+      "length": 3032,
+      "sha256": "0122714730d93bc47bb99eb8b77186ca84d13dea1f664124fe1bfcf130b9b01b"
+    },
+    {
+      "path": "go-encoded/frames/matrix-ybr-full-u8-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 3032,
+      "sha256": "0122714730d93bc47bb99eb8b77186ca84d13dea1f664124fe1bfcf130b9b01b"
+    },
+    {
+      "path": "go-encoded/frames/matrix-ybr-full-u8-htj2k-lossy-frame-0000.j2c",
+      "length": 2608,
+      "sha256": "8ade32fe9129db3fe4325234279347c99161ab0464646998b2720013aead3e19"
+    },
+    {
+      "path": "go-encoded/frames/sample-01-htj2k-lossless-frame-0000.j2c",
+      "length": 185351,
+      "sha256": "2c5722a3821073fa803f46f29f2497f63415a3c75db42a1afd7ce7a44c292faa"
+    },
+    {
+      "path": "go-encoded/frames/sample-01-htj2k-lossless-rpcl-frame-0000.j2c",
+      "length": 185351,
+      "sha256": "2c5722a3821073fa803f46f29f2497f63415a3c75db42a1afd7ce7a44c292faa"
+    },
+    {
+      "path": "go-encoded/frames/sample-01-htj2k-lossy-frame-0000.j2c",
+      "length": 153093,
+      "sha256": "2d8b6a29fe97478d3bfc8e6d23d4cfa703cede50d3fda4167df5dfdba74caeae"
+    },
+    {
+      "path": "go-encoded/matrix-mono-u16-multiframe-htj2k-lossless-rpcl.dcm",
+      "length": 12234,
+      "sha256": "e1803ddd2a20537652830890e54e099ec2c709d837e4c4e92f89719c7c54f3ac"
+    },
+    {
+      "path": "go-encoded/matrix-mono-u16-multiframe-htj2k-lossless.dcm",
+      "length": 12234,
+      "sha256": "074a171cd2b6333e9cbec8ab190a065e75f8504bd7002d893f7380656abfbb30"
+    },
+    {
+      "path": "go-encoded/matrix-mono-u16-multiframe-htj2k-lossy.dcm",
+      "length": 16688,
+      "sha256": "988b67b7d00d88aba8aca5757ea6a51a57a85267b9e7852932199affda09dc3a"
+    },
+    {
+      "path": "go-encoded/matrix-mono-u8-htj2k-lossless-rpcl.dcm",
+      "length": 2190,
+      "sha256": "05a70907f575e224ac4a322ff1e563d278dcd84d5e4d20b690d76f924e87c472"
+    },
+    {
+      "path": "go-encoded/matrix-mono-u8-htj2k-lossless.dcm",
+      "length": 2190,
+      "sha256": "f4c6627ef07a34840f1bec83b131fd74ba7327673c2980bd0deb4bae5fcfcea7"
+    },
+    {
+      "path": "go-encoded/matrix-mono-u8-htj2k-lossy.dcm",
+      "length": 2464,
+      "sha256": "940cab9adab90fd077e3886a324890eb46fb9be3bb26b0a648c3601476ba77b3"
+    },
+    {
+      "path": "go-encoded/matrix-rgb-u16-htj2k-lossless-rpcl.dcm",
+      "length": 14434,
+      "sha256": "abedc2f52d0862264eca023571ce2a8ced500cb219cce5a0ff602d37959c4037"
+    },
+    {
+      "path": "go-encoded/matrix-rgb-u16-htj2k-lossless.dcm",
+      "length": 14434,
+      "sha256": "85aebe31891f469477c3cc0da4c18c8fa1000d3c8c8aa98e940690f267448213"
+    },
+    {
+      "path": "go-encoded/matrix-rgb-u16-htj2k-lossy.dcm",
+      "length": 14664,
+      "sha256": "a281305fa73d058d4f8f6bb16123063d461a247e41b4ecb80b9d06c6247d16a4"
+    },
+    {
+      "path": "go-encoded/matrix-rgb-u8-htj2k-lossless-rpcl.dcm",
+      "length": 8348,
+      "sha256": "8c835760886813842f90301ee7aefde687a2d3123490d388855d8a77de509f03"
+    },
+    {
+      "path": "go-encoded/matrix-rgb-u8-htj2k-lossless.dcm",
+      "length": 8348,
+      "sha256": "8f31789dea65e2b4cabe4f039ea0263c338d620202179932534085c1a7ec963f"
+    },
+    {
+      "path": "go-encoded/matrix-rgb-u8-htj2k-lossy.dcm",
+      "length": 5840,
+      "sha256": "5da488ddaaaee35783f014fa1b0f178017f77ee0f5a4c2a5e1f0e62d26a124ae"
+    },
+    {
+      "path": "go-encoded/matrix-ybr-full-422-u8-htj2k-lossless-rpcl.dcm",
+      "length": 3606,
+      "sha256": "c7e6691286cfe6ce3aa2d9123686802444c4576823a11c087ccae80135188994"
+    },
+    {
+      "path": "go-encoded/matrix-ybr-full-422-u8-htj2k-lossless.dcm",
+      "length": 3606,
+      "sha256": "d673cb824ebcddd49bad3e286cbc9c1eff3b890e15658b77bc0a1699d1096788"
+    },
+    {
+      "path": "go-encoded/matrix-ybr-full-422-u8-htj2k-lossy.dcm",
+      "length": 3350,
+      "sha256": "a3668db8d72e9bf5c112dd72d04a38b3edc61c94c50bf8443d0f70e5e239413b"
+    },
+    {
+      "path": "go-encoded/matrix-ybr-full-u8-htj2k-lossless-rpcl.dcm",
+      "length": 3710,
+      "sha256": "f73b72d814d86bcd0fa0eb1526a5cdadb85daf46881b50451c7bc05fe9282986"
+    },
+    {
+      "path": "go-encoded/matrix-ybr-full-u8-htj2k-lossless.dcm",
+      "length": 3710,
+      "sha256": "4e2c2966f73357de95eef17f83854c079a0cf5872aa4d6550d40c9daa67ffa19"
+    },
+    {
+      "path": "go-encoded/matrix-ybr-full-u8-htj2k-lossy.dcm",
+      "length": 3286,
+      "sha256": "3f5d4f95bdee2c94fd8e1c73796fb5d5f3e6ff37ecc42c2ef3c638d44eb9dedf"
+    },
+    {
+      "path": "go-encoded/sample-01-htj2k-lossless-rpcl.dcm",
+      "length": 186922,
+      "sha256": "c0fbab9f99664ae37e94e539424b84854714e73a1a2e5129221c5e662c23df3b"
+    },
+    {
+      "path": "go-encoded/sample-01-htj2k-lossless.dcm",
+      "length": 186922,
+      "sha256": "c1c0c9d03ba99109b7057925b2b5ecbb72f6bcb5813e1519a1a6cf50c5e9a5e7"
+    },
+    {
+      "path": "go-encoded/sample-01-htj2k-lossy.dcm",
+      "length": 154664,
+      "sha256": "62b919ee2bf238237022fd2de29e328c2c1157ce0acd7f5d3400812b6174b4d7"
+    },
+    {
+      "path": "sources/encoder-input-frames/matrix-ybr-full-422-u8-frame-0000.rgb",
+      "length": 23040,
+      "sha256": "86a4ea63e5869766b39734cbc84c2fd300c19d05adfe7f8a9f4532006951babb"
+    },
+    {
+      "path": "sources/encoder-input-frames/matrix-ybr-full-u8-frame-0000.rgb",
+      "length": 23040,
+      "sha256": "9d674fef5d9f03980d0079edf216c61d2df3916ee100253ea17f0fd59d9f0f23"
+    },
+    {
+      "path": "sources/frames/matrix-mono-u16-multiframe-frame-0000.raw",
+      "length": 15360,
+      "sha256": "af1e944181d5f25830319a8e25a476606024f307e64435f077f49ba2389b88b6"
+    },
+    {
+      "path": "sources/frames/matrix-mono-u16-multiframe-frame-0001.raw",
+      "length": 15360,
+      "sha256": "72358d958e44089f5d3d059007c4ef2d762e6cd3ca91c76697e99f1fa5dc43df"
+    },
+    {
+      "path": "sources/frames/matrix-mono-u16-multiframe-frame-0002.raw",
+      "length": 15360,
+      "sha256": "c148940415154bea16e292f46f1b04115787b35228f112f595100a92a492c088"
+    },
+    {
+      "path": "sources/frames/matrix-mono-u8-frame-0000.raw",
+      "length": 7680,
+      "sha256": "84db15d72814d1ef774391094b803a233f31cede684826244ed775115fa6c121"
+    },
+    {
+      "path": "sources/frames/matrix-rgb-u16-frame-0000.raw",
+      "length": 46080,
+      "sha256": "3a533c3c1b142df1522bb51c7d294313417c5efa14ca81038313610849a2558b"
+    },
+    {
+      "path": "sources/frames/matrix-rgb-u8-frame-0000.raw",
+      "length": 23040,
+      "sha256": "b96622d86049f93d76787a856f8d20982f02de737a158d538aa1c2834871ab31"
+    },
+    {
+      "path": "sources/frames/matrix-ybr-full-422-u8-frame-0000.raw",
+      "length": 15360,
+      "sha256": "9ecd220fb637f750dc1f2c74f1eedbd66680ffd16adcf4b6267b7c166ca3e819"
+    },
+    {
+      "path": "sources/frames/matrix-ybr-full-u8-frame-0000.raw",
+      "length": 23040,
+      "sha256": "2996b62efb20ec553cc0c28a846ee562394862ff1dc8e453905844ee0fbb7b22"
+    },
+    {
+      "path": "sources/frames/sample-01-frame-0000.raw",
+      "length": 815184,
+      "sha256": "71c16dd9d66487fdc5dc25a7278c70e9f6ce992f29d5910bd73509a4585c2b99"
+    },
+    {
+      "path": "sources/matrix-mono-u16-multiframe.dcm",
+      "length": 46714,
+      "sha256": "55e05cf7eb29b482cd878fcf0137a459717a6f6d43d8d93e565885303a242911"
+    },
+    {
+      "path": "sources/matrix-mono-u8.dcm",
+      "length": 8314,
+      "sha256": "bbe54bf19cedd52d9e0372445825a122129abde1105a2451230a1eb4640d65cb"
+    },
+    {
+      "path": "sources/matrix-rgb-u16.dcm",
+      "length": 46716,
+      "sha256": "fadbb3e92eb5571369d5bb5b959dc225c0abad443a37a10d7f807a790c0f650f"
+    },
+    {
+      "path": "sources/matrix-rgb-u8.dcm",
+      "length": 23676,
+      "sha256": "0c8e12c3479bb27ed3902207cb7ea00906e3429483fd79043441443eb955dab4"
+    },
+    {
+      "path": "sources/matrix-ybr-full-422-u8.dcm",
+      "length": 16004,
+      "sha256": "c6508dff60456b657c947eed6224325606478975e16f5ab39b8c98da8a8a96c8"
+    },
+    {
+      "path": "sources/matrix-ybr-full-u8.dcm",
+      "length": 23680,
+      "sha256": "ac2ac2afd0cbdd2235f5932ee83dcf474099879106693b6652aa469c6df559e9"
+    },
+    {
+      "path": "sources/sample-01.dcm",
+      "length": 816724,
+      "sha256": "971396ced6bd572f19d7e52e9b708428d83718f6d6fc83547c529885394fa9fe"
+    }
+  ]
+}

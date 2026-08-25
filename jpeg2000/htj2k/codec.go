@@ -4,8 +4,7 @@ package htj2k
 import (
 	"fmt"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000"
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/t2"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/htj2k/openjph"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
@@ -126,8 +125,12 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 					htj2kParams.NumLevels = nlInt
 				}
 			}
+			if progression := parameters.GetParameter(paramProgressionOrder); progression != nil {
+				htj2kParams.SetParameter(paramProgressionOrder, progression)
+			}
 		}
-	} else {
+	}
+	if htj2kParams == nil {
 		// Use defaults
 		if c.lossless {
 			htj2kParams = NewHTJ2KLosslessParameters()
@@ -142,43 +145,15 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		return fmt.Errorf("invalid HTJ2K parameters: %w", err)
 	}
 
-	// Create JPEG 2000 encoding parameters with HTJ2K enabled
-	encParams := jpeg2000.DefaultEncodeParams(
-		int(frameInfo.Width),
-		int(frameInfo.Height),
-		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsAllocated),
-		frameInfo.PixelRepresentation != 0,
+	encParams := openJPHEncodeParams(
+		frameInfo,
+		htj2kParams,
+		c.lossless,
+		c.transferSyntax == transfer.HTJ2KLosslessRPCL,
 	)
 
-	// Configure HTJ2K-specific settings
-	// Adjust NumLevels based on image size to ensure minimum subband size >= 1
-	maxLevels := calculateMaxLevels(int(frameInfo.Width), int(frameInfo.Height))
-	if htj2kParams.NumLevels > maxLevels {
-		encParams.NumLevels = maxLevels
-	} else {
-		encParams.NumLevels = htj2kParams.NumLevels
-	}
-	encParams.CodeBlockWidth = htj2kParams.BlockWidth
-	encParams.CodeBlockHeight = htj2kParams.BlockHeight
-	encParams.ProgressionOrder = 2 // OpenJPH default is RPCL.
-	encParams.HTJ2KMode = true
-
-	// Set HTJ2K block encoder factory
-	encParams.BlockEncoderFactory = func(width, height int) jpeg2000.BlockEncoder {
-		return NewHTEncoder(width, height)
-	}
-
-	// Configure lossless vs lossy mode
-	if c.lossless {
-		encParams.Lossless = true
-	} else {
-		encParams.Lossless = false
-		encParams.Quality = htj2kParams.Quality
-	}
-
 	// Create encoder with HTJ2K enabled
-	encoder := jpeg2000.NewEncoder(encParams)
+	encoder := openjph.NewEncoder(encParams)
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
@@ -195,10 +170,19 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		if len(frameData) == 0 {
 			return fmt.Errorf("frame %d pixel data is empty", frameIndex)
 		}
+		frameData = prepareFrameForEncode(frameData, frameInfo)
 		// Encode using full JPEG 2000 pipeline (DWT + HTJ2K block coding + T2)
 		encoded, err := encoder.Encode(frameData)
 		if err != nil {
 			return fmt.Errorf("HTJ2K encode failed for frame %d: %w", frameIndex, err)
+		}
+		if len(encoded) >= len(frameData) {
+			return fmt.Errorf(
+				"HTJ2K encode failed for frame %d: output size %d is not smaller than source size %d",
+				frameIndex,
+				len(encoded),
+				len(frameData),
+			)
 		}
 
 		// Add encoded frame to destination
@@ -208,6 +192,116 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 
 	return nil
+}
+
+func openJPHEncodeParams(frameInfo *imagetypes.FrameInfo, params *Parameters, lossless, explicitProgression bool) *openjph.EncodeParams {
+	encParams := openjph.DefaultEncodeParams(
+		int(frameInfo.Width),
+		int(frameInfo.Height),
+		int(frameInfo.SamplesPerPixel),
+		int(frameInfo.BitsAllocated),
+		frameInfo.PixelRepresentation != 0,
+	)
+	encParams.EnableMCT = frameInfo.SamplesPerPixel > 1
+	maxLevels := calculateMaxLevels(int(frameInfo.Width), int(frameInfo.Height))
+	if params.NumLevels > maxLevels {
+		encParams.NumLevels = maxLevels
+	} else {
+		encParams.NumLevels = params.NumLevels
+	}
+	encParams.CodeBlockWidth = params.BlockWidth
+	encParams.CodeBlockHeight = params.BlockHeight
+	encParams.ProgressionOrder = uint8(ProgressionRPCL)
+	if explicitProgression {
+		encParams.ProgressionOrder = uint8(params.ProgressionOrder)
+	}
+	encParams.Lossless = lossless
+	if !lossless {
+		encParams.Quality = params.Quality
+	}
+	return encParams
+}
+
+func prepareFrameForEncode(frameData []byte, frameInfo *imagetypes.FrameInfo) []byte {
+	var (
+		converted []byte
+		err       error
+	)
+	switch frameInfo.PhotometricInterpretation {
+	case "YBR_FULL":
+		converted, err = convertFoDicomYBRFullToRGB(frameData)
+	case "YBR_FULL_422":
+		converted, err = convertFoDicomYBRFull422ToRGB(frameData, int(frameInfo.Width))
+	default:
+		return frameData
+	}
+	if err != nil {
+		return frameData
+	}
+	return converted
+}
+
+func convertFoDicomYBRFullToRGB(data []byte) ([]byte, error) {
+	if len(data)%3 != 0 {
+		return nil, fmt.Errorf("invalid YBR_FULL length %d", len(data))
+	}
+	converted := make([]byte, len(data))
+	for offset := 0; offset < len(data); offset += 3 {
+		y := float64(data[offset])
+		cb := float64(data[offset+1])
+		cr := float64(data[offset+2])
+		converted[offset] = foDicomYBRByte(y + 1.4020*(cr-128) + 0.5)
+		converted[offset+1] = foDicomYBRByte(y - 0.3441*(cb-128) - 0.7141*(cr-128) + 0.5)
+		converted[offset+2] = foDicomYBRByte(y + 1.7720*(cb-128) + 0.5)
+	}
+	return converted, nil
+}
+
+func convertFoDicomYBRFull422ToRGB(data []byte, width int) ([]byte, error) {
+	if width <= 0 {
+		return nil, fmt.Errorf("width must be positive")
+	}
+	if len(data)%4 != 0 {
+		return nil, fmt.Errorf("invalid YBR_FULL_422 length %d", len(data))
+	}
+	converted := make([]byte, len(data)/4*6)
+	for input, output, column := 0, 0, 0; input < len(data); {
+		y1 := float64(data[input])
+		y2 := float64(data[input+1])
+		cb := float64(data[input+2])
+		cr := float64(data[input+3])
+		input += 4
+
+		converted[output] = foDicomYBRByte(y1 + 1.4020*(cr-128) + 0.5)
+		converted[output+1] = foDicomYBRByte(y1 - 0.3441*(cb-128) - 0.7141*(cr-128) + 0.5)
+		converted[output+2] = foDicomYBRByte(y1 + 1.7720*(cb-128) + 0.5)
+		output += 3
+		column++
+		if column == width {
+			column = 0
+			continue
+		}
+
+		converted[output] = foDicomYBRByte(y2 + 1.4020*(cr-128) + 0.5)
+		converted[output+1] = foDicomYBRByte(y2 - 0.3441*(cb-128) - 0.7141*(cr-128) + 0.5)
+		converted[output+2] = foDicomYBRByte(y2 + 1.7720*(cb-128) + 0.5)
+		output += 3
+		column++
+		if column == width {
+			column = 0
+		}
+	}
+	return converted, nil
+}
+
+func foDicomYBRByte(value float64) byte {
+	if value < 0 {
+		return 0
+	}
+	if value > 255 {
+		return 255
+	}
+	return byte(value)
 }
 
 // Decode decodes HTJ2K data to uncompressed pixel data
@@ -236,7 +330,8 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 				}
 			}
 		}
-	} else {
+	}
+	if htj2kParams == nil {
 		// Use defaults
 		htj2kParams = NewHTJ2KParameters()
 	}
@@ -263,13 +358,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Create JPEG 2000 decoder
-		decoder := jpeg2000.NewDecoder()
-
-		// Set HTJ2K block decoder factory
-		// The decoder will use this factory to create HTJ2K block decoders instead of EBCOT T1 decoders
-		decoder.SetBlockDecoderFactory(func(width, height int, _ int) t2.BlockDecoder {
-			return NewHTDecoder(width, height)
-		})
+		decoder := openjph.NewDecoder()
 
 		// Decode using full JPEG 2000 pipeline (T2 + HTJ2K block decoding + Inverse DWT)
 		if err := decoder.Decode(frameData); err != nil {

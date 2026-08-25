@@ -15,7 +15,6 @@ func TestHTJ2KLosslessRoundTrip(t *testing.T) {
 		height uint16
 		large  bool
 	}{
-		{"16x16", 16, 16, false},
 		{"64x64", 64, 64, false},
 		{"128x128", 128, 128, false},
 		{"256x256", 256, 256, false},

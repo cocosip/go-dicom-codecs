@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/wavelet"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/openjpeg/wavelet"
 )
 
 // TestDWT53Reversibility verifies DWT 5/3 is perfectly reversible.

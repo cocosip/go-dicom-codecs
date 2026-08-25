@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/wavelet"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/openjpeg/wavelet"
 )
 
 // GenerateMultilevelJ2K generates a JPEG 2000 codestream with wavelet decomposition

@@ -3,7 +3,7 @@ package validation
 import (
 	"testing"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/t1"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/openjpeg/t1"
 )
 
 // TestT1ContextAlignmentToOpenJPEG verifies complete T1 context alignment

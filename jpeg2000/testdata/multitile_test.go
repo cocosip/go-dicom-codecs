@@ -3,20 +3,20 @@ package testdata
 import (
 	"testing"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/codestream"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
 )
 
 // TestGenerateMultiTileJ2K tests multi-tile JPEG 2000 generation
 func TestGenerateMultiTileJ2K(t *testing.T) {
 	tests := []struct {
-		name         string
-		width        int
-		height       int
-		tileWidth    int
-		tileHeight   int
-		bitDepth     int
-		numLevels    int
-		components   int
+		name          string
+		width         int
+		height        int
+		tileWidth     int
+		tileHeight    int
+		bitDepth      int
+		numLevels     int
+		components    int
 		expectedTiles int
 	}{
 		{

@@ -3,9 +3,9 @@ package validation
 import (
 	"testing"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/mqc"
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/t1"
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/wavelet"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/openjpeg/mqc"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/openjpeg/t1"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/openjpeg/wavelet"
 )
 
 // TestOpenJPEGVectorIntegration performs integration testing across all core modules

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/codestream"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
 	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 

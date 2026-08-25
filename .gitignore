@@ -388,12 +388,9 @@ Thumbs.db
 # Test data
 testdata/output/
 .claude/
-
-fo-dicom-codec-code/
-toolstmpclaude-*/
-tools/
+tools/*
 .codex-go-cache/
+.gocache/
 artifacts/
 .cache/
 .tmp/
- 

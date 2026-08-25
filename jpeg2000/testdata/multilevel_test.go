@@ -3,7 +3,7 @@ package testdata
 import (
 	"testing"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/codestream"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
 )
 
 // TestGenerateMultilevelJ2K tests the multilevel J2K generator

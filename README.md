@@ -23,18 +23,17 @@ A Go library providing image compression/decompression codecs for medical imagin
 - ✅ **JPEG 2000 Multi-component Lossless** [1.2.840.10008.1.2.4.92]
 - ✅ **JPEG 2000 Multi-component** [1.2.840.10008.1.2.4.93]
 
-### HTJ2K (High-Throughput JPEG 2000) Family 🚧
-- 🔬 **HTJ2K Lossless** [1.2.840.10008.1.2.4.201] - *Experimental*
-- 🔬 **HTJ2K RPCL Lossless** [1.2.840.10008.1.2.4.202] - *Experimental*
-- 🔬 **HTJ2K** (Lossy/Lossless) [1.2.840.10008.1.2.4.203] - *Experimental*
+### HTJ2K (High-Throughput JPEG 2000) Family
+- ✅ **HTJ2K Lossless** [1.2.840.10008.1.2.4.201]
+- ✅ **HTJ2K RPCL Lossless** [1.2.840.10008.1.2.4.202]
+- ✅ **HTJ2K** (Lossy) [1.2.840.10008.1.2.4.203]
 
-> **⚠️ HTJ2K Implementation Note**: The HTJ2K codecs are currently in **experimental/research status**.
-> The implementation covers MEL, MagSgn, and VLC tables ported from OpenJPH, with a full encode/decode
-> pipeline wired into the JPEG 2000 Tier-1/Tier-2 infrastructure. Internal Go-to-Go round-trips pass,
-> and the encoder output matches OpenJPH header contracts (CAP, TLM, QCD markers). However, VLC
-> integration remains partial and external decoder compatibility (e.g. fo-dicom.Codecs/OpenJPH) has
-> not been fully validated. For production use, consider [OpenJPH](https://github.com/aous72/OpenJPH)
-> or OpenJPEG 2.5+. See [`jpeg2000/htj2k/README.md`](jpeg2000/htj2k/README.md) for details.
+HTJ2K uses an independent OpenJPH-aligned Go engine. The committed schema-v2
+interop bundle covers `.201`, `.202`, and `.203` across mono, RGB, YBR, signed,
+odd-dimension, and multi-frame inputs. Go CI validates exact per-frame
+codestream parity and four-way decoded artifacts generated locally with the
+NuGet `fo-dicom.Codecs` reference. See
+[`jpeg2000/htj2k/README.md`](jpeg2000/htj2k/README.md) for details.
 
 ## Installation
 
@@ -58,16 +57,13 @@ The library is organized into the following packages:
   - `jpegls/runmode/` - Shared run-mode coding utilities
   - `jpegls/lossless/` - JPEG-LS Lossless codec (LOCO-I + Golomb-Rice)
   - `jpegls/nearlossless/` - JPEG-LS Near-Lossless codec
-- `jpeg2000/` - JPEG 2000 core engine and sub-packages
+- `jpeg2000/` - JPEG 2000 public facade and codec adapters
   - `jpeg2000/lossless/` - JPEG 2000 Lossless codec (UIDs .90, .92)
   - `jpeg2000/lossy/` - JPEG 2000 Lossy codec (UIDs .91, .93)
-  - `jpeg2000/htj2k/` - HTJ2K codecs (UIDs .201–.203, experimental)
-  - `jpeg2000/codestream/` - Codestream marker parser (SIZ, COD, QCD, SOT, MCT, MCC, MCO, etc.)
-  - `jpeg2000/colorspace/` - RGB/YCbCr colorspace conversion (RCT/ICT)
-  - `jpeg2000/mqc/` - MQ arithmetic coder/decoder (47-state machine)
-  - `jpeg2000/t1/` - Tier-1: EBCOT block coder (bit-plane coding, coding passes)
-  - `jpeg2000/t2/` - Tier-2: packet builder/parser, tag trees, progression orders
-  - `jpeg2000/wavelet/` - 5/3 (lossless) and 9/7 (lossy) DWT implementations
+  - `jpeg2000/openjpeg/` - Concrete classic JPEG 2000 engine
+  - `jpeg2000/htj2k/` - HTJ2K DICOM adapters (UIDs .201-.203)
+  - `jpeg2000/htj2k/openjph/` - Independent OpenJPH-aligned HTJ2K engine
+  - `jpeg2000/internal/common/` - Family-neutral parser, I/O, models, and proven shared geometry
 
 Auto-registration happens via blank imports. Including any codec package side-effect registers it with the go-dicom global registry:
 
@@ -422,79 +418,30 @@ See the [examples/](examples/) directory for complete working examples:
 - `dicom_transcoder/` - Transcode between DICOM transfer syntaxes
 - `external_codec/` - Register a custom external codec
 
-## Local Process-Isolated Validation
+## Offline HTJ2K Interoperability Validation
 
-`cmd/dicom-interop-validation` is a manually run diagnostic tool. It embeds
-five anonymized DICOM fixtures and validates Go encoders against fo-dicom
-Native Codecs. For every supported format, fo-dicom Native decodes the source
-fixture to uncompressed DICOM, Go encodes that image in a separate process,
-and fo-dicom Native decodes Go's output before the tool compares image metadata
-and samples. It is not part of the normal test suite or CI.
+`cmd/dicom-interop-validation` validates the committed schema-v2 HTJ2K bundle
+without executing C#, dotnet, or a native library. It verifies the accepted
+fo-dicom.Codecs version and source provenance, the complete fixture and transfer
+syntax matrix, safe relative artifact paths, file lengths, and SHA256 hashes.
 
-Running it requires a .NET 10 SDK so that the bundled
-`cmd/fo-dicom-native-worker` project can restore and run fo-dicom Native
-Codecs. Use `--fo-native-project <path>` to select a different local Native
-worker project.
-
-#### Run locally
-
-From the repository root in PowerShell, first confirm that Go and a .NET 10
-SDK are available:
+Run it from the repository root:
 
 ```powershell
-go version
-dotnet --list-sdks
+go run ./cmd/dicom-interop-validation
 ```
 
-The first run restores the Worker NuGet packages automatically. To restore
-them explicitly before running the matrix:
+The defaults are `test-data/htj2k/interop-v1` for the bundle and
+`tools/fo-dicom-reference-generator` for the generator source. Override either
+path when validating a staged bundle:
 
 ```powershell
-dotnet restore cmd\fo-dicom-native-worker\fo-dicom-native-worker.csproj
+go run ./cmd/dicom-interop-validation --bundle <bundle-directory> --generator-source <generator-directory>
 ```
 
-Run the full 12-format matrix and retain all produced DICOM files:
-
-```powershell
-go run ./cmd/dicom-interop-validation --parallel 4 --workdir artifacts\interop-validation
-```
-
-Run one format while investigating a failure:
-
-```powershell
-go run ./cmd/dicom-interop-validation --format jpeg-lossless-14-sv1 --parallel 1 --workdir artifacts\interop-jpeg-lossless-sv1
-```
-
-Use the bundled Native Worker by default, or provide a different local Worker
-project. List the supported arguments with `--help`:
-
-```powershell
-go run ./cmd/dicom-interop-validation --help
-go run ./cmd/dicom-interop-validation --fo-native-project D:\Code\fo-native-worker\fo-native-worker.csproj
-```
-
-Supported `--format` values are `rle`, `jpeg-process-1`,
-`jpeg-process-2-4`, `jpeg-lossless-14`, `jpeg-lossless-14-sv1`,
-`jpeg-ls-lossless`, `jpeg-ls-near-lossless`, `jpeg2000-lossless`,
-`jpeg2000-lossy`, `htj2k-lossless`, `htj2k-lossless-rpcl`, and `htj2k-lossy`.
-
-The output has these meanings:
-
-- `INTEROP|pass|format=...` means every executed fixture for that format was
-  accepted by fo-dicom Native and met the configured pixel tolerance.
-- `INTEROP|skip|...` means the fixture is intentionally outside the Native
-  decoder's known support, such as the JPEG-LS multi-frame Native baseline.
-- `INTEROP|fail|...` means fo-dicom Native decoded the Go output but detected
-  a metadata or sample mismatch. The command exits with code 1 and retains the
-  work directory for analysis; this is a codec interoperability result, not
-  necessarily a tool startup failure.
-
-Each retained fixture directory contains `prepared.dcm` (Native-decoded
-source), `encoded.dcm` (Go output), and `decoded.dcm` (Native-decoded Go
-output).
-
-The default run directory is removed after success and retained after failure.
-Use `--workdir` to retain compressed and decoded DICOM artifacts explicitly.
+The generator source is hashed with the same filename/content ordering and
+separator rules as the managed generator. The validator contains no process
+launcher and also works as a compiled executable when `PATH` is empty.
 
 ## Testing
 

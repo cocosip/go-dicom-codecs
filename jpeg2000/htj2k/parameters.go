@@ -6,10 +6,28 @@ import "github.com/cocosip/go-dicom/pkg/imaging/codec"
 var _ codec.Parameters = (*Parameters)(nil)
 
 const (
-	paramQuality     = "quality"
-	paramBlockWidth  = "blockWidth"
-	paramBlockHeight = "blockHeight"
-	paramNumLevels   = "numLevels"
+	paramQuality          = "quality"
+	paramBlockWidth       = "blockWidth"
+	paramBlockHeight      = "blockHeight"
+	paramNumLevels        = "numLevels"
+	paramProgressionOrder = "progressionOrder"
+)
+
+// ProgressionOrder controls JPEG 2000 packet progression for HTJ2K Lossless
+// RPCL (.202), matching fo-dicom.Codecs DicomHtJpeg2000Params.
+type ProgressionOrder int
+
+const (
+	// ProgressionLRCP orders packets by layer, resolution, component, then precinct.
+	ProgressionLRCP ProgressionOrder = iota
+	// ProgressionRLCP orders packets by resolution, layer, component, then precinct.
+	ProgressionRLCP
+	// ProgressionRPCL orders packets by resolution, precinct, component, then layer.
+	ProgressionRPCL
+	// ProgressionPCRL orders packets by precinct, component, resolution, then layer.
+	ProgressionPCRL
+	// ProgressionCPRL orders packets by component, precinct, resolution, then layer.
+	ProgressionCPRL
 )
 
 // Parameters contains parameters for HTJ2K (High-Throughput JPEG 2000) compression
@@ -41,6 +59,10 @@ type Parameters struct {
 	// - 6: Maximum levels (best compression for large images)
 	NumLevels int
 
+	// ProgressionOrder is forwarded only by the .202 codec. The .201 and .203
+	// codecs use OpenJPH's effective PROG_UNKNOWN default, RPCL.
+	ProgressionOrder ProgressionOrder
+
 	// internal storage for compatibility with generic parameter interface
 	params map[string]interface{}
 }
@@ -48,22 +70,24 @@ type Parameters struct {
 // NewHTJ2KParameters creates default Parameters for HTJ2K
 func NewHTJ2KParameters() *Parameters {
 	return &Parameters{
-		Quality:     80, // Default quality 80 for lossy
-		BlockWidth:  64, // Default block width
-		BlockHeight: 64, // Default block height
-		NumLevels:   5,  // Match OpenJPH default used by fo-dicom.Codecs
-		params:      make(map[string]interface{}),
+		Quality:          80, // Default quality 80 for lossy
+		BlockWidth:       64, // Default block width
+		BlockHeight:      64, // Default block height
+		NumLevels:        5,  // Match OpenJPH default used by fo-dicom.Codecs
+		ProgressionOrder: ProgressionRPCL,
+		params:           make(map[string]interface{}),
 	}
 }
 
 // NewHTJ2KLosslessParameters creates parameters optimized for lossless encoding
 func NewHTJ2KLosslessParameters() *Parameters {
 	return &Parameters{
-		Quality:     100, // Quality 100 for lossless
-		BlockWidth:  64,
-		BlockHeight: 64,
-		NumLevels:   5,
-		params:      make(map[string]interface{}),
+		Quality:          100, // Quality 100 for lossless
+		BlockWidth:       64,
+		BlockHeight:      64,
+		NumLevels:        5,
+		ProgressionOrder: ProgressionRPCL,
+		params:           make(map[string]interface{}),
 	}
 }
 
@@ -78,6 +102,8 @@ func (p *Parameters) GetParameter(name string) interface{} {
 		return p.BlockHeight
 	case paramNumLevels:
 		return p.NumLevels
+	case paramProgressionOrder:
+		return p.ProgressionOrder
 	default:
 		// Check custom parameters
 		return p.params[name]
@@ -102,6 +128,13 @@ func (p *Parameters) SetParameter(name string, value interface{}) {
 	case paramNumLevels:
 		if v, ok := value.(int); ok {
 			p.NumLevels = v
+		}
+	case paramProgressionOrder:
+		switch v := value.(type) {
+		case ProgressionOrder:
+			p.ProgressionOrder = v
+		case int:
+			p.ProgressionOrder = ProgressionOrder(v)
 		}
 	default:
 		// Store as custom parameter
@@ -143,6 +176,10 @@ func (p *Parameters) Validate() error {
 		p.NumLevels = 6
 	}
 
+	if p.ProgressionOrder < ProgressionLRCP || p.ProgressionOrder > ProgressionCPRL {
+		p.ProgressionOrder = ProgressionRPCL
+	}
+
 	return nil
 }
 
@@ -162,6 +199,12 @@ func (p *Parameters) WithBlockSize(width, height int) *Parameters {
 // WithNumLevels sets the number of decomposition levels and returns the parameters for chaining
 func (p *Parameters) WithNumLevels(numLevels int) *Parameters {
 	p.NumLevels = numLevels
+	return p
+}
+
+// WithProgressionOrder sets the .202 packet progression order.
+func (p *Parameters) WithProgressionOrder(order ProgressionOrder) *Parameters {
+	p.ProgressionOrder = order
 	return p
 }
 

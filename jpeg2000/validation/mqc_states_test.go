@@ -3,7 +3,7 @@ package validation
 import (
 	"testing"
 
-	"github.com/cocosip/go-dicom-codecs/jpeg2000/mqc"
+	"github.com/cocosip/go-dicom-codecs/jpeg2000/openjpeg/mqc"
 )
 
 // TestMQ47StatesMachine verifies the 47-state finite state machine

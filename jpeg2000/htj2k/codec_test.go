@@ -1,6 +1,7 @@
 package htj2k
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
@@ -87,14 +88,13 @@ func TestHTJ2KCodec_TransferSyntax(t *testing.T) {
 }
 
 func TestHTJ2KCodec_EncodeDecodeRoundTrip(t *testing.T) {
-	// Create a simple 4x4 test image
-	width := uint16(4)
-	height := uint16(4)
-	testData := []byte{
-		10, 20, 30, 40,
-		15, 25, 35, 45,
-		12, 22, 32, 42,
-		18, 28, 38, 48,
+	width := uint16(64)
+	height := uint16(64)
+	testData := make([]byte, int(width)*int(height))
+	for y := 0; y < int(height); y++ {
+		for x := 0; x < int(width); x++ {
+			testData[y*int(width)+x] = byte((x + y) & 0xff)
+		}
 	}
 
 	frameInfo := &imagetypes.FrameInfo{
@@ -181,6 +181,44 @@ func TestHTJ2KCodec_EncodeDecodeRoundTrip(t *testing.T) {
 			t.Error("Decoded data is empty")
 		}
 	})
+}
+
+func TestHTJ2KCodec_TypedNilParametersUseDefaults(t *testing.T) {
+	frameInfo := &imagetypes.FrameInfo{
+		Width:                     64,
+		Height:                    64,
+		BitsAllocated:             8,
+		BitsStored:                8,
+		HighBit:                   7,
+		SamplesPerPixel:           1,
+		PhotometricInterpretation: photometricMonochrome2,
+	}
+	source := codecHelpers.NewTestPixelData(frameInfo)
+	pixels := make([]byte, int(frameInfo.Width)*int(frameInfo.Height))
+	for index := range pixels {
+		pixels[index] = byte((index / int(frameInfo.Width)) + (index % int(frameInfo.Width)))
+	}
+	if err := source.AddFrame(pixels); err != nil {
+		t.Fatal(err)
+	}
+
+	var parameters *Parameters
+	htj2kCodec := NewLosslessCodec()
+	encoded := codecHelpers.NewTestPixelData(frameInfo)
+	if err := htj2kCodec.Encode(source, encoded, parameters); err != nil {
+		t.Fatalf("Encode() with typed-nil parameters error = %v", err)
+	}
+	decoded := codecHelpers.NewTestPixelData(frameInfo)
+	if err := htj2kCodec.Decode(encoded, decoded, parameters); err != nil {
+		t.Fatalf("Decode() with typed-nil parameters error = %v", err)
+	}
+	got, err := decoded.GetFrame(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, pixels) {
+		t.Fatal("typed-nil parameter round trip changed lossless pixels")
+	}
 }
 
 func TestHTJ2KCodec_InvalidInput(t *testing.T) {

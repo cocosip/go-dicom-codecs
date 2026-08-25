@@ -172,13 +172,13 @@ Forbidden dependencies:
 The authoritative adapter is:
 
 ```text
-D:\dotnet-source-code\fo-dicom.Codecs\Codec\DicomHtJpeg2000Codec.cs
+D:\Code\dotnet-source\fo-dicom.Codecs\Codec\DicomHtJpeg2000Codec.cs
 ```
 
 The authoritative OpenJPH wrapper is:
 
 ```text
-D:\dotnet-source-code\fo-dicom.Codecs\Native\Common\OpenJPH\interface\ojph_interface.cpp
+D:\Code\dotnet-source\fo-dicom.Codecs\Native\Common\OpenJPH\interface\ojph_interface.cpp
 ```
 
 Required wrapper behavior includes:
@@ -213,8 +213,8 @@ tools/fo-dicom-reference-generator/
 
 It must:
 
-1. reference a caller-supplied fo-dicom.Codecs project or managed package in
-   `[6.0.0-beta1, 7.0.0)`;
+1. reference the managed fo-dicom.Codecs NuGet package in
+   `[6.0.0-beta1, 7.0.0)`; never use a local project or directory reference;
 2. use fo-dicom's public managed codec/transcoder API;
 3. contain no direct P/Invoke and accept no Native DLL path;
 4. reject a loaded managed version outside `[6.0.0-beta1, 7.0.0)`;
@@ -315,8 +315,8 @@ the phase has a current RED/GREEN checkpoint under active development;
 `Blocked` records a reproducible external blocker without silently advancing
 to a dependent phase.
 
-Current checkpoint: the durable design and execution sequence are written;
-rollback baseline A0 is complete; no implementation phase has started yet.
+Current checkpoint: A1-A13 are complete. The reopened A13 review findings and
+all final quality/performance gates are closed with fresh evidence.
 
 ### Progress snapshot
 
@@ -326,8 +326,8 @@ Last updated: 2026-08-25
 |---|---:|---:|---|
 | Architecture and interoperability design | 4 | 4 | Complete |
 | Rollback and clean baseline (A0) | 1 | 1 | Complete |
-| Implementation phases (A1-A13) | 0 | 13 | Not started |
-| Active phase | 0 | 1 | None |
+| Implementation phases (A1-A13) | 13 | 13 | Complete |
+| Active phase | 0 | 0 | None |
 
 Completed design work:
 
@@ -337,8 +337,8 @@ Completed design work:
 - [x] Define package migration order, interoperability matrix, and quality
   gates.
 
-Next action: start A1 by adding the classic exact-byte RED characterization
-test. Do not start A2 or restructure packages before A1 is complete.
+Next action: preserve the completed architecture, offline interoperability, and
+Go-only hosted workflow gates for future JPEG 2000 and HTJ2K changes.
 
 ### Cross-session progress protocol
 
@@ -375,160 +375,164 @@ prove completion.
 
 ### A1 - Freeze exact pre-migration bytes
 
-- [ ] Add deterministic classic mono-u16 lossless and RGB-u8 lossy fixtures under
+- [x] Add deterministic classic mono-u16 lossless and RGB-u8 lossy fixtures under
   `jpeg2000/testdata/baseline/`.
-- [ ] Add deterministic `.201`, `.202`, and `.203` fixtures under
+- [x] Add deterministic `.201`, `.202`, and `.203` fixtures under
   `jpeg2000/htj2k/testdata/baseline/`.
-- [ ] Require full-byte equality and literal SHA256 values in characterization
+- [x] Require full-byte equality and literal SHA256 values in characterization
   tests. Name HTJ2K tests as the current Go baseline, not fo-dicom parity.
-- [ ] Generate the files only from unchanged baseline `faf55bc`; record lengths
+- [x] Generate the files only from unchanged baseline `faf55bc`; record lengths
   and hashes in the evidence log.
-- [ ] Completion gate: focused baseline tests, `go test -count=1 ./jpeg2000/...`,
+- [x] Completion gate: focused baseline tests, `go test -count=1 ./jpeg2000/...`,
   and `git diff --check` pass.
 
 ### A2 - Enforce ownership and dependency direction
 
-- [ ] Add AST-based tests that inspect non-test Go imports and identifier use with
+- [x] Add AST-based tests that inspect non-test Go imports and identifier use with
   file and line evidence. Do not use source-text grep as the guard itself.
-- [ ] Enforce the required dependency direction and forbid family selectors in
+- [x] Enforce the required dependency direction and forbid family selectors in
   root/shared orchestration.
-- [ ] While migration is incomplete, keep an exact inventory of current
+- [x] While migration is incomplete, keep an exact inventory of current
   violations. Any new or unrecorded violation fails; each later phase removes
   its own inventory entries, and A12 removes the migration exemption.
-- [ ] Completion gate: architecture tests record the exact starting violations and
+- [x] Completion gate: architecture tests record the exact starting violations and
   all JPEG 2000 tests pass.
 
 ### A3 - Extract only proven common mechanisms
 
-- [ ] Move marker constants, parsed models, parser, bounded reader/writer, and
+- [x] Move marker constants, parsed models, parser, bounded reader/writer, and
   bounded tile-part serialization to `jpeg2000/internal/common/codestream`.
-- [ ] Move frame/rectangle/packet record data only when it contains no policy.
-- [ ] Characterize even and odd origins, partial tiles, clipped code-blocks,
+- [x] Move frame/rectangle/packet record data only when it contains no policy.
+- [x] Characterize even and odd origins, partial tiles, clipped code-blocks,
   multiple resolution levels, truncation, overflow, and exact marker bytes.
-- [ ] Keep geometry that differs between the two families private; do not
+- [x] Keep geometry that differs between the two families private; do not
   normalize a difference merely to make it shareable.
-- [ ] Delete replaced old common paths without forwarding packages.
-- [ ] Completion gate: common focused tests plus all frozen-byte tests pass.
+- [x] Delete replaced old common paths without forwarding packages.
+- [x] Completion gate: common focused tests plus all frozen-byte tests pass.
 
 ### A4 - Establish the concrete OpenJPEG engine
 
-- [ ] Move MQC and EBCOT Tier-1 to `jpeg2000/openjpeg/mqc` and
+- [x] Move MQC and EBCOT Tier-1 to `jpeg2000/openjpeg/mqc` and
   `jpeg2000/openjpeg/t1` without arithmetic or pass-order changes.
-- [ ] Split OpenJPEG tag-tree/pass-contribution Tier-2 into
+- [x] Split OpenJPEG tag-tree/pass-contribution Tier-2 into
   `jpeg2000/openjpeg/t2`; shared code may retain neutral records only.
-- [ ] Move OpenJPEG color transforms, DWT, quantization, rate control, marker
+- [x] Move OpenJPEG color transforms, DWT, quantization, rate control, marker
   policy, and codestream orchestration under `jpeg2000/openjpeg`.
-- [ ] Make the classic public facade and `.90/.91` codecs map parameters directly
+- [x] Make the classic public facade and `.90/.91` codecs map parameters directly
   into this concrete engine. It must not accept HT cleanup, CAP, or TLM policy.
-- [ ] Delete old `mqc`, `t1`, `t2`, `colorspace`, and `wavelet` package paths as
+- [x] Delete old `mqc`, `t1`, `t2`, `colorspace`, and `wavelet` package paths as
   their consumers migrate; add no aliases or compatibility wrappers.
-- [ ] Completion gate: MQC/T1/T2/color/wavelet focused suites and exact classic and
+- [x] Completion gate: MQC/T1/T2/color/wavelet focused suites and exact classic and
   pre-alignment HTJ2K baselines pass after each move.
 
 ### A5 - Establish the independent OpenJPH engine and adapter
 
-- [ ] Create `jpeg2000/htj2k/openjph` with its own config, engine, sample traversal,
+- [x] Create `jpeg2000/htj2k/openjph` with its own config, engine, sample traversal,
   codestream policy, cleanup coding, packet path, and decoder boundary.
-- [ ] Switch `jpeg2000/htj2k` directly to this engine; it must not construct the
+- [x] Switch `jpeg2000/htj2k` directly to this engine; it must not construct the
   classic `jpeg2000` encoder or import OpenJPEG code.
-- [ ] Move existing HT cleanup, MEL, VLC, UVLC, and MagSgn code under OpenJPH
+- [x] Move existing HT cleanup, MEL, VLC, UVLC, and MagSgn code under OpenJPH
   ownership mechanically before changing observable bytes.
-- [ ] Implement the fo-dicom adapter's YBR FULL/YBR FULL 422 conversion and
+- [x] Implement the fo-dicom adapter's YBR FULL/YBR FULL 422 conversion and
   exception fallback, bit allocation, component count, signedness, transform
   mapping, and exact 8/16-bit component-line traversal.
-- [ ] Completion gate: the concrete dependency guard passes and `.201/.202/.203`
+- [x] Completion gate: the concrete dependency guard passes and `.201/.202/.203`
   still match the frozen pre-alignment Go baseline.
 
 ### A6 - Align OpenJPH color and wavelet arithmetic
 
-- [ ] Implement OpenJPH-owned RCT, ICT, reversible 5/3, and irreversible 9/7 from
+- [x] Implement OpenJPH-owned RCT, ICT, reversible 5/3, and irreversible 9/7 from
   OpenJPH `0.30.1` operation order and boundary behavior.
-- [ ] Test signed and unsigned level shift, odd origins/dimensions, boundaries,
+- [x] Test signed and unsigned level shift, odd origins/dimensions, boundaries,
   float operation order, and final rounding with hand-derived literals.
-- [ ] Promote RCT or 5/3 into common only if the complete OpenJPEG and OpenJPH
+- [x] Promote RCT or 5/3 into common only if the complete OpenJPEG and OpenJPH
   vector suites prove exact identity; otherwise keep both implementations.
-- [ ] Completion gate: focused arithmetic vectors pass and divergence against the
+- [x] Completion gate: focused arithmetic vectors pass and divergence against the
   saved fo-dicom frames is localized to later codestream stages.
 
 ### A7 - Align OpenJPH quantization, headers, and cleanup coding
 
-- [ ] Implement OpenJPH QCD state, MAGB/Kmax, CAP payload, marker order, and COM
+- [x] Implement OpenJPH QCD state, MAGB/Kmax, CAP payload, marker order, and COM
   behavior without reusing OpenJPEG quantization policy.
-- [ ] Align cleanup precision and exact MEL/VLC/UVLC/MagSgn bytes for `.201`,
+- [x] Align cleanup precision and exact MEL/VLC/UVLC/MagSgn bytes for `.201`,
   `.202`, and `.203` while leaving OpenJPEG MQC/T1 untouched.
-- [ ] Derive expected marker and cleanup literals from committed offline reference
+- [x] Derive expected marker and cleanup literals from committed offline reference
   frames and record their hashes in the manifest/evidence log.
-- [ ] Completion gate: marker and code-block byte parity passes across the complete
+- [x] Completion gate: marker and code-block byte parity passes across the complete
   reference fixture matrix.
 
 ### A8 - Align OpenJPH packets, TLM, and tile-parts
 
-- [ ] Implement OpenJPH precinct preparation, packet header/body construction,
+- [x] Implement OpenJPH precinct preparation, packet header/body construction,
   inclusion and missing-MSB tag trees, pass lengths, and `0xFF` bit stuffing.
-- [ ] Implement default progression when fo-dicom supplies `PROG_UNKNOWN`, explicit
+- [x] Implement default progression when fo-dicom supplies `PROG_UNKNOWN`, explicit
   `.202` progression, TLM entries, `Psot`, and tile-parts divided by resolution.
-- [ ] Keep these algorithms separate from OpenJPEG Tier-2.
-- [ ] Completion gate: every committed `.201/.202/.203` frame matches the
+- [x] Keep these algorithms separate from OpenJPEG Tier-2.
+- [x] Completion gate: every committed `.201/.202/.203` frame matches the
   codestream generated by the manifest-recorded fo-dicom.Codecs reference
   version byte for byte.
 
 ### A9 - Align the independent OpenJPH decoder
 
-- [ ] Implement cleanup decode, dequantization, inverse DWT, inverse color
+- [x] Implement cleanup decode, dequantization, inverse DWT, inverse color
   transform, signedness handling, and exact output traversal in the concrete
   OpenJPH decoder.
-- [ ] Select the decoder from the DICOM transfer syntax adapter, never from marker
+- [x] Select the decoder from the DICOM transfer syntax adapter, never from marker
   heuristics or a shared family switch.
-- [ ] Completion gate: Go decodes all fo-dicom frames; lossless frames equal source
-  raw data and lossy frames equal fo-dicom-decoded raw data. Go encode/decode
-  also passes for every fixture frame.
+- [x] Completion gate: Go decodes all fo-dicom frames; lossless frames equal source
+  raw data except the manifest-proven Native YBR conversion and 16-bit
+  multi-component traversal cases, while every frame equals fo-dicom-decoded raw
+  data. Go encode/decode also passes for every fixture frame.
 
 ### A10 - Generate versioned offline interoperability artifacts
 
-- [ ] Add the local-only C# generator at `tools/fo-dicom-reference-generator` and a
+- [x] Add the local-only C# generator at `tools/fo-dicom-reference-generator` and a
   pure-Go manifest validator under `cmd/dicom-interop-validation`.
-- [ ] Use the public managed fo-dicom.Codecs API; accept only
+- [x] Use the public managed fo-dicom.Codecs API; accept only
   `[6.0.0-beta1, 7.0.0)`, record the exact resolved version, and expose no
   direct P/Invoke or Native DLL option.
-- [ ] Make the validator reject path escapes, absolute paths, duplicates,
+- [x] Make the validator reject path escapes, absolute paths, duplicates,
   missing frames/directions, bad SHA256 values, and versions outside the
   accepted range. It must work with an empty `PATH` and not import `os/exec`.
-- [ ] Generate every matrix case and all frames locally. Commit DICOM, `.j2c`, raw,
+- [x] Generate every matrix case and all frames locally. Commit DICOM, `.j2c`, raw,
   schema, and manifest artifacts only; never commit build output or DLLs.
-- [ ] Completion gate: the pure-Go validator verifies all artifact hashes and
+- [x] Completion gate: the pure-Go validator verifies all artifact hashes and
   provenance without executing C#, C++, dotnet, or a native library.
 
 ### A11 - Prove four-way interoperability
 
-- [ ] Execute and record Go encode -> Go decode in Go tests.
-- [ ] Consume saved fo-dicom encode -> Go decode frames in Go tests.
-- [ ] Consume locally saved Go encode -> fo-dicom decode and fo-dicom encode ->
+- [x] Execute and record Go encode -> Go decode in Go tests.
+- [x] Consume saved fo-dicom encode -> Go decode frames in Go tests.
+- [x] Consume locally saved Go encode -> fo-dicom decode and fo-dicom encode ->
   fo-dicom decode results from the artifact bundle.
-- [ ] Verify every frame, fragment order, transfer syntax, encapsulation, marker,
+- [x] Verify every frame, fragment order, transfer syntax, encapsulation, marker,
   tile-part, packet, cleanup block, compressed hash, and decoded raw hash.
-- [ ] Completion gate: all fixture cases satisfy the lossless/lossy acceptance
+- [x] Completion gate: all fixture cases satisfy the lossless/lossy acceptance
   rules and exact compressed-byte requirements stated above.
 
 ### A12 - Delete the mixed legacy implementation
 
-- [ ] Remove all remaining `HTJ2KMode`, `isHTJ2K`, marker-family inference, block
+- [x] Remove all remaining `HTJ2KMode`, `isHTJ2K`, marker-family inference, block
   factories, family fallbacks, and mixed OpenJPH helpers from classic files.
-- [ ] Remove all OpenJPEG helpers from HTJ2K files and enable every final
+- [x] Remove all OpenJPEG helpers from HTJ2K files and enable every final
   architecture guard without a migration exemption.
-- [ ] Delete any remaining flat legacy implementation directories. No deprecated
+- [x] Delete any remaining flat legacy implementation directories. No deprecated
   forwarding API is retained because compatibility is not a requirement.
-- [ ] Completion gate: final dependency guards, exact-byte tests, interoperability
+- [x] Completion gate: final dependency guards, exact-byte tests, interoperability
   tests, and `go test -count=1 ./jpeg2000/...` pass.
 
 ### A13 - Run final quality and performance gates
 
-- [ ] Run fresh functional, race/coverage, vet, lint, and whitespace commands from
-  the verification section with task-specific temporary caches.
-- [ ] Benchmark classic and HTJ2K encode/decode for lossless/lossy, mono/RGB, and
-  8/16-bit inputs. Investigate material regressions without weakening parity.
-- [ ] Record command outcomes, fixture provenance, pass/fail counts, and benchmark
-  results in the evidence log.
-- [ ] Completion gate: A1-A13 may be marked complete only from fresh recorded
+- [x] Close the independent review findings for typed-nil parameters, manifest
+  path containment, provenance commit binding, and Go-only command/validator CI.
+- [x] Run fresh functional, race/coverage, vet, lint, and whitespace commands
+  locally with Go 1.27 and task-specific Go 1.27 caches. The module and hosted
+  workflows remain on Go 1.25.
+- [x] Benchmark classic and HTJ2K encode/decode for lossless/lossy, mono/RGB, and
+  8/16-bit inputs with timed repeated samples. Investigate material regressions
+  without weakening parity.
+- [x] Record command outcomes, fixture provenance, pass/fail counts, and stable
+  benchmark results in the evidence log. Completion requires fresh recorded
   evidence; skipped or environment-blocked gates remain explicitly incomplete.
 
 ## Verification gates
@@ -539,8 +543,9 @@ Every task runs its focused RED/GREEN test plus:
 go test -count=1 ./jpeg2000/...
 go test -count=1 ./cmd/dicom-interop-validation
 go test -count=1 ./...
-go vet ./codec/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
-golangci-lint run --timeout=10m ./codec/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
+go vet ./codec/... ./cmd/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
+golangci-lint run --timeout=10m ./codec/... ./cmd/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
+go run ./cmd/dicom-interop-validation --bundle test-data/htj2k/interop-v1 --generator-source tools/fo-dicom-reference-generator
 git diff --check
 ```
 
@@ -552,21 +557,604 @@ classic/HTJ2K benchmark matrix.
 | ID | Deliverable | Items | Status | Evidence | Next action |
 |---|---|---:|---|---|---|
 | A0 | Remove rejected history and verify baseline | 6/6 | Complete | 2026-08-24 log | None |
-| A1 | Freeze classic and current HTJ2K exact bytes | 0/5 | Not started | None | Add classic RED baseline test |
-| A2 | Add dependency and ownership guards | 0/4 | Not started | None | Wait for A1 |
-| A3 | Extract proven common parser, I/O, models, and geometry | 0/6 | Not started | None | Wait for A2 |
-| A4 | Establish the concrete OpenJPEG engine | 0/6 | Not started | None | Wait for A3 |
-| A5 | Establish the independent OpenJPH engine and adapter | 0/5 | Not started | None | Wait for A4 |
-| A6 | Align OpenJPH color and wavelet arithmetic | 0/4 | Not started | None | Wait for A5 |
-| A7 | Align QCD, MAGB, CAP, and cleanup coding | 0/4 | Not started | None | Wait for A6 |
-| A8 | Align precincts, packets, TLM, and tile-parts | 0/4 | Not started | None | Wait for A7 |
-| A9 | Align decoder and output traversal | 0/3 | Not started | None | Wait for A8 |
-| A10 | Build the ranged-version C# generator and offline bundle | 0/5 | Not started | None | Wait for structural split |
-| A11 | Prove exact bytes and four-way interoperability | 0/5 | Not started | None | Wait for A9 and A10 |
-| A12 | Delete mixed branches and old implementation paths | 0/4 | Not started | None | Wait for A11 |
-| A13 | Run final quality and benchmark gates | 0/4 | Not started | None | Wait for A12 |
+| A1 | Freeze classic and current HTJ2K exact bytes | 5/5 | Complete | 2026-08-25 A1 log | None |
+| A2 | Add dependency and ownership guards | 4/4 | Complete | 2026-08-25 A2 log | None |
+| A3 | Extract proven common parser, I/O, models, and geometry | 6/6 | Complete | 2026-08-25 A3 log | None |
+| A4 | Establish the concrete OpenJPEG engine | 6/6 | Complete | 2026-08-25 A4 completion log | None |
+| A5 | Establish the independent OpenJPH engine and adapter | 5/5 | Complete | 2026-08-25 A5 completion log | None |
+| A6 | Align OpenJPH color and wavelet arithmetic | 4/4 | Complete | 2026-08-25 A6 completion log | None |
+| A7 | Align QCD, MAGB, CAP, and cleanup coding | 4/4 | Complete | 2026-08-25 A7 full-matrix completion log | None |
+| A8 | Align precincts, packets, TLM, and tile-parts | 4/4 | Complete | 2026-08-25 A8 completion log | None |
+| A9 | Align decoder and output traversal | 3/3 | Complete | 2026-08-25 decoder completion log | None |
+| A10 | Build the ranged-version C# generator and offline bundle | 5/5 | Complete | 2026-08-25 A10 completion log | None |
+| A11 | Prove exact bytes and four-way interoperability | 5/5 | Complete | 2026-08-25 A11 completion log | None |
+| A12 | Delete mixed branches and old implementation paths | 4/4 | Complete | 2026-08-25 A12 completion log | None |
+| A13 | Run final quality and benchmark gates | 4/4 | Complete | 2026-08-25 final review-remediation log | None |
 
 ## Evidence log
+
+### 2026-08-25 - A13 review remediation and final gates complete
+
+- Typed-nil `*htj2k.Parameters` now uses default parameters in both encode and
+  decode. The focused regression performs a real lossless encode/decode and
+  verifies exact reconstructed pixels.
+- The Go artifact generator rejects empty, absolute, volume-qualified,
+  backslash, non-canonical, and traversal-controlled manifest paths. Fixture
+  and syntax names must be single safe segments. Actual source/fo DICOM reads,
+  generated DICOM/frame writes, and manifest reads/writes use `os.Root`, so an
+  in-bundle symlink cannot redirect access outside the bundle. Symlink tests
+  are active on Linux; this Windows host skipped them because it lacks symlink
+  privilege, while all lexical and generator-entry containment tests passed.
+- The pure-Go validator requires the `managedVersion` `+<40-lowerhex>` metadata
+  to equal `sourceCommit`; accepted NuGet range membership alone is not treated
+  as reproducible source provenance. The committed bundle remains valid.
+- CI, release, and CodeQL include `./cmd/...`; CI and release explicitly run the
+  committed bundle validator. Hosted workflows execute only Go and remain on
+  Go `1.25`, matching `go.mod` (`go 1.25.0`). They do not execute C#, dotnet,
+  C++, DLLs, or the local-only reference generator.
+- Fresh local verification used installed `go1.27.0`, `GOTOOLCHAIN=local`,
+  `.codex-go-cache/a13-go127`, and `.codex-go-cache/a13-lint-go127`.
+  `go test -count=1 ./...`, race/short/coverage including `./cmd/...`, `go vet`,
+  the pure-Go bundle validator, and `git diff --check` passed. Full
+  golangci-lint `v2.13.1` reported `0 issues`; whitespace output contained only
+  Windows LF-to-CRLF warnings.
+- The 40-case benchmark matrix ran with `-benchtime=200ms -count=3` on
+  Windows/amd64, Intel Core Ultra 9 185H. Throughput ranges were classic
+  lossless encode/decode `2.08-3.73 / 4.10-15.13 MB/s`, classic lossy
+  `1.70-3.82 / 10.67-18.68 MB/s`, and HTJ2K `.201/.202/.203`
+  `18.13-80.98 / 4.61-26.96 MB/s`. All timed samples passed.
+- A final independent scoped review found no remaining Critical or Important
+  findings. A13 is complete at 4/4; A1-A13 are complete at 13/13.
+
+### 2026-08-25 - A13 reopened by final independent review
+
+- The final independent review found four unresolved issues: HTJ2K decode
+  panics for typed-nil `*Parameters`; the Go artifact generator permits
+  manifest-controlled paths and names to escape the bundle; provenance does
+  not bind `managedVersion` build metadata to `sourceCommit`; and hosted
+  workflows omit `./cmd/...` plus the pure-Go bundle validator.
+- A13 is reopened at 0/4. A1-A12 remain complete. The exact next action is to
+  add and run focused RED tests for the three runtime/validation findings.
+- Local verification commands use the installed `go1.27.0`,
+  `GOTOOLCHAIN=local`, and repository caches `.codex-go-cache/a13-go127` and
+  `.codex-go-cache/a13-lint-go127`. The module language baseline and GitHub
+  Actions toolchain remain Go `1.25`.
+- The earlier `-benchtime=1x` matrix is retained only as a smoke run. A13 needs
+  a timed, repeated benchmark before completion.
+
+### 2026-08-25 - Initial A13 quality and performance checkpoint (superseded)
+
+- Local final verification uses the installed Go `1.27` and its dedicated
+  repository caches. GitHub CI, release, CodeQL, and the `go.mod` language
+  baseline remain on Go `1.25`. golangci-lint `v2.13.1` uses `goinstall` in
+  hosted CI so it is built by the workflow's selected Go toolchain.
+- Fresh Go 1.27 `go test -count=1 ./...` passed. The required
+  `-race -short -timeout 30m -coverprofile=coverage.out -covermode=atomic`
+  command passed across codec, JPEG, JPEG 2000, JPEG-LS, and examples packages
+  using `.codex-go-cache/a13-go127`.
+- Fresh Go 1.27 `go vet` passed. Go 1.27-built golangci-lint reported
+  `0 issues`. `git diff --check` returned exit 0; its only output was the
+  repository's existing Windows LF-to-CRLF conversion warning.
+- The final pure-Go validator accepted `test-data/htj2k/interop-v1`, including
+  all 306 declared artifacts, the NuGet-only generator project contract, and
+  `fo-dicom.Codecs` provenance
+  `6.0.0+fc2df0efaa9acdee7b3640f821665107630933e8`.
+- Added and ran a 40-case Go 1.27 benchmark smoke matrix with `-benchtime=1x` on
+  Windows/amd64, Intel Core Ultra 9 185H: classic lossless and lossy each ran
+  encode/decode for Mono8, Mono16, RGB8, and RGB16; HTJ2K lossless, lossless
+  RPCL, and lossy ran the same eight directions. All cases passed. This is the
+  first complete matrix smoke run, so no stable performance baseline or unsupported historical performance
+  comparison is claimed; exact-byte and decoded-artifact gates were unchanged.
+- Observed throughput ranges were classic lossless encode `2.25-4.61 MB/s`
+  and decode `7.90-15.00 MB/s`, classic lossy encode `1.72-3.64 MB/s` and
+  decode `9.98-20.18 MB/s`, and HTJ2K encode `17.32-66.52 MB/s` and decode
+  `4.61-26.03 MB/s`.
+- The local-only NuGet generator tests passed `24/24`. GitHub workflow scans
+  found no C#, dotnet, native worker, DLL, or generator execution; hosted CI
+  remains Go-only and consumes only committed offline artifacts.
+- A13 is complete at 4/4. A1-A13 are complete at 13/13.
+
+### 2026-08-25 - A12 legacy removal complete; A13 started
+
+- Replaced the empty migration whitelist with the permanent
+  `TestJPEG2000ArchitectureHasNoFamilyViolations` zero-violation guard. The
+  final ownership, dependency-direction, and family-policy guards passed.
+- Deleted the superseded schema-v1 interoperability bundle and pre-alignment
+  byte fixtures/tests, all flat legacy implementation paths, and the obsolete
+  `cmd/fo-dicom-native-worker` source plus its ignored build output.
+- The pure-Go validator now parses the local generator project and requires one
+  NuGet `fo-dicom.Codecs` `PackageReference` in `[6.0.0-beta1, 7.0.0)`. It
+  rejects generator `ProjectReference` and direct DLL assembly references.
+  The generator test project references only the generator project itself.
+- The root README now describes the concrete OpenJPEG/OpenJPH ownership and the
+  completed schema-v2 exact-byte and four-way HTJ2K evidence rather than the
+  removed mixed/experimental pipeline.
+- Fresh `go test -count=1 ./jpeg2000/...` and
+  `go test -count=1 ./cmd/dicom-interop-go-generator
+  ./cmd/dicom-interop-validation` passed. The pure-Go command also validated
+  the committed `interop-v1` bundle and current generator dependency contract.
+- A12 is complete at 4/4. A13 is `In progress`; its next action is the final
+  functional, race/coverage, vet, lint, whitespace, and benchmark matrix.
+
+### 2026-08-25 - A11 four-way interoperability complete; A12 started
+
+- The local-only C# artifact generator now has a NuGet-only
+  `fo-dicom.Codecs` reference in `[6.0.0-beta1, 7.0.0)`. It has no external
+  project/directory reference, DLL path, direct P/Invoke, or CI integration.
+- The committed bundle records NuGet `fo-dicom.Codecs`
+  `6.0.0+fc2df0efaa9acdee7b3640f821665107630933e8` and source commit
+  `fc2df0efaa9acdee7b3640f821665107630933e8`. It contains seven fixtures, 21
+  syntax instances, 27 frame/syntax cases, and 306 declared artifacts.
+- The NuGet codec reused decoded buffers across repeated multi-frame operations.
+  The local generator isolates each compressed frame in a one-frame Dataset,
+  transcodes through the public fo-dicom API, and copies the returned data into
+  a `MemoryByteBuffer` before the next call. Six lossless multi-frame checks
+  then matched their source frames exactly.
+- All 27 cases have exact Go/fo compressed codestream equality and exact
+  fo-from-fo, Go-from-Go, Go-from-fo, and fo-from-Go decoded raw equality. Go
+  tests also verify saved DICOM transfer syntaxes, frame order and encapsulated
+  frame reconstruction, markers, TLM, tile-parts, packets, and cleanup blocks.
+- The pure-Go validator passed the formal `interop-v1` bundle. The focused
+  accepted-range Go tests and both Go command suites passed. The local-only
+  NuGet generator suite passed 24/24; GitHub CI and release workflows contain
+  only Go build/test/vet/lint/benchmark steps.
+- A11 is complete at 5/5. A12 is `In progress`; its first action is removal of
+  the superseded A1 pre-alignment baseline and schema-v1 interop fixture/tests.
+
+### 2026-08-25 - A11 Go artifact generation and validation checkpoint
+
+- Added the pure-Go `cmd/dicom-interop-go-generator`. It writes Go-encoded DICOM
+  and codestreams plus Go-from-Go and Go-from-fo decoded DICOM/raw artifacts;
+  it never creates or substitutes fo-from-Go evidence.
+- The generator preserves saved YBR encoded DICOM metadata and changes only a
+  deep-cloned in-memory decode input from `YBR_FULL` or `YBR_FULL_422` to `RGB`,
+  matching the existing fo-dicom.Codecs reference-generator decode workaround.
+- Extended the schema-v2 pure-Go validator to require every Go artifact
+  direction and validate its path, frame count, decoded length, declared hash,
+  and file hash. Future fo-from-Go fields may be absent, but partial DICOM/frame
+  declarations are rejected.
+- The real bundle now contains seven fixtures, 21 syntax instances, and 258
+  artifacts. All 21 instances contain Go encode, Go-from-Go, and Go-from-fo
+  DICOM/frame directions; none claims fo-from-Go evidence.
+- `go test -count=1 ./cmd/dicom-interop-go-generator
+  ./cmd/dicom-interop-validation` passed. The pure-Go validator passed against
+  the real bundle, and the three accepted-range byte/structure tests passed for
+  all 27 fixture/frame/syntax cases.
+- A11 remains `In progress` at 2/5. Its third item remains unchecked until the
+  local fo-dicom.Codecs generator produces genuine `decoded/fo-from-go`
+  artifacts from the saved Go-encoded DICOM files.
+
+### 2026-08-25 - A11 Go-only two-direction checkpoint
+
+- A fresh pure-Go command ran
+  `TestAcceptedRangeNativeDecodeMatchesFoDicom`,
+  `TestAcceptedRangeCleanupBytesMatchOpenJPH`, and
+  `TestAcceptedRangePacketAndTilePartStructureMatchesOpenJPH` against the
+  schema-v2 bundle. It passed without C#, dotnet, C++, a DLL, or an external
+  process.
+- Across all seven fixtures, nine frames, and `.201/.202/.203` syntaxes, Go
+  encode -> Go decode matched the saved fo-decoded frame bytes, and saved
+  fo-dicom encode -> Go decode matched the same saved frame bytes. The strict
+  lossless source comparison retains only the previously recorded YBR and
+  16-bit multi-component authority traversal exceptions.
+- The same Go command compared main-header markers, TLM entries, tile-part
+  order and lengths, packet coordinates/headers/bodies, inclusion state,
+  cleanup contributions, and complete codestream bytes for all 27 cases.
+- A11 is `In progress` at 2/5. The next action is to add and validate saved Go
+  encode -> fo-dicom.Codecs decode results from the offline bundle, consume
+  files only from Go, and keep Go/CI fully offline.
+
+### 2026-08-25 - A10 offline generator and bundle validation complete; A11 started
+
+- `cmd/dicom-interop-validation` is now a pure-Go schema-v2 bundle validator.
+  The previous process orchestration, embedded codec execution, child workers,
+  dotnet invocation, and `os/exec` dependency were removed from the command.
+- Focused RED cases covered absolute and escaping paths, case-insensitive
+  duplicate artifacts, missing source/encoded/decoded frames, missing `.201`,
+  `.202`, or `.203` directions, incorrect lengths and SHA256 values, invalid
+  schema/provenance/version values, incomplete fixture coverage, undeclared
+  files, unreferenced digests, generator source drift, and empty `PATH`.
+  `go test -count=1 ./cmd/dicom-interop-validation` passed after GREEN.
+- The validator independently checked all 114 artifacts in
+  `test-data/htj2k/interop-v1`, including safe canonical paths, exact file
+  lengths and SHA256 hashes, seven fixtures, nine source frames, all 21 syntax
+  instances, and the complete bit-depth/color/signedness/odd-size/multiframe
+  matrix. It accepted managed version
+  `6.0.0+80d8103d394aeed8ce70141c742d7d53620ef90e` within
+  `[6.0.0-beta1, 7.0.0)` and source commit
+  `80d8103d394aeed8ce70141c742d7d53620ef90e`.
+- The Go validator recomputed the generator source digest with the exact C#
+  filename/content ordering and NUL separators and matched
+  `4a31aa58d24fc2e2d84007929ec76e8631f882ed7915f5bc2b242a86ac2a14d5`.
+  A compiled validator also passed against the real bundle with `PATH` empty.
+- The A10 completion gate executes only Go. It does not run C#, dotnet, C++, or
+  `Dicom.Native.dll`; the local generator is provenance for the already saved
+  bundle and is never a Go or CI dependency. The generator exposes no native
+  library command-line option and contains no direct P/Invoke.
+- The bundle tree contains no DLL, executable, PDB, `bin`, or `obj` output.
+  Generator build output is excluded by `.gitignore` and is not part of the
+  offline bundle.
+- A10 is complete at 5/5. A11 is `In progress` at 0/5. The next action is to
+  record the existing Go-to-Go and saved fo-to-Go directions, then add saved
+  Go-to-fo evidence while retaining exact per-frame acceptance.
+
+### 2026-08-25 - A9 decoder and output traversal complete; A10 started
+
+- Irreversible cleanup decode now preserves the full reconstructed 31-bit
+  magnitude and bin-center low bits. Reversible cleanup retains the existing
+  `31-Kmax` right shift. The subband transfer uses
+  `get_irrev_delta / 2^(31-Kmax)`, matching OpenJPH `tx_from_cb32`.
+- A literal cleanup RED for quantized magnitude `512`, `Kmax=22` initially failed
+  because no irreversible decoder mode existed. GREEN reconstructs the OpenJPH
+  bin center `768`; the QCD `0xB6EA` HL transfer remains exactly
+  `0.010974055 (0x3C33CC86)`.
+- Mono `.203` became byte-exact after the cleanup transfer correction. Remaining
+  8-bit RGB/YBR differences localized to integer conversion before ICT.
+  OpenJPH `tile::pull` performs `ict_backward` on float lines before
+  `irv_convert_to_integer`; Go now preserves inverse 9/7 float32 samples through
+  ICT and performs x64 Native nearest-even conversion afterward. A focused RED
+  changed the old `[26 26 26]` result to `[26 25 26]`.
+- `TestAcceptedRangeNativeDecodeMatchesFoDicom` now covers both Native-to-Go and
+  Go-encode-to-Go-decode for all 27 fixture/syntax frame cases. Every output is
+  byte-identical to the manifest-recorded fo-decoded frame. Lossless source
+  equality remains strict except the previously proven Native YBR conversion and
+  16-bit multi-component traversal behavior; fo-from-fo equality is never
+  relaxed.
+- `go test -count=1 ./jpeg2000/htj2k/openjph/...` passed all five concrete
+  OpenJPH packages. The accepted-range decoder command and focused transfer
+  syntax/round-trip/ownership command passed. `git diff --check` exited zero.
+- The wider `go test -count=1 ./jpeg2000/htj2k/...` still fails the intentionally
+  frozen A1 pre-alignment bytes and old pre-range `interop` COM bytes. It also
+  exposes a typed-nil parameter panic in `TestHTJ2KNativeHeaderContract...`, to
+  be resolved before the A13 full quality gate rather than folded into A9.
+- A9 is complete at 3/3. A10 is `In progress` at 0/5. The next action is the
+  independent generator/validator and schema-v2 bundle validation described
+  above.
+
+### 2026-08-25 - A9 Native decode RED and irreversible transfer checkpoint
+
+- `TestAcceptedRangeNativeDecodeMatchesFoDicom` decodes every committed Native
+  frame with the concrete Go OpenJPH decoder and reports the first differing
+  byte with sample, component, row, and column coordinates. `.201/.202` match
+  fo-from-fo for every frame. Every `.203` fixture initially differed; the
+  representative mono-u16 frame 0 first sample was `Go=50`, `Native=0`.
+- OpenJPH `tx_from_cb32` retains a sign-magnitude code-block word and multiplies
+  it by `get_irrev_delta / 2^(31-Kmax)`. Go cleanup already right-shifts that
+  word to a signed quantized integer, so its equivalent subband multiplier is
+  exactly `get_irrev_delta`, including the OpenJPH LL/HL/LH/HH band scales
+  `1/2/2/4` and excluding bit depth.
+- The literal QCD `0xB6EA`, guard-bit, HL-band, and quantized-coefficient `12345`
+  RED produced `359.59784 (0x43B3CC86)` instead of the OpenJPH float32 result
+  `0.010974055 (0x3C33CC86)`. A second RED showed the old OpenJPEG finalizer
+  returned `[0 0 0 0]` instead of the x64 Native result `[0 0 64 -64]` because
+  it neither scaled by bit depth nor used SSE2/AVX2 nearest-even rounding.
+- GREEN keeps dequantized coefficients in OpenJPH's normalized float32 domain,
+  applies the band scale, runs inverse 9/7, and only then scales by bit depth
+  and applies x64 Native nearest-even conversion. Both focused tests pass.
+- The accepted-range rerun reduced mono-u16 frame 0 sample 0 from `Go=50` to
+  `Go=1` against `Native=0`; mono/RGB residuals are now predominantly one
+  sample value. Source comparison then showed cleanup reconstructs bin-center
+  low bits that Go discards with the reversible `31-Kmax` shift. A9 remains
+  `In progress` at 0/3. The next boundary is irreversible cleanup-to-float
+  transfer, before inverse 9/7, ICT, or traversal.
+
+### 2026-08-25 - A8 packet, TLM, tile-part, and exact-byte completion; A9 started
+
+- `TestAcceptedRangePacketAndTilePartStructureMatchesOpenJPH` scans raw
+  codestream structure without relying on the shared parser's merged tile view.
+  Across all 27 schema-v2 frame/syntax cases it compares TLM entry values,
+  tile-part count/order and `Isot/TPsot/TNsot/Psot`, tile-part headers, SOD
+  boundaries and data, packet coordinates and raw headers, inclusion and
+  missing-MSB values, pass counts/lengths, packet bodies, and finally the whole
+  codestream. Every Go frame matched its Native/OpenJPH frame byte for byte.
+- The first structural acceptance test was already green because the A7
+  quantization and cleanup corrections also made the current accepted-range
+  packet bodies, lengths, TLM entries, and tile-part bytes exact. It is retained
+  as the A8 regression/completion gate rather than reported as a RED/GREEN
+  production change.
+- A separate adapter RED exposed the remaining fo-dicom progression contract:
+  `.202` ignored an explicit LRCP parameter and wrote RPCL (`2`) instead of
+  LRCP (`0`). GREEN adds the five public progression values and defaults to
+  RPCL; only `.202` forwards the parameter, while `.201` and `.203` retain the
+  effective OpenJPH `PROG_UNKNOWN` default RPCL behavior.
+- `go test -count=1 ./jpeg2000/htj2k/openjph/...` passed all five OpenJPH-owned
+  packages. Focused HTJ2K progression/parameter tests and the OpenJPEG-no-HT /
+  OpenJPH-direct-cleanup ownership guards passed. `git diff --check` exited zero
+  with Windows line-ending warnings only.
+- A8 is complete at 4/4. A9 is `In progress` at 0/3. The exact next action is
+  the accepted-range Native decode/output RED described above.
+
+### 2026-08-25 - A7 full-matrix completion; A8 started
+
+- The accepted-range generator now accepts repeated `--input` values in stable
+  command-line order and writes one schema-v2 manifest containing all fixtures.
+  A deterministic managed source writer adds unsigned mono 8-bit, three-frame
+  unsigned mono 16-bit, RGB 8/16-bit, YBR FULL, and YBR FULL 422 sources. Together
+  with the existing `888x459` signed mono 16-bit source, the bundle covers every
+  required bit depth, color model, signedness, odd dimension, and multiframe case.
+- `test-data/htj2k/interop-v1` records fo-dicom.Codecs
+  `6.0.0+80d8103d394aeed8ce70141c742d7d53620ef90e`, source commit
+  `80d8103d394aeed8ce70141c742d7d53620ef90e`, generator SHA256
+  `4a31aa58d24fc2e2d84007929ec76e8631f882ed7915f5bc2b242a86ac2a14d5`,
+  seven fixtures, nine source frames, 21 syntax instances, and 114 artifacts.
+  Independent file existence, length, and SHA256 verification reported zero
+  failures.
+- A real Native YBR RED exposed an authority wrapper metadata defect: encode
+  converts YBR raw bytes to RGB but retains the YBR DICOM photometric value, so
+  fo-from-fo decode tries to convert the compressed codestream as YBR raw. The
+  generator preserves the original fo-encoded DICOM and codestream bytes, then
+  marks only its in-memory decode input as RGB. It also stores managed
+  `PixelDataConverter` output as `encoderInputFrames` for engine byte tests.
+- Full-matrix cleanup RED localized the remaining Go difference to adapter color
+  conversion. fo-dicom evaluates each complete double expression with `+0.5`
+  before one truncation; go-dicom v0.7.0 truncated chroma terms separately. The
+  literal YBR FULL `(32,112,144)` case changed from Go `[54,27,5]` to Native
+  `[54,26,4]`; YBR FULL 422 `(40,42,116,140)` changed from
+  `[57,37,20,59,39,22]` to `[57,36,19,59,38,21]`. Focused adapter RED/GREEN
+  now passes without modifying the general go-dicom dependency.
+- `TestAcceptedRangeCleanupBytesMatchOpenJPH` reads schema v2 and ran 27
+  per-frame cases. Main-header marker order and raw `SIZ/CAP/COD/QCD/COM`
+  segments matched, and every included cleanup contribution matched for `.201`,
+  `.202`, and `.203` across all seven fixtures and nine frames.
+- The generator suite passed 22/22 tests. `go test -count=1
+  ./jpeg2000/htj2k/openjph/...` passed all five OpenJPH-owned packages, and
+  `git diff --check` exited zero. The wider `./jpeg2000/htj2k/...` and
+  `./jpeg2000/...` commands still fail only the intentionally frozen A1
+  pre-alignment bytes, the old pre-range `test-data/htj2k/interop` COM bytes,
+  and A9 lossy decoder error bounds; all other JPEG 2000 packages pass.
+- A7 is complete at 4/4. A8 is `In progress` at 0/4. The exact next action is
+  the accepted-range packet/TLM/tile-part structural RED described above.
+
+### 2026-08-25 - A7 Native SIMD quantization and cleanup parity checkpoint
+
+- The accepted-range RED now retains packet layer/resolution/component/precinct,
+  inclusion index, band, code-block coordinates and dimensions, Kmax,
+  zero-bitplanes, and pass count. The sole `.203` difference decoded to R1/HL
+  block `(0,0)`, local coefficient `(19,9)`: Go `121`, Native `122`.
+- Go's pre-quantization coefficient is float32 bits `0x38E37023`; HL
+  `delta_inv` is `0x4E0951F0`, and their float32 product is `62463.613`
+  (`0x4773FF9D`). OpenJPH's generic scalar path truncates, but the authority's
+  selected x64 AVX2/SSE2 `tx_to_cb32` uses `_mm256_cvtps_epi32`/
+  `_mm_cvtps_epi32`, which rounds to nearest even and produces `62464`.
+- A literal RED for those two float32 inputs first failed with `62463`, then
+  passed after irreversible QCD-to-code-block conversion adopted the actual
+  Native SIMD rounding rule. The 9/7 transform and cleanup writer were not
+  changed.
+- `TestAcceptedRangeCleanupBytesMatchOpenJPH` compares every included cleanup
+  contribution for `.201`, `.202`, and `.203`; all three passed for the current
+  `888x459`, signed 16-bit, single-frame MONOCHROME2 authority fixture.
+  `go test -count=1 ./jpeg2000/htj2k/openjph/...` passed all five OpenJPH-owned
+  packages with the task-local `GOCACHE`.
+- A7 is `In progress` at 3/4. The completion gate remains unchecked because the
+  committed bundle does not yet cover the full fixture matrix required above.
+  Next action is to generate the missing accepted-range source cases and run
+  marker/cleanup parity for every frame and syntax.
+
+### 2026-08-25 - A7 accepted-range generator, bundle, and cleanup RED checkpoint
+
+- The local managed generator under `tools/fo-dicom-reference-generator` uses
+  fo-dicom's public managed APIs and `NativeTranscoderManager`, rejects versions
+  outside `[6.0.0-beta1, 7.0.0)`, and contains no Native DLL CLI option or direct
+  P/Invoke. Its focused suite passed 17/17 tests, including real Native
+  encode/decode of `sample-01.dcm`.
+- `test-data/htj2k/interop-v1` was generated from authority commit
+  `80d8103d394aeed8ce70141c742d7d53620ef90e`, managed informational version
+  `6.0.0+80d8103d394aeed8ce70141c742d7d53620ef90e`, and OpenJPH `0.30.1`.
+  Independent manifest verification reported 14 artifacts and zero failures.
+- The one-frame, signed 16-bit MONOCHROME2 fixture is `888x459`. Native `.201`
+  and `.202` frames are each 185351 bytes with SHA256
+  `2c5722a3821073fa803f46f29f2497f63415a3c75db42a1afd7ce7a44c292faa`;
+  `.203` is 153093 bytes with SHA256
+  `2d8b6a29fe97478d3bfc8e6d23d4cfa703cede50d3fda4167df5dfdba74caeae`.
+- The accepted-range `.203` cleanup RED parses both codestreams and compares
+  every included code-block. Block 0 matches exactly. Block 1 has equal length
+  346, equal `Scup=88`, and identical MEL/VLC suffix; its only difference is
+  MagSgn byte 139 (`Go=0x80`, `Native=0x90`). Go SHA256 is
+  `684f1509300dfef4da86cce93fa3b74f74d3a93e99ded5daa3bc95aa985c6db4`;
+  Native SHA256 is
+  `eefc318728200fc23b18520b73c47a61e3bf337f8f61a365fde22fac0650d21a`.
+- This checkpoint satisfies the A7 reference prerequisite but not an A7 or A10
+  checklist item. A7 remains `In progress` at 1/4. Next action is to attach
+  packet/band geometry to block 1, decode the differing coefficient, and trace
+  its pre-cleanup value back through irreversible 9/7 and QCD multiplication.
+
+### 2026-08-25 - A7 OpenJPH quantization, Kmax/MAGB, CAP, and COM checkpoint
+
+- RED/GREEN vectors derived from OpenJPH `ojph_params.cpp`,
+  `ojph_subband.cpp`, `ojph_codestream_gen.cpp`, and
+  `ojph_codeblock_fun.cpp` cover QCD-decoded float32 `delta`/`delta_inv`,
+  `Kmax`, truncation, sign-magnitude conversion, and OR-reduced magnitude.
+  The Native `.203` first-step vector remains literal: QCD `0xB718`,
+  `Kmax=22`, `delta=0x30718000`, and `delta_inv=0x4E87AF70`.
+- Irreversible quantization now consumes normalized float32 coefficients,
+  selects each LL/HL/LH/HH encoded QCD step and band gain, rounds the float32
+  product with the authority's Native SIMD nearest-even rule, and passes the
+  quantized magnitude to cleanup without the reversible `31-Kmax` left shift.
+  The lossless default retains that shift.
+- The no-decomposition RED changed `[-0.5, 0.5]` from `[0, 0]` to
+  `[-1073741824, 1073741824]`. The lossy `.203` codestream grew from the A6
+  255-byte empty-cleanup result to 2038 bytes; the frozen pre-alignment Go
+  baseline is 2102 bytes and is not treated as a fo-dicom reference.
+- CAP now derives `MAGB` from QCD exactly as OpenJPH `param_cap` does. A lossy
+  16-bit RGB RED exposed the old component-count guess as `0x002B`; GREEN writes
+  the OpenJPH value `0x002A`. Version COM changed from stale `0.21.2` to the
+  authoritative OpenJPH `0.30.1`, and the main-header marker order is frozen as
+  `SOC,SIZ,CAP,COD,QCD,COM,TLM,SOT`.
+- `go test -count=1 ./jpeg2000/htj2k/openjph/...` passed. Focused QCD/CAP/COM/
+  marker-order tests and existing `.201/.202` fo-dicom exact-byte tests passed.
+  `go test -count=1 ./jpeg2000/htj2k/...` now fails only the intentionally stale
+  `.203` Go baseline and lossy round-trip error bounds; irreversible decoder
+  dequantization remains assigned to A9.
+- The live authority checkout is clean at
+  `80d8103d394aeed8ce70141c742d7d53620ef90e`, reports managed version `6.0.0`,
+  and contains OpenJPH `0.30.1`. This is within the approved
+  `[6.0.0-beta1, 7.0.0)` range, but differs from the design-time commit recorded
+  above; the generated manifest must record the actually resolved version and
+  commit.
+- A7 is `In progress` at 1/4. The exact next action is to implement the local
+  managed reference-generator prerequisite and generate accepted-range `.203`
+  cleanup/codestream artifacts. The existing `5.16.5.1` lossless-only manifest
+  cannot satisfy the A7 artifact or completion gates.
+
+### 2026-08-25 - A6 OpenJPH color and wavelet arithmetic complete; A7 started
+
+- Scalar sample RED/GREEN vectors now cover unsigned level shift, signed input,
+  irreversible normalization by `1 << bitDepth`, x64 Native nearest-even output
+  rounding, and signed/unsigned clamping.
+- RCT/ICT vectors use literal integer values and float32 bit patterns from
+  OpenJPH `transform/ojph_colour.cpp`; the lossy encoder normalizes every
+  component before applying OpenJPH ICT.
+- Reversible 5/3 and irreversible 9/7 vectors cover even and odd origin parity,
+  single-sample boundaries, odd/even lengths, and a `3x5` two-dimensional case
+  with both origins odd. The inverse 9/7 path uses OpenJPH `K`/`K_inv`, lifting
+  order, symmetric extension, and float32 operation order; the obsolete
+  OpenJPEG `BUG_WEIRD_TWO_INVK` inverse path and its self-referential tests were
+  removed. RCT and 5/3 remain family-owned because complete cross-family
+  bit-identity has not been established.
+- `go test -count=1 ./jpeg2000/htj2k/openjph/colorspace
+  ./jpeg2000/htj2k/openjph/wavelet ./jpeg2000/htj2k/openjph` passed with a
+  task-specific `GOCACHE`.
+- `go test -count=1 ./jpeg2000/htj2k/...` passed `.201`, `.202`, and every
+  OpenJPH-owned package. Its remaining failures are confined to lossy `.203`:
+  the codestream is 255 bytes instead of the frozen 2102-byte pre-alignment
+  baseline and round-trip pixels collapse to unsigned midpoint 128. The new
+  normalized `[-0.5, 0.5)` coefficients still enter the old OpenJPEG-scaled
+  quantization/code-block transfer, localizing the divergence to A7 rather than
+  color or wavelet arithmetic.
+- A6 is complete at 4/4. A7 is `In progress`; next action is the normalized
+  irreversible subband-to-code-block RED vector suite derived from OpenJPH
+  `ojph_codeblock_fun.cpp`.
+
+### 2026-08-25 - A5 independent OpenJPH engine and adapter complete; A6 started
+
+- The structural RED required OpenJPH to construct cleanup coding directly.
+  HT cleanup, MEL, VLC, UVLC, and MagSgn now live under
+  `jpeg2000/htj2k/openjph/cleanup`; copied MQC/EBCOT packages and externally
+  supplied block factories were removed.
+- OpenJPH owns HT marker, quantization, packet, tile-part, dequantization, and
+  decoder choices directly. `TestOpenJPHOwnsCleanupDirectly` passes and the
+  OpenJPH tree imports no classic OpenJPEG engine package.
+- Adapter RED/GREEN tests cover YBR FULL and YBR FULL 422 conversion, conversion
+  failure fallback, BitsAllocated/component/signedness/transform/lossless
+  mappings, native output-smaller-than-input failure, 8-bit pixel interleaving,
+  and the fo-dicom wrapper's exact 16-bit component-line traversal.
+- The output-size contract changed old small-image tests: 4x4 and 16x16 success
+  expectations were replaced by a focused rejection test and compressible
+  64x64 round-trip coverage.
+- `go test -count=1 ./jpeg2000/htj2k/openjph/cleanup`,
+  `go test -count=1 -run TestCurrentGoHTJ2KPreAlignmentBytes
+  ./jpeg2000/htj2k`, `go test -count=1 ./jpeg2000/htj2k/...`, and
+  `go test -count=1 ./jpeg2000/...` all passed with a task-specific `GOCACHE`.
+  `git diff --check` exited 0 with Windows line-ending warnings only.
+- A5 is complete at 5/5. A6 is `In progress`; next action is the scalar
+  OpenJPH `ojph_colour.cpp` reversible/irreversible color RED vector suite.
+
+### 2026-08-25 - A4 concrete OpenJPEG engine complete and A5 started
+
+- The OpenJPEG AST guard first failed with 34 HTJ2K/OpenJPH identifiers in
+  dead tile-part, quantization, precinct/tag-tree, and missing-MSB helpers.
+  Those declarations and the classic facade's OpenJPH quantization forwarder
+  were deleted; the guard now rejects all such identifiers.
+- A second structural RED found `BlockEncoderFactory` and the unused
+  `BlockDecoderFactory`. OpenJPEG now constructs its EBCOT Tier-1 encoder and
+  decoder directly and exposes no cleanup, CAP, or TLM policy through the
+  classic facade.
+- `go test -count=1 -run
+  'TestClassicJPEG2000PreMigrationBytes|TestCurrentGoHTJ2KPreAlignmentBytes'
+  ./jpeg2000 ./jpeg2000/htj2k` passed.
+- `go test -count=1 ./jpeg2000/openjpeg/...` passed for OpenJPEG, color, MQC,
+  Tier-1, Tier-2, and wavelet packages.
+- `go test -count=1 ./jpeg2000/...` passed for all 18 current JPEG 2000
+  packages. `git diff --check` exited 0 with Windows line-ending warnings only.
+- A4 is complete at 6/6. A5 is `In progress`; next action is the structural RED
+  requiring OpenJPH to own cleanup coding directly and contain no MQC/EBCOT
+  implementation or externally supplied block factories.
+
+### 2026-08-25 - A4 concrete-engine transition checkpoint
+
+- Classic implementation and white-box tests moved under `jpeg2000/openjpeg`;
+  root `jpeg2000` now forwards its public encoder, decoder, ROI, MCT,
+  quantization, rate-control, and tile APIs to that concrete engine.
+- Old `jpeg2000/{mqc,t1,t2,colorspace,wavelet}` paths are absent and no
+  compatibility packages were added.
+- RED required the concrete OpenJPEG ownership paths and later reported 33
+  HT family selectors in the classic engine. The reachable OpenJPEG encode and
+  decode paths now contain no family selector and the selector guard is green.
+- A mechanically independent `jpeg2000/htj2k/openjph` transition engine exists,
+  imports none of `jpeg2000/openjpeg`, and `htj2k/codec.go` uses it directly.
+  Current-Go `.201/.202/.203` frozen bytes remain exact after the switch.
+- A4 remains `In progress`: unused OpenJPH quantization, HT tile-part, and HT
+  precinct helpers still need deletion from `openjpeg`; its Tier-2 split is not
+  complete. The transition OpenJPH engine still contains copied MQC/EBCOT code
+  that A5 must delete after moving cleanup ownership.
+- Next action: strengthen the OpenJPEG ownership guard to reject every HTJ2K or
+  OpenJPH declaration, delete those dead helpers, and rerun classic frozen bytes
+  plus `go test -count=1 ./jpeg2000/openjpeg/...`.
+
+### 2026-08-25 - A3 common mechanisms complete
+
+- The entire legacy `jpeg2000/codestream` package and its tests moved to
+  `jpeg2000/internal/common/codestream`; the old path and all old imports are
+  absent.
+- `boundedReader` preserves offset on rejected reads and reports truncation as
+  `io.ErrUnexpectedEOF`; `boundedWriter` rejects capacity overflow and short
+  writes.
+- `WriteTilePart` serializes bounded SOT/header/SOD/data records only. Classic
+  and HTJ2K code retain their own header, packet, part-count, and TLM policy.
+- RED first reported the missing common ownership files, then missing bounded
+  I/O and tile-part APIs. GREEN passed after the mechanical move and extraction.
+- Existing parser/geometry suites continue to cover tile sizes, multi-part
+  parsing, odd/partial layouts, marker bytes, and malformed input; no differing
+  color, wavelet, code-block, or precinct arithmetic moved to common.
+- `go test -count=1 ./jpeg2000/...` passed for all 11 current JPEG 2000 packages.
+- `git diff --check` exited 0 with only Windows LF-to-CRLF warnings.
+- A3 is complete. A4 is `In progress`; next action is the OpenJPEG ownership
+  structural RED test.
+
+### 2026-08-25 - A2 architecture guard complete
+
+- The AST guard inspects every non-test Go file and reports stable
+  `kind:file:line:detail` evidence.
+- RED reported 33 pre-migration violations: one HTJ2K-to-classic facade import,
+  one marker-based family inference, and 31 family-selector identifier uses.
+- The guard also rejects future family imports, HTJ2K UID literals, and
+  `CodeBlockStyle & 0x40` marker inference in root/shared orchestration.
+- GREEN passed after only the exact 33-item migration inventory was recorded.
+- `go test -count=1 ./jpeg2000/...` passed for all 11 JPEG 2000 packages.
+- `git diff --check` exited 0; Git emitted only its Windows LF-to-CRLF warning.
+- A2 is complete. A3 is `In progress`; next action is the common codestream
+  ownership RED test.
+
+### 2026-08-25 - A1 exact pre-migration bytes complete
+
+- Classic mono-u16 lossless: 314 bytes,
+  `56da3b34eeffcc02a72caa60a931f18d1bb3f5006ec148467359ce89935ed853`.
+- Classic RGB-u8 lossy: 2387 bytes,
+  `e72b2141404a7603c67f4b87c835c3f74610e550a3f0173f69d25dff667aba5f`.
+- Current-Go HTJ2K `.201`: 424 bytes,
+  `403d88c5bf41e2ccc1624413af04fdc58f062a7a4d56d5f56b1aa186ff86a171`.
+- Current-Go HTJ2K `.202`: 424 bytes,
+  `403d88c5bf41e2ccc1624413af04fdc58f062a7a4d56d5f56b1aa186ff86a171`.
+- Current-Go HTJ2K `.203`: 2102 bytes,
+  `c56ff474fe31fc28fc31ca9de165a97ee3e6a36a689887fb534dddac0abe320c`.
+- RED failed only because all five committed `.j2c` fixtures were absent.
+  GREEN passed after generation from the unchanged implementation and literal
+  hashes were added.
+- `go test -count=1 -run
+  'TestClassicJPEG2000PreMigrationBytes|TestCurrentGoHTJ2KPreAlignmentBytes'
+  ./jpeg2000 ./jpeg2000/htj2k` passed.
+- `go test -count=1 ./jpeg2000/...` passed for all 11 JPEG 2000 packages.
+- `git diff --check` exited 0; Git emitted only its Windows LF-to-CRLF warning.
+- A1 is complete. A2 is `In progress`; next action is the AST guard RED test.
+
+### 2026-08-25 - A1 started
+
+- A1 is `In progress`; no implementation checkpoint has been claimed yet.
+- The initial `go test -count=1 ./jpeg2000/...` attempt was blocked before
+  compilation by access denial in the user-wide Go build cache. Subsequent
+  verification uses a task-specific writable `GOCACHE`.
+- Next action: add classic exact-byte characterization tests that fail because
+  the committed baseline fixtures do not yet exist.
 
 ### 2026-08-25 - durable progress and version-range checkpoint
 

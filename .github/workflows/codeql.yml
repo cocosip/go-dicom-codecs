@@ -14,7 +14,7 @@ permissions:
   security-events: write
 
 env:
-  GO_PACKAGES: ./codec/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
+  GO_PACKAGES: ./codec/... ./cmd/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
 
 jobs:
   analyze:
