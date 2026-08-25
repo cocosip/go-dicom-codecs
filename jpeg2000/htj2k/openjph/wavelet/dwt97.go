@@ -106,18 +106,18 @@ func encodeStep2_97Float32(data []float32, flStart, fwStart int32, end, m int32,
 	if imax > 0 {
 		fw := fwStart
 		fl := flStart
-		data[fw-1] += (data[fl] + data[fw]) * c32
+		data[fw-1] = float32Add(data[fw-1], float32Mul(float32Add(data[fl], data[fw]), c32))
 		fw += 2
 
 		for i := int32(1); i < imax; i++ {
-			data[fw-1] += (data[fw-2] + data[fw]) * c32
+			data[fw-1] = float32Add(data[fw-1], float32Mul(float32Add(data[fw-2], data[fw]), c32))
 			fw += 2
 		}
 	}
 
 	if m < end {
 		fw := fwStart + 2*m
-		data[fw-1] += (2 * data[fw-2]) * c32
+		data[fw-1] = float32Add(data[fw-1], float32Mul(float32Mul(2, data[fw-2]), c32))
 	}
 }
 
@@ -129,15 +129,15 @@ func encodeStep1Combined97Float32(data []float32, itersC1, itersC2 int32, c1, c2
 	var i int32
 	fw := int32(0)
 	for i = 0; i < itersCommon; i++ {
-		data[fw] *= c1f
-		data[fw+1] *= c2f
+		data[fw] = float32Mul(data[fw], c1f)
+		data[fw+1] = float32Mul(data[fw+1], c2f)
 		fw += 2
 	}
 
 	if i < itersC1 {
-		data[fw] *= c1f
+		data[fw] = float32Mul(data[fw], c1f)
 	} else if i < itersC2 {
-		data[fw+1] *= c2f
+		data[fw+1] = float32Mul(data[fw+1], c2f)
 	}
 }
 
@@ -169,6 +169,21 @@ func min32(a, b int32) int32 {
 		return a
 	}
 	return b
+}
+
+// These helpers make each float32 operation observable before the next one.
+// Without the explicit bit round-trip, ARM64 compilers may fuse the lifting
+// multiply/add sequence into FMA and produce different OpenJPH code-blocks.
+func float32Add(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a + b))
+}
+
+func float32Sub(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a - b))
+}
+
+func float32Mul(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a * b))
 }
 
 // Inverse97_1D performs the inverse 9/7 wavelet transform on a 1D signal
@@ -217,10 +232,10 @@ func Inverse97_1DFloat32WithParity(data []float32, even bool) {
 	k := float32(K97)
 	kInv := float32(1) / k
 	for i := range low {
-		low[i] *= k
+		low[i] = float32Mul(low[i], k)
 	}
 	for i := range high {
-		high[i] *= kInv
+		high[i] = float32Mul(high[i], kInv)
 	}
 
 	steps := [...]float32{float32(delta97), float32(gamma97), float32(beta97), float32(alpha97)}
@@ -234,7 +249,7 @@ func Inverse97_1DFloat32WithParity(data []float32, even bool) {
 		for i := range augmented {
 			left := symmetric97(other, start+i-1)
 			right := symmetric97(other, start+i)
-			augmented[i] -= coefficient * (left + right)
+			augmented[i] = float32Sub(augmented[i], float32Mul(coefficient, float32Add(left, right)))
 		}
 		augmented, other = other, augmented
 		stepEven = !stepEven

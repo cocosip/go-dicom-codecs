@@ -20,18 +20,30 @@ const (
 
 // ICTForwardFloat32 matches OpenJPH's scalar gen_ict_forward operation order.
 func ICTForwardFloat32(r, g, b float32) (y, cb, cr float32) {
-	y = openJPHAlphaR*r + openJPHAlphaG*g + openJPHAlphaB*b
-	cb = openJPHBetaCb * (b - y)
-	cr = openJPHBetaCr * (r - y)
+	y = float32Add(float32Add(float32Mul(openJPHAlphaR, r), float32Mul(openJPHAlphaG, g)), float32Mul(openJPHAlphaB, b))
+	cb = float32Mul(openJPHBetaCb, float32Sub(b, y))
+	cr = float32Mul(openJPHBetaCr, float32Sub(r, y))
 	return
 }
 
 // ICTInverseFloat32 matches OpenJPH's scalar gen_ict_backward operation order.
 func ICTInverseFloat32(y, cb, cr float32) (r, g, b float32) {
-	g = y - openJPHGammaCrG*cr - openJPHGammaCbG*cb
-	r = y + openJPHGammaCrR*cr
-	b = y + openJPHGammaCbB*cb
+	g = float32Sub(float32Sub(y, float32Mul(openJPHGammaCrG, cr)), float32Mul(openJPHGammaCbG, cb))
+	r = float32Add(y, float32Mul(openJPHGammaCrR, cr))
+	b = float32Add(y, float32Mul(openJPHGammaCbB, cb))
 	return
+}
+
+func float32Add(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a + b))
+}
+
+func float32Sub(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a - b))
+}
+
+func float32Mul(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a * b))
 }
 
 // ICTForward applies the irreversible color transform (JPEG 2000 ICT).

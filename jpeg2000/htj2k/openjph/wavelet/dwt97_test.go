@@ -186,6 +186,17 @@ func TestConversionFunctions(t *testing.T) {
 	})
 }
 
+func TestFloat32LiftingOperationsRoundBeforeAddition(t *testing.T) {
+	// This pair cancels to zero when multiplication is rounded to float32
+	// before the addition. A fused multiply-add produces a non-zero result.
+	oneBelow := math.Float32frombits(0x3f7fffff)
+	oneAbove := math.Float32frombits(0x3f800001)
+	got := float32Add(-1, float32Mul(oneAbove, oneBelow))
+	if got != 0 {
+		t.Fatalf("stepwise float32 result = %08x, want zero", math.Float32bits(got))
+	}
+}
+
 // Benchmark97_1D benchmarks 1D forward transform
 func Benchmark97_1D(b *testing.B) {
 	sizes := []int{64, 256, 1024}
