@@ -257,6 +257,20 @@ params.ProgressionOrder = 2 // RPCL — resolution-first progression
 params.AppendLosslessLayer = true
 ```
 
+### HTJ2K
+
+HTJ2K uses the DICOM registry adapter and a separate OpenJPH-aligned Go
+engine. Importing the package registers all three HTJ2K transfer syntaxes:
+
+```go
+import _ "github.com/cocosip/go-dicom-codecs/jpeg2000/htj2k" // DICOM UIDs .201-.203
+```
+
+To construct an adapter directly, use `htj2k.NewLosslessCodec()`,
+`htj2k.NewLosslessRPCLCodec()`, or `htj2k.NewCodec(quality)`. The lossy codec
+accepts a quality from 1 to 100 (80 by default); `htj2k.Parameters` also
+exposes code-block dimensions and the number of wavelet decomposition levels.
+
 ## Codec Details
 
 ### JPEG Baseline
@@ -346,6 +360,27 @@ params.AppendLosslessLayer = true
   - Region of Interest (ROI): rectangle, multiple regions, bitmap mask
   - Multi-component transforms (Part 2 MCT/MCC/MCO markers)
   - Custom precinct sizes and code-block dimensions
+- **Status**: ✅ Production ready
+
+### HTJ2K (High-Throughput JPEG 2000)
+- **UIDs**:
+  - `.201`: HTJ2K Lossless
+  - `.202`: HTJ2K Lossless with RPCL progression
+  - `.203`: HTJ2K lossy
+- **Engine**: Independent pure-Go engine aligned with OpenJPH and
+  ISO/IEC 15444-15 / ITU-T T.814
+- **Wavelet**: Reversible 5/3 for lossless transfer syntaxes; irreversible
+  9/7 for `.203` lossy encoding
+- **Pixel data**: Mono, RGB, and YBR inputs; 8-bit and 16-bit, signed and
+  unsigned coverage in the committed interoperability bundle
+- **Encoding controls**: Lossy quality (1-100; default 80), code-block width
+  and height (default 64x64), and 0-6 wavelet decomposition levels (default 5)
+- **Progression**: `.202` forwards the configured LRCP, RLCP, RPCL, PCRL, or
+  CPRL progression order; `.201` and `.203` use the OpenJPH-aligned RPCL
+  default
+- **Interoperability**: The committed `fo-dicom.Codecs` fixture bundle verifies
+  exact per-frame codestreams and four-way decoded raw-pixel equality for all
+  three transfer syntaxes
 - **Status**: ✅ Production ready
 
 ### RLE Lossless
