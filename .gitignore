@@ -390,8 +390,5 @@ testdata/output/
 .claude/
 tools/*
 !tools/fo-dicom-reference-generator
-.codex-go-cache/
-.gocache/
 artifacts/
 .cache/
-.tmp/

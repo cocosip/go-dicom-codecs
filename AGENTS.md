@@ -24,3 +24,6 @@ Tests use Go's built-in `testing` package. Name files with `_test.go` and test f
 ## Commit & Pull Request Guidelines
 
 Recent history uses short conventional-style subjects, often with emoji prefixes, such as `fix: ...`, `style: ...`, `build(deps): ...`, and `ci(release): ...`. Keep commits scoped and imperative. Pull requests should describe the codec behavior changed, list verification commands run, and call out compatibility risks, especially for DICOM transfer syntax registration, lossy/lossless output, or performance-sensitive paths. Include benchmark output when touching hot encode/decode loops.
+
+## Cache Directory
+- The `.cache` directory is used for project build and package caching, and is already added to `.gitignore`. During testing and debugging, relevant caches can be configured under this directory. No additional cache directories should be created.
