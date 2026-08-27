@@ -19,8 +19,10 @@ type EncodeParams struct {
 	Width      int
 	Height     int
 	Components int
-	BitDepth   int
-	IsSigned   bool
+	BitDepth   int // Codestream sample precision
+	// InputBitsAllocated is the byte-aligned container width of each input sample.
+	InputBitsAllocated int
+	IsSigned           bool
 
 	// Tile parameters
 	TileWidth  int // 0 means single tile (entire image)
@@ -115,6 +117,7 @@ func DefaultEncodeParams(width, height, components, bitDepth int, isSigned bool)
 		Height:              height,
 		Components:          components,
 		BitDepth:            bitDepth,
+		InputBitsAllocated:  ((bitDepth + 7) / 8) * 8,
 		IsSigned:            isSigned,
 		TileWidth:           0, // Single tile
 		TileHeight:          0, // Single tile
@@ -291,6 +294,12 @@ func (e *Encoder) validateParams() error {
 	if p.BitDepth < 1 || p.BitDepth > 16 {
 		return fmt.Errorf("invalid bit depth: %d (must be 1-16)", p.BitDepth)
 	}
+	if p.InputBitsAllocated != 8 && p.InputBitsAllocated != 16 {
+		return fmt.Errorf("invalid input bits allocated: %d (must be 8 or 16)", p.InputBitsAllocated)
+	}
+	if p.BitDepth > p.InputBitsAllocated {
+		return fmt.Errorf("invalid bit depth %d for %d-bit input container", p.BitDepth, p.InputBitsAllocated)
+	}
 
 	if p.NumLevels < 0 || p.NumLevels > 6 {
 		return fmt.Errorf("invalid decomposition levels: %d (must be 0-6)", p.NumLevels)
@@ -330,7 +339,7 @@ func (e *Encoder) validateParams() error {
 func (e *Encoder) convertPixelData(pixelData []byte) error {
 	p := e.params
 	numPixels := p.Width * p.Height
-	expectedBytes := numPixels * p.Components * ((p.BitDepth + 7) / 8)
+	expectedBytes := numPixels * p.Components * (p.InputBitsAllocated / 8)
 
 	if len(pixelData) < expectedBytes {
 		return fmt.Errorf("insufficient pixel data: got %d bytes, need %d", len(pixelData), expectedBytes)
@@ -342,16 +351,14 @@ func (e *Encoder) convertPixelData(pixelData []byte) error {
 		e.data[i] = make([]int32, numPixels)
 	}
 
-	// Convert based on bit depth
-	if p.BitDepth <= 8 {
+	// Convert based on the input container width. BitDepth remains the
+	// codestream precision and controls masking and sign extension.
+	if p.InputBitsAllocated == 8 {
 		// 8-bit data
 		for i := 0; i < numPixels; i++ {
 			for c := 0; c < p.Components; c++ {
-				val := int32(pixelData[i*p.Components+c])
-				if p.IsSigned && val >= 128 {
-					val -= 256
-				}
-				e.data[c][i] = val
+				raw := int32(pixelData[i*p.Components+c])
+				e.data[c][i] = normalizeInputSample(raw, p.BitDepth, p.IsSigned)
 			}
 		}
 	} else {
@@ -362,17 +369,23 @@ func (e *Encoder) convertPixelData(pixelData []byte) error {
 				for x := 0; x < p.Width; x++ {
 					i := y*p.Width + x
 					idx := i * 2
-					val := int32(pixelData[idx]) | (int32(pixelData[idx+1]) << 8)
-					if p.IsSigned && val >= (1<<(p.BitDepth-1)) {
-						val -= (1 << p.BitDepth)
-					}
-					e.data[c][i] = val
+					raw := int32(pixelData[idx]) | (int32(pixelData[idx+1]) << 8)
+					e.data[c][i] = normalizeInputSample(raw, p.BitDepth, p.IsSigned)
 				}
 			}
 		}
 	}
 
 	return nil
+}
+
+func normalizeInputSample(raw int32, bitDepth int, isSigned bool) int32 {
+	rangeSize := int32(1 << bitDepth)
+	value := raw & (rangeSize - 1)
+	if isSigned && value >= rangeSize/2 {
+		value -= rangeSize
+	}
+	return value
 }
 
 // buildCodestream builds the JPEG 2000 codestream
@@ -1984,7 +1997,7 @@ func (e *Encoder) writeTilesWithGlobalRateDistortion(buf *bytes.Buffer, tileWidt
 	}
 
 	if e.params.NumLayers > 1 || e.params.TargetRatio > 0 {
-		origBytes := e.params.Width * e.params.Height * e.params.Components * ((e.params.BitDepth + 7) / 8)
+		origBytes := e.params.Width * e.params.Height * e.params.Components * (e.params.InputBitsAllocated / 8)
 		e.applyRateDistortionGlobal(allBlocks, packetEncs, origBytes, numTiles)
 	}
 
@@ -2275,7 +2288,7 @@ func (e *Encoder) encodeTilePackets(tileData [][]int32, width, height int) []t2.
 
 	// Apply rate-distortion optimized allocation (PCRD) if layered or TargetRatio is requested.
 	if e.params.NumLayers > 1 || e.params.TargetRatio > 0 {
-		origBytes := e.params.Width * e.params.Height * e.params.Components * ((e.params.BitDepth + 7) / 8)
+		origBytes := e.params.Width * e.params.Height * e.params.Components * (e.params.InputBitsAllocated / 8)
 		e.applyRateDistortionGlobal(allBlocks, []*t2.PacketEncoder{packetEnc}, origBytes, 1)
 	}
 

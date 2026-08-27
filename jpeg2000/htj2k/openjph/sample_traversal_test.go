@@ -67,6 +67,58 @@ func TestConvertPixelDataMatchesOpenJPHWrapperTraversal(t *testing.T) {
 	}
 }
 
+func TestConvertPixelDataUsesStoredPrecisionInside16BitContainer(t *testing.T) {
+	tests := []struct {
+		name     string
+		isSigned bool
+		input    []byte
+		want     []int32
+	}{
+		{
+			name:  "unsigned ignores unused high bits",
+			input: []byte{0x23, 0xf1, 0xff, 0x0f},
+			want:  []int32{0x0123, 0x0fff},
+		},
+		{
+			name:     "signed extends bit 11 after masking",
+			isSigned: true,
+			input:    []byte{0xff, 0xff, 0x00, 0xf8},
+			want:     []int32{-1, -2048},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := DefaultEncodeParams(2, 1, 1, 12, tt.isSigned)
+			encoder := NewEncoder(params)
+			if err := encoder.convertPixelData(tt.input); err != nil {
+				t.Fatalf("convertPixelData() error = %v", err)
+			}
+			if !reflect.DeepEqual(encoder.data[0], tt.want) {
+				t.Fatalf("convertPixelData() = %v, want %v", encoder.data[0], tt.want)
+			}
+		})
+	}
+}
+
+func TestDefaultEncodeParamsDerivesInputContainerWidth(t *testing.T) {
+	tests := []struct {
+		bitDepth int
+		want     int
+	}{
+		{bitDepth: 8, want: 8},
+		{bitDepth: 12, want: 16},
+		{bitDepth: 16, want: 16},
+	}
+
+	for _, tt := range tests {
+		params := DefaultEncodeParams(1, 1, 1, tt.bitDepth, false)
+		if params.InputBitsAllocated != tt.want {
+			t.Errorf("bitDepth=%d: InputBitsAllocated = %d, want %d", tt.bitDepth, params.InputBitsAllocated, tt.want)
+		}
+	}
+}
+
 func TestUsesColorTransformMatchesFoDicomComponentRule(t *testing.T) {
 	for _, components := range []int{1, 2, 3} {
 		params := DefaultEncodeParams(2, 1, components, 8, false)

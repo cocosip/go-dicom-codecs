@@ -95,6 +95,9 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	if frameInfo == nil {
 		return fmt.Errorf("failed to get frame info from source pixel data")
 	}
+	if err := validateHTJ2KEncodeFrameInfo(frameInfo); err != nil {
+		return err
+	}
 
 	// Get encoding parameters
 	var htj2kParams *Parameters
@@ -194,14 +197,36 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	return nil
 }
 
+func validateHTJ2KEncodeFrameInfo(frameInfo *imagetypes.FrameInfo) error {
+	if frameInfo.BitsAllocated != 8 && frameInfo.BitsAllocated != 16 {
+		return fmt.Errorf("invalid HTJ2K pixel metadata: BitsAllocated must be 8 or 16, got %d", frameInfo.BitsAllocated)
+	}
+	if frameInfo.BitsStored < 1 || frameInfo.BitsStored > frameInfo.BitsAllocated {
+		return fmt.Errorf(
+			"invalid HTJ2K pixel metadata: BitsStored must be between 1 and BitsAllocated, got BitsStored=%d BitsAllocated=%d",
+			frameInfo.BitsStored,
+			frameInfo.BitsAllocated,
+		)
+	}
+	if frameInfo.HighBit != frameInfo.BitsStored-1 {
+		return fmt.Errorf(
+			"invalid HTJ2K pixel metadata: HighBit must equal BitsStored - 1, got HighBit=%d BitsStored=%d",
+			frameInfo.HighBit,
+			frameInfo.BitsStored,
+		)
+	}
+	return nil
+}
+
 func openJPHEncodeParams(frameInfo *imagetypes.FrameInfo, params *Parameters, lossless, explicitProgression bool) *openjph.EncodeParams {
 	encParams := openjph.DefaultEncodeParams(
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsAllocated),
+		int(frameInfo.BitsStored),
 		frameInfo.PixelRepresentation != 0,
 	)
+	encParams.InputBitsAllocated = int(frameInfo.BitsAllocated)
 	encParams.EnableMCT = frameInfo.SamplesPerPixel > 1
 	maxLevels := calculateMaxLevels(int(frameInfo.Width), int(frameInfo.Height))
 	if params.NumLevels > maxLevels {

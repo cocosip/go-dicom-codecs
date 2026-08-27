@@ -106,7 +106,52 @@ func TestCodecEncodeRejectsOutputThatIsNotSmallerThanSource(t *testing.T) {
 	}
 }
 
-func TestOpenJPHEncodeParamsMatchFoDicomFrameMapping(t *testing.T) {
+func TestCodecEncodeRejectsInvalidPixelBitMetadata(t *testing.T) {
+	tests := []struct {
+		name string
+		info *imagetypes.FrameInfo
+		want string
+	}{
+		{
+			name: "zero bits stored",
+			info: &imagetypes.FrameInfo{BitsAllocated: 16, BitsStored: 0, HighBit: 0},
+			want: "BitsStored must be between 1 and BitsAllocated",
+		},
+		{
+			name: "bits stored exceeds container",
+			info: &imagetypes.FrameInfo{BitsAllocated: 8, BitsStored: 12, HighBit: 11},
+			want: "BitsStored must be between 1 and BitsAllocated",
+		},
+		{
+			name: "high bit does not identify stored precision",
+			info: &imagetypes.FrameInfo{BitsAllocated: 16, BitsStored: 12, HighBit: 12},
+			want: "HighBit must equal BitsStored - 1",
+		},
+		{
+			name: "unsupported input container",
+			info: &imagetypes.FrameInfo{BitsAllocated: 12, BitsStored: 12, HighBit: 11},
+			want: "BitsAllocated must be 8 or 16",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.info.Width = 1
+			tt.info.Height = 1
+			tt.info.SamplesPerPixel = 1
+			tt.info.PhotometricInterpretation = photometricMonochrome2
+			source := codecHelpers.NewTestPixelData(tt.info)
+			destination := codecHelpers.NewTestPixelData(tt.info)
+
+			err := NewLosslessCodec().Encode(source, destination, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Encode() error = %v, want error containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestOpenJPHEncodeParamsSeparateStoredPrecisionFromAllocatedContainer(t *testing.T) {
 	tests := []struct {
 		name        string
 		info        *imagetypes.FrameInfo
@@ -116,9 +161,9 @@ func TestOpenJPHEncodeParamsMatchFoDicomFrameMapping(t *testing.T) {
 		wantQuality int
 	}{
 		{
-			name: "signed 16-bit mono lossless",
+			name: "signed 12-bit mono in 16-bit container",
 			info: &imagetypes.FrameInfo{
-				Width: 17, Height: 9, BitsAllocated: 16,
+				Width: 17, Height: 9, BitsAllocated: 16, BitsStored: 12, HighBit: 11,
 				SamplesPerPixel: 1, PixelRepresentation: 1,
 			},
 			params:   NewHTJ2KLosslessParameters(),
@@ -128,7 +173,7 @@ func TestOpenJPHEncodeParamsMatchFoDicomFrameMapping(t *testing.T) {
 		{
 			name: "unsigned 8-bit two-component lossy",
 			info: &imagetypes.FrameInfo{
-				Width: 17, Height: 9, BitsAllocated: 8,
+				Width: 17, Height: 9, BitsAllocated: 8, BitsStored: 8, HighBit: 7,
 				SamplesPerPixel: 2, PixelRepresentation: 0,
 			},
 			params: func() *Parameters {
@@ -145,9 +190,11 @@ func TestOpenJPHEncodeParamsMatchFoDicomFrameMapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := openJPHEncodeParams(tt.info, tt.params, tt.lossless, false)
 			if got.Width != 17 || got.Height != 9 || got.Components != int(tt.info.SamplesPerPixel) ||
-				got.BitDepth != int(tt.info.BitsAllocated) || got.IsSigned != (tt.info.PixelRepresentation != 0) {
-				t.Fatalf("frame mapping = %+v, want width=17 height=9 components=%d bitDepth=%d signed=%v",
-					got, tt.info.SamplesPerPixel, tt.info.BitsAllocated, tt.info.PixelRepresentation != 0)
+				got.BitDepth != int(tt.info.BitsStored) || got.InputBitsAllocated != int(tt.info.BitsAllocated) ||
+				got.IsSigned != (tt.info.PixelRepresentation != 0) {
+				t.Fatalf("frame mapping = %+v, want width=17 height=9 components=%d bitDepth=%d inputBitsAllocated=%d signed=%v",
+					got, tt.info.SamplesPerPixel, tt.info.BitsStored, tt.info.BitsAllocated,
+					tt.info.PixelRepresentation != 0)
 			}
 			if got.EnableMCT != tt.wantMCT || got.Lossless != tt.lossless {
 				t.Fatalf("mode mapping: MCT=%v lossless=%v, want %v %v",

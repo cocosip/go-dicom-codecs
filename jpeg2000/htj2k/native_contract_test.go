@@ -12,19 +12,19 @@ import (
 )
 
 const (
-	nativeHTJ2KLosslessCapability = uint16(0x000A)
-	nativeHTJ2KLossyCapability    = uint16(0x002A)
+	stored12HTJ2KLosslessCapability = uint16(0x0006)
+	stored12HTJ2KLossyCapability    = uint16(0x0026)
 )
 
-func TestHTJ2KNativeHeaderContractUsesAllocatedPrecisionAndCapabilities(t *testing.T) {
+func TestHTJ2KNativeHeaderContractUsesStoredPrecisionAndCapabilities(t *testing.T) {
 	tests := []struct {
 		name       string
 		codec      *Codec
 		capability uint16
 	}{
-		{name: "201 lossless", codec: NewLosslessCodec(), capability: nativeHTJ2KLosslessCapability},
-		{name: "202 lossless rpcl", codec: NewLosslessRPCLCodec(), capability: nativeHTJ2KLosslessCapability},
-		{name: "203 lossy", codec: NewCodec(80), capability: nativeHTJ2KLossyCapability},
+		{name: "201 lossless", codec: NewLosslessCodec(), capability: stored12HTJ2KLosslessCapability},
+		{name: "202 lossless rpcl", codec: NewLosslessRPCLCodec(), capability: stored12HTJ2KLosslessCapability},
+		{name: "203 lossy", codec: NewCodec(80), capability: stored12HTJ2KLossyCapability},
 	}
 
 	for _, tt := range tests {
@@ -34,8 +34,8 @@ func TestHTJ2KNativeHeaderContractUsesAllocatedPrecisionAndCapabilities(t *testi
 			if err != nil {
 				t.Fatalf("parse encoded codestream: %v", err)
 			}
-			if got := cs.SIZ.Components[0].BitDepth(); got != 16 {
-				t.Fatalf("SIZ precision = %d, want BitsAllocated 16 used by fo-dicom Native", got)
+			if got := cs.SIZ.Components[0].BitDepth(); got != 12 {
+				t.Fatalf("SIZ precision = %d, want BitsStored 12", got)
 			}
 			if got := nativeCAPCapability(t, encoded); got != tt.capability {
 				t.Fatalf("CAP capability = 0x%04X, want Native 0x%04X", got, tt.capability)
@@ -56,17 +56,17 @@ func TestHTJ2KNativeQCDContract(t *testing.T) {
 		{
 			name:  "201 lossless",
 			codec: NewLosslessCodec(),
-			want:  []byte{0x20, 0x88, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x88, 0x88, 0x88},
+			want:  []byte{0x20, 0x68, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x68, 0x68, 0x68},
 		},
 		{
 			name:  "202 lossless rpcl",
 			codec: NewLosslessRPCLCodec(),
-			want:  []byte{0x20, 0x88, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x88, 0x88, 0x88},
+			want:  []byte{0x20, 0x68, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x70, 0x68, 0x68, 0x68},
 		},
 		{
 			name:  "203 lossy",
 			codec: NewCodec(80),
-			want:  []byte{0x22, 0xB7, 0x18, 0xB6, 0xEA, 0xB6, 0xEA, 0xB6, 0xBC, 0xAF, 0x00, 0xAF, 0x00, 0xAE, 0xE2, 0xA7, 0x4C, 0xA7, 0x4C, 0xA7, 0x64, 0x90, 0x03, 0x90, 0x03, 0x90, 0x46, 0x97, 0xD2, 0x97, 0xD2, 0x97, 0x61},
+			want:  []byte{0x22, 0x97, 0x18, 0x96, 0xEA, 0x96, 0xEA, 0x96, 0xBC, 0x8F, 0x00, 0x8F, 0x00, 0x8E, 0xE2, 0x87, 0x4C, 0x87, 0x4C, 0x87, 0x64, 0x70, 0x03, 0x70, 0x03, 0x70, 0x46, 0x77, 0xD2, 0x77, 0xD2, 0x77, 0x61},
 		},
 	}
 
@@ -81,7 +81,7 @@ func TestHTJ2KNativeQCDContract(t *testing.T) {
 
 func TestHTJ2KNativeRCTQCDContract(t *testing.T) {
 	encoded := encodeNativeContractRGBFrame(t, NewLosslessCodec())
-	want := []byte{0x20, 0x90, 0x98, 0x98, 0x98, 0x98, 0x98, 0x98, 0x98, 0x98, 0x98, 0x98, 0x98, 0x98, 0x90, 0x90, 0x90}
+	want := []byte{0x20, 0x70, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x70, 0x70, 0x70}
 	if got := markerPayload(t, encoded, 0x5C); !bytes.Equal(got, want) {
 		t.Fatalf("RGB RCT QCD payload = % X, want Native % X", got, want)
 	}
@@ -89,7 +89,7 @@ func TestHTJ2KNativeRCTQCDContract(t *testing.T) {
 
 func TestHTJ2KNativeLossyRGBCAPUsesQCDMAGB(t *testing.T) {
 	encoded := encodeNativeContractRGBFrame(t, NewCodec(80))
-	if got, want := nativeCAPCapability(t, encoded), uint16(0x002A); got != want {
+	if got, want := nativeCAPCapability(t, encoded), uint16(0x0026); got != want {
 		t.Fatalf("lossy RGB CAP capability = 0x%04X, want OpenJPH MAGB-derived 0x%04X", got, want)
 	}
 }
