@@ -16,7 +16,7 @@ func TestCodecEncodeReportsYCbCrOutputMetadata(t *testing.T) {
 		HighBit:                   7,
 		SamplesPerPixel:           3,
 		PlanarConfiguration:       0,
-		PhotometricInterpretation: "RGB",
+		PhotometricInterpretation: photometricRGB,
 	}
 	source := newMetadataPixelData(info, false)
 	if err := source.AddFrame(make([]byte, 8*8*3)); err != nil {
@@ -41,7 +41,7 @@ func TestCodecDecodeReportsRGBInterleavedOutputMetadata(t *testing.T) {
 		HighBit:                   7,
 		SamplesPerPixel:           3,
 		PlanarConfiguration:       0,
-		PhotometricInterpretation: "RGB",
+		PhotometricInterpretation: photometricRGB,
 	}
 	source := newMetadataPixelData(encodeInfo, false)
 	if err := source.AddFrame(make([]byte, 8*8*3)); err != nil {
@@ -61,7 +61,7 @@ func TestCodecDecodeReportsRGBInterleavedOutputMetadata(t *testing.T) {
 		t.Fatalf("Decode() error = %v", err)
 	}
 	got := decoded.GetFrameInfo()
-	if got.PhotometricInterpretation != "RGB" {
+	if got.PhotometricInterpretation != photometricRGB {
 		t.Fatalf("decoded PhotometricInterpretation = %q, want RGB", got.PhotometricInterpretation)
 	}
 	if got.PlanarConfiguration != 0 {
