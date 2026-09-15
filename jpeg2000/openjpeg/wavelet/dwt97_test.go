@@ -89,17 +89,25 @@ func openJPEGEncodeStep2Float32(data []float32, flStart, fwStart, end, m int32, 
 	if imax > 0 {
 		fw := fwStart
 		fl := flStart
-		data[fw-1] += (data[fl] + data[fw]) * c
+		data[fw-1] = referenceFloat32Add(data[fw-1], referenceFloat32Mul(referenceFloat32Add(data[fl], data[fw]), c))
 		fw += 2
 		for i := int32(1); i < imax; i++ {
-			data[fw-1] += (data[fw-2] + data[fw]) * c
+			data[fw-1] = referenceFloat32Add(data[fw-1], referenceFloat32Mul(referenceFloat32Add(data[fw-2], data[fw]), c))
 			fw += 2
 		}
 	}
 	if m < end {
 		fw := fwStart + 2*m
-		data[fw-1] += (2 * data[fw-2]) * c
+		data[fw-1] = referenceFloat32Add(data[fw-1], referenceFloat32Mul(referenceFloat32Mul(2, data[fw-2]), c))
 	}
+}
+
+func referenceFloat32Add(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a + b))
+}
+
+func referenceFloat32Mul(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a * b))
 }
 
 func openJPEGEncodeStep1CombinedFloat32(data []float32, itersC1, itersC2 int32, c1, c2 float32) {
@@ -270,16 +278,16 @@ func openJPEGDecodeStep2Float32(data []float32, flStart, fwStart, end, m int32, 
 	if imax > 0 {
 		fw := fwStart
 		fl := flStart
-		data[fw-1] += (data[fl] + data[fw]) * c
+		data[fw-1] = referenceFloat32Add(data[fw-1], referenceFloat32Mul(referenceFloat32Add(data[fl], data[fw]), c))
 		fw += 2
 		for i := int32(1); i < imax; i++ {
-			data[fw-1] += (data[fw-2] + data[fw]) * c
+			data[fw-1] = referenceFloat32Add(data[fw-1], referenceFloat32Mul(referenceFloat32Add(data[fw-2], data[fw]), c))
 			fw += 2
 		}
 	}
 	if m < end {
 		fw := fwStart + 2*m
-		data[fw-1] += (2 * data[fw-2]) * c
+		data[fw-1] = referenceFloat32Add(data[fw-1], referenceFloat32Mul(referenceFloat32Mul(2, data[fw-2]), c))
 	}
 }
 
