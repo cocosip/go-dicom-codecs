@@ -1,6 +1,8 @@
 // Package wavelet implements discrete wavelet transforms used by JPEG 2000.
 package wavelet
 
+import "math"
+
 // DWT97 implements the 9/7 irreversible wavelet transform
 // Used for lossy JPEG 2000 compression
 // Reference: ISO/IEC 15444-1:2019 Annex F
@@ -101,18 +103,18 @@ func encodeStep2_97Float32(data []float32, flStart, fwStart int32, end, m int32,
 	if imax > 0 {
 		fw := fwStart
 		fl := flStart
-		data[fw-1] += (data[fl] + data[fw]) * c32
+		data[fw-1] = float32Add(data[fw-1], float32Mul(float32Add(data[fl], data[fw]), c32))
 		fw += 2
 
 		for i := int32(1); i < imax; i++ {
-			data[fw-1] += (data[fw-2] + data[fw]) * c32
+			data[fw-1] = float32Add(data[fw-1], float32Mul(float32Add(data[fw-2], data[fw]), c32))
 			fw += 2
 		}
 	}
 
 	if m < end {
 		fw := fwStart + 2*m
-		data[fw-1] += (2 * data[fw-2]) * c32
+		data[fw-1] = float32Add(data[fw-1], float32Mul(float32Mul(2, data[fw-2]), c32))
 	}
 }
 
@@ -124,15 +126,15 @@ func encodeStep1Combined97Float32(data []float32, itersC1, itersC2 int32, c1, c2
 	var i int32
 	fw := int32(0)
 	for i = 0; i < itersCommon; i++ {
-		data[fw] *= c1f
-		data[fw+1] *= c2f
+		data[fw] = float32Mul(data[fw], c1f)
+		data[fw+1] = float32Mul(data[fw+1], c2f)
 		fw += 2
 	}
 
 	if i < itersC1 {
-		data[fw] *= c1f
+		data[fw] = float32Mul(data[fw], c1f)
 	} else if i < itersC2 {
-		data[fw+1] *= c2f
+		data[fw+1] = float32Mul(data[fw+1], c2f)
 	}
 }
 
@@ -164,6 +166,16 @@ func min32(a, b int32) int32 {
 		return a
 	}
 	return b
+}
+
+// These helpers preserve OpenJPEG's scalar float32 operation boundaries.
+// The bit round-trip prevents ARM64 compilers from fusing adjacent operations.
+func float32Add(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a + b))
+}
+
+func float32Mul(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a * b))
 }
 
 // Inverse97_1D performs the inverse 9/7 wavelet transform on a 1D signal
@@ -262,7 +274,7 @@ func Forward97_2DWithParity(data []float64, width, height, stride int, evenRow, 
 
 func decodeStep1OpenJPEG97Float32(data []float32, start, end int32, c float32) {
 	for i := int32(0); i < end; i++ {
-		data[start+2*i] *= c
+		data[start+2*i] = float32Mul(data[start+2*i], c)
 	}
 }
 
@@ -271,18 +283,18 @@ func decodeStep2OpenJPEG97Float32(data []float32, flStart, fwStart, end, m int32
 	if imax > 0 {
 		fw := fwStart
 		fl := flStart
-		data[fw-1] += (data[fl] + data[fw]) * c
+		data[fw-1] = float32Add(data[fw-1], float32Mul(float32Add(data[fl], data[fw]), c))
 		fw += 2
 
 		for i := int32(1); i < imax; i++ {
-			data[fw-1] += (data[fw-2] + data[fw]) * c
+			data[fw-1] = float32Add(data[fw-1], float32Mul(float32Add(data[fw-2], data[fw]), c))
 			fw += 2
 		}
 	}
 
 	if m < end {
 		fw := fwStart + 2*m
-		data[fw-1] += (2 * data[fw-2]) * c
+		data[fw-1] = float32Add(data[fw-1], float32Mul(float32Mul(2, data[fw-2]), c))
 	}
 }
 

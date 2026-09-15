@@ -19,6 +19,17 @@ func TestForward97_1DUsesOpenJPEGFloat32Arithmetic(t *testing.T) {
 	}
 }
 
+func TestFloat32LiftingOperationsRoundBeforeAddition(t *testing.T) {
+	// Multiplication rounds to one before addition. A fused multiply-add keeps
+	// the extra precision and produces a non-zero result on ARM64.
+	oneBelow := math.Float32frombits(0x3f7fffff)
+	oneAbove := math.Float32frombits(0x3f800001)
+	got := float32Add(-1, float32Mul(oneAbove, oneBelow))
+	if got != 0 {
+		t.Fatalf("stepwise float32 result = %08x, want zero", math.Float32bits(got))
+	}
+}
+
 func openJPEGForward97_1DFloat32(input []float64, even bool) []float32 {
 	data := make([]float32, len(input))
 	for i, v := range input {

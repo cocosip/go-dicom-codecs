@@ -1,10 +1,20 @@
 package openjpeg
 
 import (
+	"math"
 	"testing"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
 )
+
+func TestIrreversibleMCTOperationsRoundBeforeAddition(t *testing.T) {
+	oneBelow := math.Float32frombits(0x3f7fffff)
+	oneAbove := math.Float32frombits(0x3f800001)
+	got := float32Add(-1, float32Mul(oneAbove, oneBelow))
+	if got != 0 {
+		t.Fatalf("stepwise float32 result = %08x, want zero", math.Float32bits(got))
+	}
+}
 
 // TestDefaultEncodeParams tests default encoding parameters
 func TestDefaultEncodeParams(t *testing.T) {

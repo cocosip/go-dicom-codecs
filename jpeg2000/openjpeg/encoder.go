@@ -268,11 +268,19 @@ func (e *Encoder) applyOpenJPEGIrreversibleMCT() [][]float32 {
 	b := wavelet.ConvertInt32ToFloat32(e.data[2])
 	for i := range r {
 		red, green, blue := r[i], g[i], b[i]
-		r[i] = (red*0.299 + green*0.587) + blue*0.114
-		g[i] = (red*-0.16875 + green*-0.331260) + blue*0.5
-		b[i] = (red*0.5 + green*-0.41869) + blue*-0.08131
+		r[i] = float32Add(float32Add(float32Mul(red, 0.299), float32Mul(green, 0.587)), float32Mul(blue, 0.114))
+		g[i] = float32Add(float32Add(float32Mul(red, -0.16875), float32Mul(green, -0.331260)), float32Mul(blue, 0.5))
+		b[i] = float32Add(float32Add(float32Mul(red, 0.5), float32Mul(green, -0.41869)), float32Mul(blue, -0.08131))
 	}
 	return [][]float32{r, g, b}
+}
+
+func float32Add(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a + b))
+}
+
+func float32Mul(a, b float32) float32 {
+	return math.Float32frombits(math.Float32bits(a * b))
 }
 
 // validateParams validates encoding parameters
