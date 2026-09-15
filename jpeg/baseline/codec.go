@@ -78,7 +78,9 @@ func (c *Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newP
 	}
 	quality := baselineParams.Quality
 	if frameInfo.SamplesPerPixel == 3 && frameInfo.PhotometricInterpretation.Value == pixel.RGBPhotometric.Value {
-		setOutputColorMetadata(newPixelData, pixel.YbrFull422, pixel.InterleavedPlanar)
+		if err := setOutputColorMetadata(newPixelData, frameInfo, pixel.YbrFull422, pixel.InterleavedPlanar); err != nil {
+			return fmt.Errorf("failed to set encoded frame metadata: %w", err)
+		}
 	}
 
 	// Process all frames
@@ -157,7 +159,9 @@ func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newP
 			return fmt.Errorf("decoded height (%d) doesn't match expected (%d)", height, frameInfo.Height)
 		}
 		if components == 3 {
-			setOutputColorMetadata(newPixelData, pixel.RGBPhotometric, pixel.InterleavedPlanar)
+			if err := setOutputColorMetadata(newPixelData, frameInfo, pixel.RGBPhotometric, pixel.InterleavedPlanar); err != nil {
+				return fmt.Errorf("failed to set decoded frame metadata: %w", err)
+			}
 		}
 
 		// Add decoded frame to destination
@@ -169,18 +173,10 @@ func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newP
 	return nil
 }
 
-func setOutputColorMetadata(pixelData codec.FrameSink, photometric *pixel.PhotometricInterpretation, planarConfiguration pixel.PlanarConfiguration) {
-	info := pixelDataFrameInfo(pixelData)
+func setOutputColorMetadata(pixelData codec.FrameSink, info codec.FrameInfo, photometric *pixel.PhotometricInterpretation, planarConfiguration pixel.PlanarConfiguration) error {
 	info.PhotometricInterpretation = *photometric
 	info.PlanarConfiguration = planarConfiguration
-	_ = pixelData.SetFrameInfo(info)
-}
-
-func pixelDataFrameInfo(pixelData codec.FrameSink) codec.FrameInfo {
-	if source, ok := pixelData.(codec.FrameSource); ok {
-		return source.FrameInfo()
-	}
-	return codec.FrameInfo{}
+	return pixelData.SetFrameInfo(info)
 }
 
 // RegisterBaselineCodec registers the JPEG Baseline codec with the global registry

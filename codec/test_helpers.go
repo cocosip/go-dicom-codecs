@@ -2,6 +2,7 @@ package codec
 
 import (
 	"context"
+	"fmt"
 
 	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/pixel"
@@ -22,9 +23,12 @@ func NewTestPixelData(frameInfo *dicomcodec.FrameInfo) *TestPixelData {
 }
 
 // Frame returns the pixel data for the specified frame (0-indexed).
-func (p *TestPixelData) Frame(_ context.Context, frameIndex int) ([]byte, error) {
+func (p *TestPixelData) Frame(ctx context.Context, frameIndex int) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if frameIndex < 0 || frameIndex >= len(p.frames) {
-		return nil, context.Canceled
+		return nil, fmt.Errorf("frame index %d out of range [0, %d)", frameIndex, len(p.frames))
 	}
 	return p.frames[frameIndex], nil
 }
