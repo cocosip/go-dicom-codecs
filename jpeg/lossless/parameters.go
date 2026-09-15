@@ -34,6 +34,19 @@ func NewLosslessParameters() *JPEGLosslessParameters {
 	}
 }
 
+// Clone returns an independent copy of the parameters.
+func (p *JPEGLosslessParameters) Clone() codec.Parameters {
+	if p == nil {
+		return (*JPEGLosslessParameters)(nil)
+	}
+	clone := *p
+	clone.params = make(map[string]interface{}, len(p.params))
+	for key, value := range p.params {
+		clone.params[key] = value
+	}
+	return &clone
+}
+
 // GetParameter retrieves a parameter by name (implements codec.Parameters)
 func (p *JPEGLosslessParameters) GetParameter(name string) interface{} {
 	switch name {

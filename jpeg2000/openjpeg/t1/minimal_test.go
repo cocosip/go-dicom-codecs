@@ -121,4 +121,3 @@ func TestMinimalTwoCoeffs(t *testing.T) {
 		}
 	}
 }
-

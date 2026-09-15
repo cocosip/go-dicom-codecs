@@ -4,7 +4,10 @@ import (
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+
+	"context"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 	"testing"
 )
 
@@ -17,16 +20,14 @@ func TestLosslessCodecWithMCTBindingsWritesMarkers(t *testing.T) {
 		src[2*i+1] = byte((i * 3) % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           uint16(w),
-		Height:          uint16(h),
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: uint16(comps),
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  uint16(w),
+		Height: uint16(h),
+
+		SamplesPerPixel: uint16(comps), BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	pdIn := codecHelpers.NewTestPixelData(frameInfo)
-	if err := pdIn.AddFrame(src); err != nil {
+	if err := pdIn.AddFrame(context.Background(), src); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 	pdOut := codecHelpers.NewTestPixelData(frameInfo)
@@ -35,11 +36,11 @@ func TestLosslessCodecWithMCTBindingsWritesMarkers(t *testing.T) {
 	b := jpeg2000.MCTBindingParams{AssocType: 2, ComponentIDs: []uint16{0, 1}, Matrix: [][]float64{{1, 0}, {0, 1}}, Inverse: [][]float64{{1, 0}, {0, 1}}, Offsets: []int32{5, -5}, ElementType: 1, MCOPrecision: 1}
 	params.SetParameter("mctBindings", []jpeg2000.MCTBindingParams{b})
 	c := NewCodec()
-	if err := c.Encode(pdIn, pdOut, params); err != nil {
+	if err := c.Encode(context.Background(), pdIn, pdOut, params); err != nil {
 		t.Fatalf("encode failed: %v", err)
 	}
 
-	encodedData, _ := pdOut.GetFrame(0)
+	encodedData, _ := pdOut.Frame(context.Background(), 0)
 	cs, err := codestream.NewParser(encodedData).Parse()
 	if err != nil {
 		t.Fatalf("parse failed: %v", err)

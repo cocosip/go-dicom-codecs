@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"context"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/htj2k/openjph/t2"
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
-	"github.com/cocosip/go-dicom/pkg/imaging"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixeldata"
 )
 
 func TestAcceptedRangeNativeDecodeMatchesFoDicom(t *testing.T) {
@@ -109,7 +110,7 @@ func assertAcceptedRangeSavedGoDicom(
 	if got := parsed.TransferSyntax.UID().UID(); got != syntax.TransferSyntaxUID {
 		t.Fatalf("saved Go DICOM transfer syntax = %s, want %s", got, syntax.TransferSyntaxUID)
 	}
-	pixels, err := imaging.CreatePixelData(parsed.Dataset)
+	pixels, err := pixeldata.FromDataset(parsed.Dataset)
 	if err != nil {
 		t.Fatalf("read saved Go DICOM pixel data: %v", err)
 	}
@@ -117,7 +118,7 @@ func assertAcceptedRangeSavedGoDicom(
 		t.Fatalf("saved Go DICOM frame count = %d, want %d", pixels.FrameCount(), fixture.Image.FrameCount)
 	}
 	for frame := 0; frame < fixture.Image.FrameCount; frame++ {
-		got, err := pixels.GetFrame(frame)
+		got, err := pixels.Frame(context.Background(), frame)
 		if err != nil {
 			t.Fatalf("read saved Go DICOM frame %d: %v", frame, err)
 		}

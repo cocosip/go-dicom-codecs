@@ -1,33 +1,36 @@
 package codec
 
 import (
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	"context"
+
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
-// TestPixelData is a simple implementation of imagetypes.PixelData for testing
+// TestPixelData is a simple implementation of codec.FrameSource and codec.FrameSink for testing.
 type TestPixelData struct {
 	frames    [][]byte
-	frameInfo *imagetypes.FrameInfo
+	frameInfo dicomcodec.FrameInfo
 }
 
 // NewTestPixelData creates a new TestPixelData with the given frame info
-func NewTestPixelData(frameInfo *imagetypes.FrameInfo) *TestPixelData {
+func NewTestPixelData(frameInfo *dicomcodec.FrameInfo) *TestPixelData {
 	return &TestPixelData{
 		frames:    make([][]byte, 0),
-		frameInfo: frameInfo,
+		frameInfo: *frameInfo,
 	}
 }
 
-// GetFrame returns the pixel data for the specified frame (0-indexed)
-func (p *TestPixelData) GetFrame(frameIndex int) ([]byte, error) {
+// Frame returns the pixel data for the specified frame (0-indexed).
+func (p *TestPixelData) Frame(_ context.Context, frameIndex int) ([]byte, error) {
 	if frameIndex < 0 || frameIndex >= len(p.frames) {
-		return nil, nil
+		return nil, context.Canceled
 	}
 	return p.frames[frameIndex], nil
 }
 
 // AddFrame appends a new frame to the pixel data
-func (p *TestPixelData) AddFrame(frameData []byte) error {
+func (p *TestPixelData) AddFrame(_ context.Context, frameData []byte) error {
 	p.frames = append(p.frames, frameData)
 	return nil
 }
@@ -37,12 +40,47 @@ func (p *TestPixelData) FrameCount() int {
 	return len(p.frames)
 }
 
-// GetFrameInfo returns frame metadata for codec operations
-func (p *TestPixelData) GetFrameInfo() *imagetypes.FrameInfo {
+// FrameInfo returns frame metadata for codec operations.
+func (p *TestPixelData) FrameInfo() dicomcodec.FrameInfo {
 	return p.frameInfo
 }
 
-// IsEncapsulated returns true if pixel data is encapsulated (compressed)
-func (p *TestPixelData) IsEncapsulated() bool {
+// SetFrameInfo updates frame metadata.
+func (p *TestPixelData) SetFrameInfo(info dicomcodec.FrameInfo) error {
+	if err := info.Validate(); err != nil {
+		return err
+	}
+	p.frameInfo = info
+	return nil
+}
+
+// Encapsulated returns true if pixel data is encapsulated (compressed).
+func (p *TestPixelData) Encapsulated() bool {
 	return false
+}
+
+var _ dicomcodec.FrameSource = (*TestPixelData)(nil)
+var _ dicomcodec.FrameSink = (*TestPixelData)(nil)
+
+// NewFrameInfo creates valid frame metadata for codec tests.
+func NewFrameInfo(width, height, bitsAllocated, bitsStored, highBit, samples uint16, signed bool, planar pixel.PlanarConfiguration, photometric *pixel.PhotometricInterpretation) dicomcodec.FrameInfo {
+	return dicomcodec.FrameInfo{
+		Width:           width,
+		Height:          height,
+		BitDepth:        *pixel.NewBitDepth(bitsAllocated, bitsStored, highBit, signed),
+		SamplesPerPixel: samples,
+		PixelRepresentation: func() pixel.Representation {
+			if signed {
+				return pixel.SignedPixels
+			}
+			return pixel.UnsignedPixels
+		}(),
+		PlanarConfiguration: planar,
+		PhotometricInterpretation: func() pixel.PhotometricInterpretation {
+			if photometric == nil {
+				return pixel.PhotometricInterpretation{}
+			}
+			return *photometric
+		}(),
+	}
 }

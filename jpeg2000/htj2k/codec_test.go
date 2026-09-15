@@ -1,14 +1,15 @@
 package htj2k
 
 import (
-	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 const (
@@ -97,20 +98,15 @@ func TestHTJ2KCodec_EncodeDecodeRoundTrip(t *testing.T) {
 		}
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(testData); err != nil {
+	if err := src.AddFrame(context.Background(), testData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -120,24 +116,24 @@ func TestHTJ2KCodec_EncodeDecodeRoundTrip(t *testing.T) {
 
 		// Encode
 		encoded := codecHelpers.NewTestPixelData(frameInfo)
-		err := htj2kCodec.Encode(src, encoded, nil)
+		err := htj2kCodec.Encode(context.Background(), src, encoded, nil)
 		if err != nil {
 			t.Fatalf("Encode failed: %v", err)
 		}
 
-		srcData, _ := src.GetFrame(0)
-		encodedData, _ := encoded.GetFrame(0)
+		srcData, _ := src.Frame(context.Background(), 0)
+		encodedData, _ := encoded.Frame(context.Background(), 0)
 		t.Logf("Original size: %d bytes, Encoded size: %d bytes", len(srcData), len(encodedData))
 
 		// Decode
 		decoded := codecHelpers.NewTestPixelData(frameInfo)
-		err = htj2kCodec.Decode(encoded, decoded, nil)
+		err = htj2kCodec.Decode(context.Background(), encoded, decoded, nil)
 		if err != nil {
 			t.Fatalf("Decode failed: %v", err)
 		}
 
 		// Verify dimensions
-		decodedInfo := decoded.GetFrameInfo()
+		decodedInfo := decoded.FrameInfo()
 		if decodedInfo.Width != frameInfo.Width {
 			t.Errorf("Width mismatch: got %d, want %d", decodedInfo.Width, frameInfo.Width)
 		}
@@ -147,7 +143,7 @@ func TestHTJ2KCodec_EncodeDecodeRoundTrip(t *testing.T) {
 
 		// For HTJ2K, we expect some differences due to the simplified implementation
 		// Just verify that decode succeeded and produced data
-		decodedData, _ := decoded.GetFrame(0)
+		decodedData, _ := decoded.Frame(context.Background(), 0)
 		if len(decodedData) == 0 {
 			t.Error("Decoded data is empty")
 		}
@@ -159,92 +155,73 @@ func TestHTJ2KCodec_EncodeDecodeRoundTrip(t *testing.T) {
 
 		// Encode
 		encoded := codecHelpers.NewTestPixelData(frameInfo)
-		err := htj2kCodec.Encode(src, encoded, nil)
+		err := htj2kCodec.Encode(context.Background(), src, encoded, nil)
 		if err != nil {
 			t.Fatalf("Encode failed: %v", err)
 		}
 
-		srcData, _ := src.GetFrame(0)
-		encodedData, _ := encoded.GetFrame(0)
+		srcData, _ := src.Frame(context.Background(), 0)
+		encodedData, _ := encoded.Frame(context.Background(), 0)
 		t.Logf("Original size: %d bytes, Encoded size: %d bytes", len(srcData), len(encodedData))
 
 		// Decode
 		decoded := codecHelpers.NewTestPixelData(frameInfo)
-		err = htj2kCodec.Decode(encoded, decoded, nil)
+		err = htj2kCodec.Decode(context.Background(), encoded, decoded, nil)
 		if err != nil {
 			t.Fatalf("Decode failed: %v", err)
 		}
 
 		// Verify that decode produced data
-		decodedData, _ := decoded.GetFrame(0)
+		decodedData, _ := decoded.Frame(context.Background(), 0)
 		if len(decodedData) == 0 {
 			t.Error("Decoded data is empty")
 		}
 	})
 }
 
-func TestHTJ2KCodec_TypedNilParametersUseDefaults(t *testing.T) {
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     64,
-		Height:                    64,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PhotometricInterpretation: photometricMonochrome2,
+func TestHTJ2KCodec_TypedNilParametersAreRejected(t *testing.T) {
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	source := codecHelpers.NewTestPixelData(frameInfo)
 	pixels := make([]byte, int(frameInfo.Width)*int(frameInfo.Height))
 	for index := range pixels {
 		pixels[index] = byte((index / int(frameInfo.Width)) + (index % int(frameInfo.Width)))
 	}
-	if err := source.AddFrame(pixels); err != nil {
+	if err := source.AddFrame(context.Background(), pixels); err != nil {
 		t.Fatal(err)
 	}
 
 	var parameters *Parameters
 	htj2kCodec := NewLosslessCodec()
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	if err := htj2kCodec.Encode(source, encoded, parameters); err != nil {
-		t.Fatalf("Encode() with typed-nil parameters error = %v", err)
-	}
-	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	if err := htj2kCodec.Decode(encoded, decoded, parameters); err != nil {
-		t.Fatalf("Decode() with typed-nil parameters error = %v", err)
-	}
-	got, err := decoded.GetFrame(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, pixels) {
-		t.Fatal("typed-nil parameter round trip changed lossless pixels")
+	if err := htj2kCodec.Encode(context.Background(), source, encoded, parameters); !errors.Is(err, codec.ErrInvalidParameters) {
+		t.Fatalf("Encode() with typed-nil parameters error = %v, want codec.ErrInvalidParameters", err)
 	}
 }
 
 func TestHTJ2KCodec_InvalidInput(t *testing.T) {
 	htj2kCodec := NewLosslessCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     8,
-		Height:                    8,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  8,
+		Height: 8,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	emptyPixelData := codecHelpers.NewTestPixelData(frameInfo)
-	if err := emptyPixelData.AddFrame([]byte{}); err != nil {
+	if err := emptyPixelData.AddFrame(context.Background(), []byte{}); err != nil {
 		t.Fatalf("failed to add empty frame: %v", err)
 	}
 
 	tests := []struct {
 		name    string
-		src     imagetypes.PixelData
-		dst     imagetypes.PixelData
+		src     codec.FrameSource
+		dst     codec.FrameSink
 		wantErr bool
 	}{
 		{
@@ -275,7 +252,7 @@ func TestHTJ2KCodec_InvalidInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := htj2kCodec.Encode(tt.src, tt.dst, nil)
+			err := htj2kCodec.Encode(context.Background(), tt.src, tt.dst, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Encode() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -285,17 +262,14 @@ func TestHTJ2KCodec_InvalidInput(t *testing.T) {
 
 func TestHTJ2KCodec_DecodeRejectsNoFrames(t *testing.T) {
 	htj2kCodec := NewLosslessCodec()
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           8,
-		Height:          8,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  8,
+		Height: 8,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 
-	err := htj2kCodec.Decode(
-		codecHelpers.NewTestPixelData(frameInfo),
+	err := htj2kCodec.Decode(context.Background(), codecHelpers.NewTestPixelData(frameInfo),
 		codecHelpers.NewTestPixelData(frameInfo),
 		nil,
 	)
@@ -305,7 +279,7 @@ func TestHTJ2KCodec_DecodeRejectsNoFrames(t *testing.T) {
 }
 
 func TestHTJ2KCodec_Registration(t *testing.T) {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 
 	tests := []struct {
 		name           string
@@ -331,12 +305,12 @@ func TestHTJ2KCodec_Registration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			codec, found := registry.GetCodec(tt.transferSyntax)
+			codec, found := registry.Lookup(tt.transferSyntax)
 			if found != tt.wantFound {
-				t.Errorf("GetCodec() found = %v, want %v", found, tt.wantFound)
+				t.Errorf("Lookup() found = %v, want %v", found, tt.wantFound)
 			}
 			if found && codec == nil {
-				t.Error("GetCodec() returned nil codec")
+				t.Error("Lookup() returned nil codec")
 			}
 		})
 	}

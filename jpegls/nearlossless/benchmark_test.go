@@ -3,38 +3,34 @@ package nearlossless
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
-func benchmarkPixelData(b *testing.B, width, height uint16) (*codecHelpers.TestPixelData, *imagetypes.FrameInfo, int64) {
+func benchmarkPixelData(b *testing.B, width, height uint16) (*codecHelpers.TestPixelData, *codec.FrameInfo, int64) {
 	b.Helper()
 
 	pixels := make([]byte, int(width)*int(height))
 	for i := range pixels {
 		pixels[i] = byte(i*31 + i/257)
 	}
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixels); err != nil {
+	if err := src.AddFrame(context.Background(), pixels); err != nil {
 		b.Fatal(err)
 	}
 	return src, frameInfo, int64(len(pixels))
 }
 
 func benchmarkParameters() codec.Parameters {
-	parameters := codec.NewBaseParameters()
-	parameters.SetParameter("near", 3)
-	return parameters
+	return NewNearLosslessParameters().WithNEAR(3)
 }
 
 func BenchmarkCodecEncode(b *testing.B) {
@@ -47,7 +43,7 @@ func BenchmarkCodecEncode(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dst := codecHelpers.NewTestPixelData(frameInfo)
-		if err := c.Encode(src, dst, parameters); err != nil {
+		if err := c.Encode(context.Background(), src, dst, parameters); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -58,7 +54,7 @@ func BenchmarkCodecDecode(b *testing.B) {
 	c := NewJPEGLSNearLosslessCodec(3)
 	parameters := benchmarkParameters()
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	if err := c.Encode(src, encoded, parameters); err != nil {
+	if err := c.Encode(context.Background(), src, encoded, parameters); err != nil {
 		b.Fatal(err)
 	}
 
@@ -67,7 +63,7 @@ func BenchmarkCodecDecode(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dst := codecHelpers.NewTestPixelData(frameInfo)
-		if err := c.Decode(encoded, dst, parameters); err != nil {
+		if err := c.Decode(context.Background(), encoded, dst, parameters); err != nil {
 			b.Fatal(err)
 		}
 	}

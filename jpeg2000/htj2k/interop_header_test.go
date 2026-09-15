@@ -3,9 +3,11 @@ package htj2k
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func TestHTJ2KHeaderMatchesOpenJPHSignals(t *testing.T) {
@@ -41,26 +43,21 @@ func TestHTJ2KHeaderMatchesOpenJPHSignals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     128,
-				Height:                    128,
-				BitsAllocated:             8,
-				BitsStored:                8,
-				HighBit:                   7,
-				SamplesPerPixel:           1,
-				PixelRepresentation:       0,
-				PlanarConfiguration:       0,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &dicomcodec.FrameInfo{
+				Width:  128,
+				Height: 128,
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 			src := codecHelpers.NewTestPixelData(frameInfo)
-			if err := src.AddFrame(makeGradient(128 * 128)); err != nil {
+			if err := src.AddFrame(context.Background(), makeGradient(128*128)); err != nil {
 				t.Fatalf("AddFrame failed: %v", err)
 			}
 			dst := codecHelpers.NewTestPixelData(frameInfo)
-			if err := tt.codec.Encode(src, dst, nil); err != nil {
+			if err := tt.codec.Encode(context.Background(), src, dst, nil); err != nil {
 				t.Fatalf("Encode failed: %v", err)
 			}
-			encoded, err := dst.GetFrame(0)
+			encoded, err := dst.Frame(context.Background(), 0)
 			if err != nil {
 				t.Fatalf("GetFrame failed: %v", err)
 			}

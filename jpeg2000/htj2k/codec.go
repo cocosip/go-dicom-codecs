@@ -2,12 +2,13 @@
 package htj2k
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/htj2k/openjph"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 var _ codec.Codec = (*Codec)(nil)
@@ -74,8 +75,8 @@ func (c *Codec) TransferSyntax() *transfer.Syntax {
 	return c.transferSyntax
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *Codec) GetDefaultParameters() codec.Parameters {
+// DefaultParameters returns the default codec parameters.
+func (c *Codec) DefaultParameters() codec.Parameters {
 	if c.lossless {
 		return NewHTJ2KLosslessParameters()
 	}
@@ -84,63 +85,33 @@ func (c *Codec) GetDefaultParameters() codec.Parameters {
 	return params
 }
 
+func (c *Codec) resolveParameters(parameters codec.Parameters) (*Parameters, error) {
+	if parameters == nil {
+		return c.DefaultParameters().(*Parameters), nil
+	}
+	params, ok := parameters.(*Parameters)
+	if !ok || params == nil {
+		return nil, fmt.Errorf("%w: HTJ2K requires *Parameters, got %T", codec.ErrInvalidParameters, parameters)
+	}
+	return params, nil
+}
+
 // Encode encodes pixel data to HTJ2K format
-func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 	if err := validateHTJ2KEncodeFrameInfo(frameInfo); err != nil {
 		return err
 	}
 
 	// Get encoding parameters
-	var htj2kParams *Parameters
-	if parameters != nil {
-		// Try to use typed parameters if provided
-		if hp, ok := parameters.(*Parameters); ok {
-			htj2kParams = hp
-		} else {
-			// Fallback: create from generic parameters
-			htj2kParams = NewHTJ2KParameters()
-			if q := parameters.GetParameter(paramQuality); q != nil {
-				if qInt, ok := q.(int); ok {
-					htj2kParams.Quality = qInt
-				}
-			}
-			if bw := parameters.GetParameter(paramBlockWidth); bw != nil {
-				if bwInt, ok := bw.(int); ok {
-					htj2kParams.BlockWidth = bwInt
-				}
-			}
-			if bh := parameters.GetParameter(paramBlockHeight); bh != nil {
-				if bhInt, ok := bh.(int); ok {
-					htj2kParams.BlockHeight = bhInt
-				}
-			}
-			if nl := parameters.GetParameter(paramNumLevels); nl != nil {
-				if nlInt, ok := nl.(int); ok {
-					htj2kParams.NumLevels = nlInt
-				}
-			}
-			if progression := parameters.GetParameter(paramProgressionOrder); progression != nil {
-				htj2kParams.SetParameter(paramProgressionOrder, progression)
-			}
-		}
-	}
-	if htj2kParams == nil {
-		// Use defaults
-		if c.lossless {
-			htj2kParams = NewHTJ2KLosslessParameters()
-		} else {
-			htj2kParams = NewHTJ2KParameters()
-			htj2kParams.Quality = c.quality
-		}
+	htj2kParams, err := c.resolveParameters(parameters)
+	if err != nil {
+		return err
 	}
 
 	// Validate parameters
@@ -165,7 +136,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -189,7 +160,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Add encoded frame to destination
-		if err := newPixelData.AddFrame(encoded); err != nil {
+		if err := newPixelData.AddFrame(ctx, encoded); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -197,36 +168,36 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	return nil
 }
 
-func validateHTJ2KEncodeFrameInfo(frameInfo *imagetypes.FrameInfo) error {
-	if frameInfo.BitsAllocated != 8 && frameInfo.BitsAllocated != 16 {
-		return fmt.Errorf("invalid HTJ2K pixel metadata: BitsAllocated must be 8 or 16, got %d", frameInfo.BitsAllocated)
+func validateHTJ2KEncodeFrameInfo(frameInfo codec.FrameInfo) error {
+	if frameInfo.BitDepth.BitsAllocated != 8 && frameInfo.BitDepth.BitsAllocated != 16 {
+		return fmt.Errorf("invalid HTJ2K pixel metadata: BitsAllocated must be 8 or 16, got %d", frameInfo.BitDepth.BitsAllocated)
 	}
-	if frameInfo.BitsStored < 1 || frameInfo.BitsStored > frameInfo.BitsAllocated {
+	if frameInfo.BitDepth.BitsStored < 1 || frameInfo.BitDepth.BitsStored > frameInfo.BitDepth.BitsAllocated {
 		return fmt.Errorf(
 			"invalid HTJ2K pixel metadata: BitsStored must be between 1 and BitsAllocated, got BitsStored=%d BitsAllocated=%d",
-			frameInfo.BitsStored,
-			frameInfo.BitsAllocated,
+			frameInfo.BitDepth.BitsStored,
+			frameInfo.BitDepth.BitsAllocated,
 		)
 	}
-	if frameInfo.HighBit != frameInfo.BitsStored-1 {
+	if frameInfo.BitDepth.HighBit != frameInfo.BitDepth.BitsStored-1 {
 		return fmt.Errorf(
 			"invalid HTJ2K pixel metadata: HighBit must equal BitsStored - 1, got HighBit=%d BitsStored=%d",
-			frameInfo.HighBit,
-			frameInfo.BitsStored,
+			frameInfo.BitDepth.HighBit,
+			frameInfo.BitDepth.BitsStored,
 		)
 	}
 	return nil
 }
 
-func openJPHEncodeParams(frameInfo *imagetypes.FrameInfo, params *Parameters, lossless, explicitProgression bool) *openjph.EncodeParams {
+func openJPHEncodeParams(frameInfo codec.FrameInfo, params *Parameters, lossless, explicitProgression bool) *openjph.EncodeParams {
 	encParams := openjph.DefaultEncodeParams(
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsStored),
-		frameInfo.PixelRepresentation != 0,
+		int(frameInfo.BitDepth.BitsStored),
+		frameInfo.PixelRepresentation.IsSigned(),
 	)
-	encParams.InputBitsAllocated = int(frameInfo.BitsAllocated)
+	encParams.InputBitsAllocated = int(frameInfo.BitDepth.BitsAllocated)
 	encParams.EnableMCT = frameInfo.SamplesPerPixel > 1
 	maxLevels := calculateMaxLevels(int(frameInfo.Width), int(frameInfo.Height))
 	if params.NumLevels > maxLevels {
@@ -247,15 +218,15 @@ func openJPHEncodeParams(frameInfo *imagetypes.FrameInfo, params *Parameters, lo
 	return encParams
 }
 
-func prepareFrameForEncode(frameData []byte, frameInfo *imagetypes.FrameInfo) []byte {
+func prepareFrameForEncode(frameData []byte, frameInfo codec.FrameInfo) []byte {
 	var (
 		converted []byte
 		err       error
 	)
-	switch frameInfo.PhotometricInterpretation {
-	case "YBR_FULL":
+	switch frameInfo.PhotometricInterpretation.Value {
+	case pixel.YbrFull.Value:
 		converted, err = convertFoDicomYBRFullToRGB(frameData)
-	case "YBR_FULL_422":
+	case pixel.YbrFull422.Value:
 		converted, err = convertFoDicomYBRFull422ToRGB(frameData, int(frameInfo.Width))
 	default:
 		return frameData
@@ -330,35 +301,15 @@ func foDicomYBRByte(value float64) byte {
 }
 
 // Decode decodes HTJ2K data to uncompressed pixel data
-func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get decoding parameters
-	var htj2kParams *Parameters
-	if parameters != nil {
-		// Try to use typed parameters if provided
-		if hp, ok := parameters.(*Parameters); ok {
-			htj2kParams = hp
-		} else {
-			// Fallback: create from generic parameters
-			htj2kParams = NewHTJ2KParameters()
-			if bw := parameters.GetParameter(paramBlockWidth); bw != nil {
-				if bwInt, ok := bw.(int); ok {
-					htj2kParams.BlockWidth = bwInt
-				}
-			}
-			if bh := parameters.GetParameter(paramBlockHeight); bh != nil {
-				if bhInt, ok := bh.(int); ok {
-					htj2kParams.BlockHeight = bhInt
-				}
-			}
-		}
-	}
-	if htj2kParams == nil {
-		// Use defaults
-		htj2kParams = NewHTJ2KParameters()
+	htj2kParams, err := c.resolveParameters(parameters)
+	if err != nil {
+		return err
 	}
 
 	// Validate parameters
@@ -373,7 +324,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -391,7 +342,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(decoder.GetPixelData()); err != nil {
+		if err := newPixelData.AddFrame(ctx, decoder.GetPixelData()); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -401,19 +352,25 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 // RegisterHTJ2KCodecs registers all HTJ2K codecs with the global registry
 func RegisterHTJ2KCodecs() {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 
 	// Register HTJ2K Lossless
 	losslessCodec := NewLosslessCodec()
-	registry.RegisterCodec(transfer.HTJ2KLossless, losslessCodec)
+	if _, err := registry.Replace(losslessCodec); err != nil {
+		panic(err)
+	}
 
 	// Register HTJ2K Lossless RPCL
 	losslessRPCLCodec := NewLosslessRPCLCodec()
-	registry.RegisterCodec(transfer.HTJ2KLosslessRPCL, losslessRPCLCodec)
+	if _, err := registry.Replace(losslessRPCLCodec); err != nil {
+		panic(err)
+	}
 
 	// Register HTJ2K Lossy
 	lossyCodec := NewCodec(80) // Default quality: 80
-	registry.RegisterCodec(transfer.HTJ2K, lossyCodec)
+	if _, err := registry.Replace(lossyCodec); err != nil {
+		panic(err)
+	}
 }
 
 func init() {

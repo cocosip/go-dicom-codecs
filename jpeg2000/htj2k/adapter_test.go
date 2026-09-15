@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
-
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func TestPrepareFrameForEncodeMatchesFoDicomYBRConversion(t *testing.T) {
@@ -64,11 +65,10 @@ func TestPrepareFrameForEncodeMatchesFoDicomYBRConversion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := &imagetypes.FrameInfo{
-				Width:                     tt.width,
-				PhotometricInterpretation: tt.photometric,
+			info := &dicomcodec.FrameInfo{
+				Width: tt.width, BitDepth: pixel.BitDepth{BitsAllocated: 0, BitsStored: 0, HighBit: 0, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(tt.photometric),
 			}
-			got := prepareFrameForEncode(tt.input, info)
+			got := prepareFrameForEncode(tt.input, *info)
 			if !bytes.Equal(got, tt.want) {
 				t.Fatalf("prepareFrameForEncode() = %v, want %v", got, tt.want)
 			}
@@ -77,17 +77,14 @@ func TestPrepareFrameForEncodeMatchesFoDicomYBRConversion(t *testing.T) {
 }
 
 func TestCodecEncodeRejectsOutputThatIsNotSmallerThanSource(t *testing.T) {
-	info := &imagetypes.FrameInfo{
-		Width:                     4,
-		Height:                    4,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PhotometricInterpretation: "MONOCHROME2",
+	info := &dicomcodec.FrameInfo{
+		Width:  4,
+		Height: 4,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	source := codecHelpers.NewTestPixelData(info)
-	if err := source.AddFrame([]byte{
+	if err := source.AddFrame(context.Background(), []byte{
 		10, 20, 30, 40,
 		15, 25, 35, 45,
 		12, 22, 32, 42,
@@ -97,7 +94,7 @@ func TestCodecEncodeRejectsOutputThatIsNotSmallerThanSource(t *testing.T) {
 	}
 	destination := codecHelpers.NewTestPixelData(info)
 
-	err := NewLosslessCodec().Encode(source, destination, nil)
+	err := NewLosslessCodec().Encode(context.Background(), source, destination, nil)
 	if err == nil || !strings.Contains(err.Error(), "not smaller") {
 		t.Fatalf("Encode() error = %v, want output-not-smaller error", err)
 	}
@@ -109,27 +106,27 @@ func TestCodecEncodeRejectsOutputThatIsNotSmallerThanSource(t *testing.T) {
 func TestCodecEncodeRejectsInvalidPixelBitMetadata(t *testing.T) {
 	tests := []struct {
 		name string
-		info *imagetypes.FrameInfo
+		info *dicomcodec.FrameInfo
 		want string
 	}{
 		{
 			name: "zero bits stored",
-			info: &imagetypes.FrameInfo{BitsAllocated: 16, BitsStored: 0, HighBit: 0},
+			info: &dicomcodec.FrameInfo{BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 0, HighBit: 0, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2")},
 			want: "BitsStored must be between 1 and BitsAllocated",
 		},
 		{
 			name: "bits stored exceeds container",
-			info: &imagetypes.FrameInfo{BitsAllocated: 8, BitsStored: 12, HighBit: 11},
+			info: &dicomcodec.FrameInfo{BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2")},
 			want: "BitsStored must be between 1 and BitsAllocated",
 		},
 		{
 			name: "high bit does not identify stored precision",
-			info: &imagetypes.FrameInfo{BitsAllocated: 16, BitsStored: 12, HighBit: 12},
+			info: &dicomcodec.FrameInfo{BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 12, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2")},
 			want: "HighBit must equal BitsStored - 1",
 		},
 		{
 			name: "unsupported input container",
-			info: &imagetypes.FrameInfo{BitsAllocated: 12, BitsStored: 12, HighBit: 11},
+			info: &dicomcodec.FrameInfo{BitDepth: pixel.BitDepth{BitsAllocated: 12, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2")},
 			want: "BitsAllocated must be 8 or 16",
 		},
 	}
@@ -139,11 +136,11 @@ func TestCodecEncodeRejectsInvalidPixelBitMetadata(t *testing.T) {
 			tt.info.Width = 1
 			tt.info.Height = 1
 			tt.info.SamplesPerPixel = 1
-			tt.info.PhotometricInterpretation = photometricMonochrome2
+			tt.info.PhotometricInterpretation = *pixel.Monochrome2
 			source := codecHelpers.NewTestPixelData(tt.info)
 			destination := codecHelpers.NewTestPixelData(tt.info)
 
-			err := NewLosslessCodec().Encode(source, destination, nil)
+			err := NewLosslessCodec().Encode(context.Background(), source, destination, nil)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("Encode() error = %v, want error containing %q", err, tt.want)
 			}
@@ -154,7 +151,7 @@ func TestCodecEncodeRejectsInvalidPixelBitMetadata(t *testing.T) {
 func TestOpenJPHEncodeParamsSeparateStoredPrecisionFromAllocatedContainer(t *testing.T) {
 	tests := []struct {
 		name        string
-		info        *imagetypes.FrameInfo
+		info        *dicomcodec.FrameInfo
 		params      *Parameters
 		lossless    bool
 		wantMCT     bool
@@ -162,9 +159,9 @@ func TestOpenJPHEncodeParamsSeparateStoredPrecisionFromAllocatedContainer(t *tes
 	}{
 		{
 			name: "signed 12-bit mono in 16-bit container",
-			info: &imagetypes.FrameInfo{
-				Width: 17, Height: 9, BitsAllocated: 16, BitsStored: 12, HighBit: 11,
-				SamplesPerPixel: 1, PixelRepresentation: 1,
+			info: &dicomcodec.FrameInfo{
+				Width: 17, Height: 9,
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(1).IsSigned()}, PixelRepresentation: pixel.Representation(1), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 			},
 			params:   NewHTJ2KLosslessParameters(),
 			lossless: true,
@@ -172,9 +169,9 @@ func TestOpenJPHEncodeParamsSeparateStoredPrecisionFromAllocatedContainer(t *tes
 		},
 		{
 			name: "unsigned 8-bit two-component lossy",
-			info: &imagetypes.FrameInfo{
-				Width: 17, Height: 9, BitsAllocated: 8, BitsStored: 8, HighBit: 7,
-				SamplesPerPixel: 2, PixelRepresentation: 0,
+			info: &dicomcodec.FrameInfo{
+				Width: 17, Height: 9,
+				SamplesPerPixel: 2, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 			},
 			params: func() *Parameters {
 				p := NewHTJ2KParameters()
@@ -188,12 +185,12 @@ func TestOpenJPHEncodeParamsSeparateStoredPrecisionFromAllocatedContainer(t *tes
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := openJPHEncodeParams(tt.info, tt.params, tt.lossless, false)
+			got := openJPHEncodeParams(*tt.info, tt.params, tt.lossless, false)
 			if got.Width != 17 || got.Height != 9 || got.Components != int(tt.info.SamplesPerPixel) ||
-				got.BitDepth != int(tt.info.BitsStored) || got.InputBitsAllocated != int(tt.info.BitsAllocated) ||
+				got.BitDepth != int(tt.info.BitDepth.BitsStored) || got.InputBitsAllocated != int(tt.info.BitDepth.BitsAllocated) ||
 				got.IsSigned != (tt.info.PixelRepresentation != 0) {
 				t.Fatalf("frame mapping = %+v, want width=17 height=9 components=%d bitDepth=%d inputBitsAllocated=%d signed=%v",
-					got, tt.info.SamplesPerPixel, tt.info.BitsStored, tt.info.BitsAllocated,
+					got, tt.info.SamplesPerPixel, tt.info.BitDepth.BitsStored, tt.info.BitDepth.BitsAllocated,
 					tt.info.PixelRepresentation != 0)
 			}
 			if got.EnableMCT != tt.wantMCT || got.Lossless != tt.lossless {

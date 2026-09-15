@@ -3,10 +3,11 @@ package lossless14sv1
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func TestLosslessSV1CodecInterface(t *testing.T) {
@@ -45,20 +46,15 @@ func TestLosslessSV1CodecEncodeDecode(t *testing.T) {
 	}
 
 	// Create source PixelData using test helper
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -69,13 +65,13 @@ func TestLosslessSV1CodecEncodeDecode(t *testing.T) {
 	sv1Codec := NewLosslessSV1Codec()
 
 	// Encode
-	err := sv1Codec.Encode(src, encoded, nil)
+	err := sv1Codec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
 	// Get encoded frame data
-	encodedFrame, err := encoded.GetFrame(0)
+	encodedFrame, err := encoded.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Failed to get encoded frame: %v", err)
 	}
@@ -93,13 +89,13 @@ func TestLosslessSV1CodecEncodeDecode(t *testing.T) {
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
 
 	// Decode
-	err = sv1Codec.Decode(encoded, decoded, nil)
+	err = sv1Codec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
 
 	// Get decoded frame data
-	decodedFrame, err := decoded.GetFrame(0)
+	decodedFrame, err := decoded.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Failed to get decoded frame: %v", err)
 	}
@@ -142,20 +138,15 @@ func TestLosslessSV1CodecRGB(t *testing.T) {
 	}
 
 	// Create source PixelData using test helper
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           uint16(components),
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricRGB,
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: uint16(components), BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -166,13 +157,13 @@ func TestLosslessSV1CodecRGB(t *testing.T) {
 	sv1Codec := NewLosslessSV1Codec()
 
 	// Encode
-	err := sv1Codec.Encode(src, encoded, nil)
+	err := sv1Codec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
 	// Get encoded frame data
-	encodedFrame, err := encoded.GetFrame(0)
+	encodedFrame, err := encoded.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Failed to get encoded frame: %v", err)
 	}
@@ -185,13 +176,13 @@ func TestLosslessSV1CodecRGB(t *testing.T) {
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
 
 	// Decode
-	err = sv1Codec.Decode(encoded, decoded, nil)
+	err = sv1Codec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
 
 	// Get decoded frame data
-	decodedFrame, err := decoded.GetFrame(0)
+	decodedFrame, err := decoded.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Failed to get decoded frame: %v", err)
 	}
@@ -219,8 +210,8 @@ func TestLosslessSV1CodecRegistry(t *testing.T) {
 	RegisterLosslessSV1Codec()
 
 	// Get from global registry
-	registry := codec.GetGlobalRegistry()
-	retrievedCodec, exists := registry.GetCodec(transfer.JPEGLosslessSV1)
+	registry := codec.GlobalRegistry()
+	retrievedCodec, exists := registry.Lookup(transfer.JPEGLosslessSV1)
 	if !exists {
 		t.Fatal("Codec not found in registry")
 	}
@@ -241,37 +232,32 @@ func TestLosslessSV1CodecRegistry(t *testing.T) {
 	}
 
 	// Create source PixelData using test helper
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := retrievedCodec.Encode(src, encoded, nil)
+	err := retrievedCodec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		t.Fatalf("Encode with retrieved codec failed: %v", err)
 	}
 
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = retrievedCodec.Decode(encoded, decoded, nil)
+	err = retrievedCodec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		t.Fatalf("Decode with retrieved codec failed: %v", err)
 	}
 
 	// Verify lossless reconstruction
-	decodedFrame, err := decoded.GetFrame(0)
+	decodedFrame, err := decoded.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Failed to get decoded frame: %v", err)
 	}
@@ -305,20 +291,15 @@ func TestLosslessSV116Bit(t *testing.T) {
 	}
 
 	// Create source PixelData using test helper
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             16,
-		BitsStored:                12,
-		HighBit:                   11,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -327,13 +308,13 @@ func TestLosslessSV116Bit(t *testing.T) {
 	sv1Codec := NewLosslessSV1Codec()
 
 	// Encode
-	err := sv1Codec.Encode(src, encoded, nil)
+	err := sv1Codec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		t.Fatalf("16-bit encode failed: %v", err)
 	}
 
 	// Get encoded frame data
-	encodedFrame, err := encoded.GetFrame(0)
+	encodedFrame, err := encoded.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Failed to get encoded frame: %v", err)
 	}
@@ -343,13 +324,13 @@ func TestLosslessSV116Bit(t *testing.T) {
 
 	// Decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = sv1Codec.Decode(encoded, decoded, nil)
+	err = sv1Codec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		t.Fatalf("16-bit decode failed: %v", err)
 	}
 
 	// Get decoded frame data
-	decodedFrame, err := decoded.GetFrame(0)
+	decodedFrame, err := decoded.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("Failed to get decoded frame: %v", err)
 	}

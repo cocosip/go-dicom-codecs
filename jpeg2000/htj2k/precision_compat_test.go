@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/htj2k/openjph"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func TestCodecDecodeSupportsStoredAndAllocatedPrecisionCodestreams(t *testing.T) {
@@ -34,14 +36,11 @@ func TestCodecDecodeSupportsStoredAndAllocatedPrecisionCodestreams(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			const width, height = 64, 64
 			pixels := makePrecisionTestPixels(width*height, tt.samples)
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     width,
-				Height:                    height,
-				BitsAllocated:             16,
-				BitsStored:                12,
-				HighBit:                   11,
-				SamplesPerPixel:           1,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &dicomcodec.FrameInfo{
+				Width:  width,
+				Height: height,
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 			if tt.signed {
 				frameInfo.PixelRepresentation = 1
@@ -76,14 +75,14 @@ func TestCodecDecodeSupportsStoredAndAllocatedPrecisionCodestreams(t *testing.T)
 					}
 
 					source := codecHelpers.NewTestPixelData(frameInfo)
-					if err := source.AddFrame(encoded); err != nil {
+					if err := source.AddFrame(context.Background(), encoded); err != nil {
 						t.Fatalf("add encoded frame: %v", err)
 					}
 					destination := codecHelpers.NewTestPixelData(frameInfo)
-					if err := NewLosslessCodec().Decode(source, destination, nil); err != nil {
+					if err := NewLosslessCodec().Decode(context.Background(), source, destination, nil); err != nil {
 						t.Fatalf("decode %d-bit compatibility codestream: %v", streamPrecision, err)
 					}
-					decoded, err := destination.GetFrame(0)
+					decoded, err := destination.Frame(context.Background(), 0)
 					if err != nil {
 						t.Fatalf("read decoded frame: %v", err)
 					}

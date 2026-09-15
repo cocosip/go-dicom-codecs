@@ -3,11 +3,13 @@ package htj2k
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
-func benchmarkPixelData(b *testing.B, width, height uint16, bitsAllocated, samplesPerPixel uint16) (*codecHelpers.TestPixelData, *imagetypes.FrameInfo, int64) {
+func benchmarkPixelData(b *testing.B, width, height uint16, bitsAllocated, samplesPerPixel uint16) (*codecHelpers.TestPixelData, *dicomcodec.FrameInfo, int64) {
 	b.Helper()
 
 	bytesPerSample := int(bitsAllocated / 8)
@@ -24,17 +26,14 @@ func benchmarkPixelData(b *testing.B, width, height uint16, bitsAllocated, sampl
 	if samplesPerPixel == 3 {
 		photometric = photometricRGB
 	}
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             bitsAllocated,
-		BitsStored:                bitsAllocated,
-		HighBit:                   bitsAllocated - 1,
-		SamplesPerPixel:           samplesPerPixel,
-		PhotometricInterpretation: photometric,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: samplesPerPixel, BitDepth: pixel.BitDepth{BitsAllocated: bitsAllocated, BitsStored: bitsAllocated, HighBit: bitsAllocated - 1, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometric),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixels); err != nil {
+	if err := src.AddFrame(context.Background(), pixels); err != nil {
 		b.Fatal(err)
 	}
 	return src, frameInfo, int64(len(pixels))
@@ -48,7 +47,7 @@ func benchmarkCodecEncode(b *testing.B, c *Codec, bitsAllocated, samplesPerPixel
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dst := codecHelpers.NewTestPixelData(frameInfo)
-		if err := c.Encode(src, dst, nil); err != nil {
+		if err := c.Encode(context.Background(), src, dst, nil); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -57,17 +56,17 @@ func benchmarkCodecEncode(b *testing.B, c *Codec, bitsAllocated, samplesPerPixel
 func benchmarkCodecDecode(b *testing.B, c *Codec, bitsAllocated, samplesPerPixel uint16) {
 	src, frameInfo, rawBytes := benchmarkPixelData(b, 256, 256, bitsAllocated, samplesPerPixel)
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	if err := c.Encode(src, encoded, nil); err != nil {
+	if err := c.Encode(context.Background(), src, encoded, nil); err != nil {
 		b.Fatal(err)
 	}
-	encodedFrame, err := encoded.GetFrame(0)
+	encodedFrame, err := encoded.Frame(context.Background(), 0)
 	if err != nil {
 		b.Fatal(err)
 	}
 	inputs := make([]*codecHelpers.TestPixelData, b.N)
 	for i := range inputs {
 		input := codecHelpers.NewTestPixelData(frameInfo)
-		if err := input.AddFrame(append([]byte(nil), encodedFrame...)); err != nil {
+		if err := input.AddFrame(context.Background(), append([]byte(nil), encodedFrame...)); err != nil {
 			b.Fatal(err)
 		}
 		inputs[i] = input
@@ -78,7 +77,7 @@ func benchmarkCodecDecode(b *testing.B, c *Codec, bitsAllocated, samplesPerPixel
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dst := codecHelpers.NewTestPixelData(frameInfo)
-		if err := c.Decode(inputs[i], dst, nil); err != nil {
+		if err := c.Decode(context.Background(), inputs[i], dst, nil); err != nil {
 			b.Fatal(err)
 		}
 	}

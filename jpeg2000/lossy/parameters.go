@@ -82,6 +82,21 @@ func NewLossyParameters() *JPEG2000LossyParameters {
 	}
 }
 
+// Clone returns an independent copy of the parameters.
+func (p *JPEG2000LossyParameters) Clone() codec.Parameters {
+	if p == nil {
+		return (*JPEG2000LossyParameters)(nil)
+	}
+	clone := *p
+	clone.RateLevels = append([]int(nil), p.RateLevels...)
+	clone.SubbandSteps = append([]float64(nil), p.SubbandSteps...)
+	clone.params = make(map[string]interface{}, len(p.params))
+	for key, value := range p.params {
+		clone.params[key] = value
+	}
+	return &clone
+}
+
 // GetParameter retrieves a parameter by name (implements codec.Parameters).
 func (p *JPEG2000LossyParameters) GetParameter(name string) interface{} {
 	switch name {

@@ -2,11 +2,11 @@
 package lossless14sv1
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 var _ codec.Codec = (*LosslessSV1Codec)(nil)
@@ -34,22 +34,19 @@ func (c *LosslessSV1Codec) TransferSyntax() *transfer.Syntax {
 	return c.transferSyntax
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *LosslessSV1Codec) GetDefaultParameters() codec.Parameters {
-	return codec.NewBaseParameters()
+// DefaultParameters returns the default codec parameters.
+func (c *LosslessSV1Codec) DefaultParameters() codec.Parameters {
+	return codec.NoParameters{}
 }
 
 // Encode encodes pixel data to JPEG Lossless SV1 format
-func (c *LosslessSV1Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *LosslessSV1Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
@@ -58,7 +55,7 @@ func (c *LosslessSV1Codec) Encode(oldPixelData imagetypes.PixelData, newPixelDat
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -78,14 +75,14 @@ func (c *LosslessSV1Codec) Encode(oldPixelData imagetypes.PixelData, newPixelDat
 			int(frameInfo.Width),
 			int(frameInfo.Height),
 			int(frameInfo.SamplesPerPixel),
-			int(frameInfo.BitsStored),
+			int(frameInfo.BitDepth.BitsStored),
 		)
 		if err != nil {
 			return fmt.Errorf("JPEG Lossless SV1 encode failed for frame %d: %w", frameIndex, err)
 		}
 
 		// Add encoded frame to destination
-		if err := newPixelData.AddFrame(jpegData); err != nil {
+		if err := newPixelData.AddFrame(ctx, jpegData); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -94,16 +91,13 @@ func (c *LosslessSV1Codec) Encode(oldPixelData imagetypes.PixelData, newPixelDat
 }
 
 // Decode decodes JPEG Lossless SV1 data to uncompressed pixel data
-func (c *LosslessSV1Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *LosslessSV1Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
@@ -112,7 +106,7 @@ func (c *LosslessSV1Codec) Decode(oldPixelData imagetypes.PixelData, newPixelDat
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -142,7 +136,7 @@ func (c *LosslessSV1Codec) Decode(oldPixelData imagetypes.PixelData, newPixelDat
 		// No reverse shifting needed - pixel representation is preserved in raw bytes.
 
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(pixelData); err != nil {
+		if err := newPixelData.AddFrame(ctx, pixelData); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -152,9 +146,11 @@ func (c *LosslessSV1Codec) Decode(oldPixelData imagetypes.PixelData, newPixelDat
 
 // RegisterLosslessSV1Codec registers the JPEG Lossless SV1 codec with the global registry
 func RegisterLosslessSV1Codec() {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	losslessSV1Codec := NewLosslessSV1Codec()
-	registry.RegisterCodec(transfer.JPEGLosslessSV1, losslessSV1Codec)
+	if _, err := registry.Replace(losslessSV1Codec); err != nil {
+		panic(err)
+	}
 }
 
 func init() {

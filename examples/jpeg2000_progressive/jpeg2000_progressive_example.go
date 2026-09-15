@@ -8,8 +8,10 @@ import (
 
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 
+	"context"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/lossy"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 const photometricMonochrome2 = "MONOCHROME2"
@@ -42,18 +44,13 @@ func main() {
 
 // basicMultiLayerExample demonstrates basic multi-layer encoding
 func basicMultiLayerExample(pixelData []byte, width, height int) {
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		SamplesPerPixel:           1,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		PixelRepresentation:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:           uint16(width),
+		Height:          uint16(height),
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("   ERROR: AddFrame failed: %v\n", err)
 		return
 	}
@@ -68,15 +65,15 @@ func basicMultiLayerExample(pixelData []byte, width, height int) {
 	encoder := lossy.NewCodecWithRate(85)
 	dst := codecHelpers.NewTestPixelData(frameInfo)
 
-	err := encoder.Encode(src, dst, params)
+	err := encoder.Encode(context.Background(), src, dst, params)
 	if err != nil {
 		fmt.Printf("   ERROR: %v\n", err)
 		return
 	}
 
 	// Report results
-	srcData, _ := src.GetFrame(0)
-	dstData, _ := dst.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	dstData, _ := dst.Frame(context.Background(), 0)
 	ratio := float64(len(srcData)) / float64(len(dstData))
 
 	fmt.Printf("   Image size: %dx%d\n", width, height)
@@ -95,31 +92,26 @@ func basicMultiLayerExample(pixelData []byte, width, height int) {
 
 	// Decode (all layers)
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = encoder.Decode(dst, decoded, nil)
+	err = encoder.Decode(context.Background(), dst, decoded, nil)
 	if err != nil {
 		fmt.Printf("   Decode ERROR: %v\n", err)
 		return
 	}
 
-	decodedFrameInfo := decoded.GetFrameInfo()
+	decodedFrameInfo := decoded.FrameInfo()
 	fmt.Printf("   Decoded (full quality): %dx%d\n",
 		decodedFrameInfo.Width, decodedFrameInfo.Height)
 }
 
 // multiLayerWithRatioExample combines multi-layer with target ratio
 func multiLayerWithRatioExample(pixelData []byte, width, height int) {
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		SamplesPerPixel:           1,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		PixelRepresentation:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:           uint16(width),
+		Height:          uint16(height),
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("   ERROR: AddFrame failed: %v\n", err)
 		return
 	}
@@ -134,15 +126,15 @@ func multiLayerWithRatioExample(pixelData []byte, width, height int) {
 	encoder := lossy.NewCodecWithRate(80)
 	dst := codecHelpers.NewTestPixelData(frameInfo)
 
-	err := encoder.Encode(src, dst, params)
+	err := encoder.Encode(context.Background(), src, dst, params)
 	if err != nil {
 		fmt.Printf("   ERROR: %v\n", err)
 		return
 	}
 
 	// Report results
-	srcData, _ := src.GetFrame(0)
-	dstData, _ := dst.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	dstData, _ := dst.Frame(context.Background(), 0)
 	targetBytes := len(srcData) / 8
 	actualRatio := float64(len(srcData)) / float64(len(dstData))
 	deviation := (actualRatio - 8.0) / 8.0 * 100
@@ -164,18 +156,13 @@ func multiLayerWithRatioExample(pixelData []byte, width, height int) {
 
 // progressiveDecodingExample simulates progressive decoding
 func progressiveDecodingExample(pixelData []byte, width, height int) {
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		SamplesPerPixel:           1,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		PixelRepresentation:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:           uint16(width),
+		Height:          uint16(height),
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("   ERROR: AddFrame failed: %v\n", err)
 		return
 	}
@@ -189,7 +176,7 @@ func progressiveDecodingExample(pixelData []byte, width, height int) {
 	encoder := lossy.NewCodecWithRate(85)
 	dst := codecHelpers.NewTestPixelData(frameInfo)
 
-	err := encoder.Encode(src, dst, params)
+	err := encoder.Encode(context.Background(), src, dst, params)
 	if err != nil {
 		fmt.Printf("   ERROR: %v\n", err)
 		return
@@ -202,7 +189,7 @@ func progressiveDecodingExample(pixelData []byte, width, height int) {
 	// Note: This is a simulation. Actual layer-by-layer decoding
 	// requires using the lower-level decoder API (t2/tile_decoder.go)
 
-	dstData, _ := dst.GetFrame(0)
+	dstData, _ := dst.Frame(context.Background(), 0)
 	totalBytes := len(dstData)
 	layerSizes := []int{
 		totalBytes / 10,     // Layer 0: ~10% (fast preview)
@@ -240,14 +227,14 @@ func progressiveDecodingExample(pixelData []byte, width, height int) {
 
 	// Full decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = encoder.Decode(dst, decoded, nil)
+	err = encoder.Decode(context.Background(), dst, decoded, nil)
 	if err != nil {
 		fmt.Printf("   Decode ERROR: %v\n", err)
 		return
 	}
 
-	srcData, _ := src.GetFrame(0)
-	decodedData, _ := decoded.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	maxError := calculateMaxError(srcData, decodedData)
 	avgError := calculateAvgError(srcData, decodedData)
 

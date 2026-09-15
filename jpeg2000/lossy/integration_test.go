@@ -3,9 +3,10 @@ package lossy
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 // TestTypeSafeParametersIntegration tests that type-safe parameters work with codec
@@ -18,20 +19,15 @@ func TestTypeSafeParametersIntegration(t *testing.T) {
 		pixelData[i] = byte(i % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -40,13 +36,13 @@ func TestTypeSafeParametersIntegration(t *testing.T) {
 	params := NewLossyParameters().WithRate(95).WithNumLevels(5)
 
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := c.Encode(src, encoded, params)
+	err := c.Encode(context.Background(), src, encoded, params)
 	if err != nil {
 		t.Fatalf("Encode with type-safe parameters failed: %v", err)
 	}
 
 	// Verify encoding worked
-	encodedData, _ := encoded.GetFrame(0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	if len(encodedData) == 0 {
 		t.Fatal("Encoded data is empty")
 	}
@@ -57,13 +53,13 @@ func TestTypeSafeParametersIntegration(t *testing.T) {
 
 	// Decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = c.Decode(encoded, decoded, nil)
+	err = c.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
 
 	// Verify decoding
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	if len(decodedData) != len(pixelData) {
 		t.Errorf("Decoded data length = %d, want %d", len(decodedData), len(pixelData))
 	}
@@ -75,20 +71,15 @@ func TestBackwardCompatibility(t *testing.T) {
 	height := uint16(64)
 	pixelData := make([]byte, int(width)*int(height))
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -100,7 +91,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	params.SetParameter("numLevels", 3)
 
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := c.Encode(src, encoded, params)
+	err := c.Encode(context.Background(), src, encoded, params)
 	if err != nil {
 		t.Fatalf("Encode with string-based parameters failed: %v", err)
 	}
@@ -140,27 +131,19 @@ func TestParametersMixedUsage(t *testing.T) {
 	}
 }
 
-// TestGenericParametersInterface tests using as generic codec.Parameters
-func TestGenericParametersInterface(t *testing.T) {
-	genericParams := codec.Parameters(NewLossyParameters())
-
-	// Can use generic methods
-	genericParams.SetParameter("rate", 95)
-	rate := genericParams.GetParameter("rate")
-
-	if rate != 95 {
-		t.Errorf("Generic rate = %v, want 95", rate)
+// TestParametersImplementCodecContract verifies the v0.8 parameter ownership contract.
+func TestParametersImplementCodecContract(t *testing.T) {
+	parameters := codec.Parameters(NewLossyParameters().WithRate(95))
+	if err := parameters.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
 	}
 
-	// Can type assert back
-	if typedParams, ok := genericParams.(*JPEG2000LossyParameters); ok {
-		// Can use typed features
-		typedParams.WithRate(90)
-		if typedParams.Rate != 90 {
-			t.Errorf("Typed rate = %d, want 90", typedParams.Rate)
-		}
-	} else {
-		t.Fatal("Failed to type assert to *JPEG2000LossyParameters")
+	cloned, ok := parameters.Clone().(*JPEG2000LossyParameters)
+	if !ok {
+		t.Fatalf("Clone() type = %T, want *JPEG2000LossyParameters", cloned)
+	}
+	if cloned.Rate != 95 {
+		t.Errorf("cloned Rate = %d, want 95", cloned.Rate)
 	}
 }
 
@@ -170,33 +153,28 @@ func TestNilParameters(t *testing.T) {
 	height := uint16(64)
 	pixelData := make([]byte, int(width)*int(height))
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
 	c := NewCodecWithRate(85) // Codec default rate
 
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := c.Encode(src, encoded, nil) // nil parameters
+	err := c.Encode(context.Background(), src, encoded, nil) // nil parameters
 	if err != nil {
 		t.Fatalf("Encode with nil parameters failed: %v", err)
 	}
 
 	// Should use codec's default rate (85)
-	encodedData, _ := encoded.GetFrame(0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	if len(encodedData) == 0 {
 		t.Fatal("Encoded data is empty")
 	}

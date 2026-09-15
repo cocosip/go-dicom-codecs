@@ -2,13 +2,13 @@
 package lossy
 
 import (
+	"context"
 	"fmt"
 	"math"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg2000"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 var _ codec.Codec = (*Codec)(nil)
@@ -62,69 +62,32 @@ func (c *Codec) TransferSyntax() *transfer.Syntax {
 	return c.transferSyntax
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *Codec) GetDefaultParameters() codec.Parameters {
+// DefaultParameters returns the default codec parameters.
+func (c *Codec) DefaultParameters() codec.Parameters {
 	params := NewLossyParameters()
 	params.Rate = c.defaultRate
 	return params
 }
 
 // Encode encodes pixel data to JPEG 2000 Lossy format
-func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Get encoding parameters
 	var lossyParams *JPEG2000LossyParameters
-	if parameters != nil {
-		// Try to use typed parameters if provided
-		if jp, ok := parameters.(*JPEG2000LossyParameters); ok {
-			lossyParams = jp
-		} else {
-			// Fallback: create from generic parameters
-			lossyParams = NewLossyParameters()
-			if nl := parameters.GetParameter("numLevels"); nl != nil {
-				if nlInt, ok := nl.(int); ok && nlInt >= 0 && nlInt <= 6 {
-					lossyParams.NumLevels = nlInt
-				}
-			}
-			if irr := parameters.GetParameter("irreversible"); irr != nil {
-				if irrBool, ok := irr.(bool); ok {
-					lossyParams.Irreversible = irrBool
-				}
-			}
-			if mct := parameters.GetParameter("allowMCT"); mct != nil {
-				if mctBool, ok := mct.(bool); ok {
-					lossyParams.AllowMCT = mctBool
-				}
-			}
-			if vb := parameters.GetParameter("isVerbose"); vb != nil {
-				if vbBool, ok := vb.(bool); ok {
-					lossyParams.IsVerbose = vbBool
-				}
-			}
-			if r := parameters.GetParameter("rate"); r != nil {
-				if rInt, ok := r.(int); ok && rInt > 0 {
-					lossyParams.Rate = rInt
-				}
-			}
-			if rl := parameters.GetParameter("rateLevels"); rl != nil {
-				if arr, ok := rl.([]int); ok && len(arr) > 0 {
-					lossyParams.RateLevels = arr
-				}
-			}
-		}
+	if parameters == nil {
+		lossyParams = c.DefaultParameters().(*JPEG2000LossyParameters)
 	} else {
-		// Use codec defaults
-		lossyParams = NewLossyParameters()
-		lossyParams.Rate = c.defaultRate
+		var ok bool
+		lossyParams, ok = parameters.(*JPEG2000LossyParameters)
+		if !ok || lossyParams == nil {
+			return fmt.Errorf("%w: JPEG 2000 Lossy requires *JPEG2000LossyParameters, got %T", codec.ErrInvalidParameters, parameters)
+		}
 	}
 
 	// Validate parameters
@@ -137,8 +100,8 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsStored),
-		frameInfo.PixelRepresentation != 0,
+		int(frameInfo.BitDepth.BitsStored),
+		frameInfo.PixelRepresentation.IsSigned(),
 	)
 
 	// Process all frames
@@ -148,7 +111,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -161,16 +124,16 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		var encoded []byte
 		var encErr error
 		if lossyParams.TargetRatio > 0 {
-			encoded, encErr = c.encodeFrameWithTargetRatio(frameData, frameInfo, lossyParams, baseEncParams)
+			encoded, encErr = c.encodeFrameWithTargetRatio(frameData, &frameInfo, lossyParams, baseEncParams)
 		} else {
-			encoded, encErr = c.encodeFrameOnce(frameData, frameInfo, lossyParams, baseEncParams)
+			encoded, encErr = c.encodeFrameOnce(frameData, &frameInfo, lossyParams, baseEncParams)
 		}
 		if encErr != nil {
 			return encErr
 		}
 
 		// Add encoded frame to destination
-		if err := newPixelData.AddFrame(encoded); err != nil {
+		if err := newPixelData.AddFrame(ctx, encoded); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -179,7 +142,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 }
 
 // Decode decodes JPEG 2000 Lossy data to uncompressed pixel data
-func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
@@ -191,7 +154,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -209,7 +172,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(decoder.GetPixelData()); err != nil {
+		if err := newPixelData.AddFrame(ctx, decoder.GetPixelData()); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -219,16 +182,20 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 // RegisterJPEG2000LossyCodec registers the JPEG 2000 Lossy codec with the global registry
 func RegisterJPEG2000LossyCodec() {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	j2kCodec := NewCodec()
-	registry.RegisterCodec(transfer.JPEG2000Lossy, j2kCodec)
+	if _, err := registry.Replace(j2kCodec); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterJPEG2000MultiComponentCodec registers JPEG 2000 Part 2 multi-component codec.
 func RegisterJPEG2000MultiComponentCodec() {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	j2kCodec := NewPart2MultiComponentCodec()
-	registry.RegisterCodec(transfer.JPEG2000Part2MultiComponent, j2kCodec)
+	if _, err := registry.Replace(j2kCodec); err != nil {
+		panic(err)
+	}
 }
 
 func init() {
@@ -237,7 +204,7 @@ func init() {
 }
 
 // encodeFrameOnce performs a single encode using the provided parameters for a single frame.
-func (c *Codec) encodeFrameOnce(frameData []byte, frameInfo *imagetypes.FrameInfo, p *JPEG2000LossyParameters, baseEncParams *jpeg2000.EncodeParams) ([]byte, error) {
+func (c *Codec) encodeFrameOnce(frameData []byte, frameInfo *codec.FrameInfo, p *JPEG2000LossyParameters, baseEncParams *jpeg2000.EncodeParams) ([]byte, error) {
 	encParams := *baseEncParams
 	targetRatio := p.TargetRatio
 	baseQuality := c.initializeBaseQuality(p, targetRatio)
@@ -264,14 +231,14 @@ func (c *Codec) initializeBaseQuality(p *JPEG2000LossyParameters, targetRatio fl
 	return baseQuality
 }
 
-func (c *Codec) configureBasicEncodeParams(encParams *jpeg2000.EncodeParams, frameInfo *imagetypes.FrameInfo, p *JPEG2000LossyParameters, baseQuality int) {
+func (c *Codec) configureBasicEncodeParams(encParams *jpeg2000.EncodeParams, frameInfo *codec.FrameInfo, p *JPEG2000LossyParameters, baseQuality int) {
 	encParams.Lossless = !p.Irreversible
 	encParams.NumLevels = clampNumLevels(p.NumLevels, int(frameInfo.Width), int(frameInfo.Height))
 	encParams.NumLayers = p.NumLayers
 	encParams.EnableMCT = p.AllowMCT
 	encParams.Quality = effectiveQuality(baseQuality, p.QuantStepScale)
 	if p.Irreversible && p.Rate > 0 && p.TargetRatio <= 0 {
-		encParams.LayerRates = openJPEGLayerRates(p.Rate, p.RateLevels, int(frameInfo.BitsStored), int(frameInfo.BitsAllocated))
+		encParams.LayerRates = openJPEGLayerRates(p.Rate, p.RateLevels, int(frameInfo.BitDepth.BitsStored), int(frameInfo.BitDepth.BitsAllocated))
 		if len(encParams.LayerRates) > 0 {
 			encParams.NumLayers = len(encParams.LayerRates)
 			encParams.UsePCRDOpt = true
@@ -287,7 +254,7 @@ func (c *Codec) configureBasicEncodeParams(encParams *jpeg2000.EncodeParams, fra
 	}
 }
 
-func (c *Codec) adjustForSmallImages(encParams *jpeg2000.EncodeParams, frameInfo *imagetypes.FrameInfo) {
+func (c *Codec) adjustForSmallImages(encParams *jpeg2000.EncodeParams, frameInfo *codec.FrameInfo) {
 	minDim := int(frameInfo.Width)
 	if int(frameInfo.Height) < minDim {
 		minDim = int(frameInfo.Height)
@@ -376,7 +343,7 @@ func (c *Codec) extractMCTParameters(encParams *jpeg2000.EncodeParams, p *JPEG20
 }
 
 // encodeFrameWithTargetRatio performs rate control on quality to reach target ratio for a single frame.
-func (c *Codec) encodeFrameWithTargetRatio(frameData []byte, frameInfo *imagetypes.FrameInfo, base *JPEG2000LossyParameters, baseEncParams *jpeg2000.EncodeParams) ([]byte, error) {
+func (c *Codec) encodeFrameWithTargetRatio(frameData []byte, frameInfo *codec.FrameInfo, base *JPEG2000LossyParameters, baseEncParams *jpeg2000.EncodeParams) ([]byte, error) {
 	target := base.TargetRatio
 	if target <= 0 {
 		return c.encodeFrameOnce(frameData, frameInfo, base, baseEncParams)

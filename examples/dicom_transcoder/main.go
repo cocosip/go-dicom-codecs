@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"github.com/cocosip/go-dicom/pkg/dicom/dataset"
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
 	"github.com/cocosip/go-dicom/pkg/dicom/tag"
+	"github.com/cocosip/go-dicom/pkg/dicom/transcode"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/dicom/writer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
@@ -68,7 +70,7 @@ func run(args []string) int {
 		options.format,
 		parseResult.Dataset,
 		parseResult.TransferSyntax,
-		codec.GetGlobalRegistry(),
+		codec.GlobalRegistry(),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -238,13 +240,13 @@ type compressionTargetFormat struct {
 var compressionTargetFormats = []compressionTargetFormat{
 	{name: "RLE Lossless", transfer: transfer.RLELossless, suffix: "rle", isLossless: true},
 	{name: "JPEG Baseline Process 1", transfer: transfer.JPEGBaseline8Bit, suffix: "jpeg_baseline", isLossless: false},
-	{name: "JPEG Extended Process 2/4", transfer: transfer.JPEGProcess2_4, suffix: "jpeg_process2_4", isLossless: false},
+	{name: "JPEG Extended Process 2/4", transfer: transfer.JPEGExtended12Bit, suffix: "jpeg_process2_4", isLossless: false},
 	{name: "JPEG Lossless Process 14", transfer: transfer.JPEGLossless, suffix: "jpeg_lossless_14", isLossless: true},
 	{name: "JPEG Lossless Process 14 SV1", transfer: transfer.JPEGLosslessSV1, suffix: "jpeg_lossless_sv1", isLossless: true},
 	{name: "JPEG-LS Lossless", transfer: transfer.JPEGLSLossless, suffix: "jpegls_lossless", isLossless: true},
 	{name: "JPEG-LS Near-Lossless", transfer: transfer.JPEGLSNearLossless, suffix: "jpegls_near_lossless", isLossless: false},
 	{name: "JPEG 2000 Lossless", transfer: transfer.JPEG2000Lossless, suffix: "j2k_lossless", isLossless: true},
-	{name: "JPEG 2000 Lossy", transfer: transfer.JPEG2000Lossy, suffix: "j2k_lossy", isLossless: false},
+	{name: "JPEG 2000 Lossy", transfer: transfer.JPEG2000, suffix: "j2k_lossy", isLossless: false},
 	{name: "HTJ2K Lossless", transfer: transfer.HTJ2KLossless, suffix: "htj2k_lossless", isLossless: true},
 	{name: "HTJ2K Lossless RPCL", transfer: transfer.HTJ2KLosslessRPCL, suffix: "htj2k_lossless_rpcl", isLossless: true},
 	{name: "HTJ2K Lossy", transfer: transfer.HTJ2K, suffix: "htj2k_lossy", isLossless: false},
@@ -326,13 +328,13 @@ func selectCompressionPlanItems(plan compressionPlan, suffix string) ([]compress
 }
 
 func jpegSequentialDCTUnsupportedReason(target *transfer.Syntax, imageInfo jpegSequentialDCTImageInfo) string {
-	if target != transfer.JPEGBaseline8Bit && target != transfer.JPEGProcess2_4 {
+	if target != transfer.JPEGBaseline8Bit && target != transfer.JPEGExtended12Bit {
 		return ""
 	}
 	if target == transfer.JPEGBaseline8Bit && imageInfo.bitsStored > 8 {
 		return ""
 	}
-	if target == transfer.JPEGProcess2_4 &&
+	if target == transfer.JPEGExtended12Bit &&
 		imageInfo.bitsAllocated == 16 &&
 		imageInfo.bitsStored == 12 &&
 		imageInfo.samplesPerPixel == 1 &&
@@ -390,8 +392,15 @@ func transcodeDICOMFile(ds *dataset.Dataset, outputPath string, sourceTS, target
 	}
 
 	// Use go-dicom transcoder which handles encapsulated data, BOT/padding, etc.
-	transcoder := codec.NewTranscoder(sourceTS, targetTS, codec.WithCodecRegistry(registry))
-	newDS, err := transcoder.Transcode(ds)
+	manager, err := transcode.NewManager(registry)
+	if err != nil {
+		return fmt.Errorf("create transcode manager: %w", err)
+	}
+	transcoder, err := manager.NewTranscoder(sourceTS, targetTS)
+	if err != nil {
+		return fmt.Errorf("create transcoder: %w", err)
+	}
+	newDS, err := transcoder.Transcode(context.Background(), ds)
 	if err != nil {
 		return fmt.Errorf("transcode failed: %w", err)
 	}

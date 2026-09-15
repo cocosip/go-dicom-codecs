@@ -3,8 +3,10 @@ package htj2k
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 // TestHTJ2KLosslessRoundTrip tests HTJ2K lossless encoding and decoding
@@ -35,19 +37,14 @@ func TestHTJ2KLosslessRoundTrip(t *testing.T) {
 			}
 
 			// Create source PixelData
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     tt.width,
-				Height:                    tt.height,
-				BitsAllocated:             8,
-				BitsStored:                8,
-				HighBit:                   7,
-				SamplesPerPixel:           1,
-				PixelRepresentation:       0,
-				PlanarConfiguration:       0,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &dicomcodec.FrameInfo{
+				Width:  tt.width,
+				Height: tt.height,
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 			src := codecHelpers.NewTestPixelData(frameInfo)
-			if err := src.AddFrame(testData); err != nil {
+			if err := src.AddFrame(context.Background(), testData); err != nil {
 				t.Fatalf("AddFrame failed: %v", err)
 			}
 
@@ -56,25 +53,27 @@ func TestHTJ2KLosslessRoundTrip(t *testing.T) {
 
 			// Encode
 			encoded := codecHelpers.NewTestPixelData(frameInfo)
-			err := htCodec.Encode(src, encoded, nil)
+			err := htCodec.Encode(context.Background(), src, encoded, nil)
 			if err != nil {
 				t.Fatalf("Encode failed: %v", err)
 			}
 
-			encodedData, _ := encoded.GetFrame(0)
+			encodedData, _ := encoded.Frame(context.Background(), 0)
 			t.Logf("Original size: %d bytes", len(testData))
 			t.Logf("Encoded size: %d bytes", len(encodedData))
 			t.Logf("Compression ratio: %.2f:1", float64(len(testData))/float64(len(encodedData)))
 
 			// Decode
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			err = htCodec.Decode(encoded, decoded, nil)
+			err = htCodec.Decode(context.Background(), encoded, decoded, nil)
 			if err != nil {
 				t.Fatalf("Decode failed: %v", err)
 			}
 
-			decodedData, _ := decoded.GetFrame(0)
-			// Verify perfect reconstruction (lossless)
+			decodedData, _ := decoded.Frame(context.
+				// Verify perfect reconstruction (lossless)
+				Background(), 0)
+
 			if len(decodedData) != len(testData) {
 				t.Fatalf("Decoded data size mismatch: got %d, want %d", len(decodedData), len(testData))
 			}
@@ -116,19 +115,14 @@ func TestHTJ2KLosslessRPCLRoundTrip(t *testing.T) {
 		testData[i] = byte(i % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(testData); err != nil {
+	if err := src.AddFrame(context.Background(), testData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -137,23 +131,25 @@ func TestHTJ2KLosslessRPCLRoundTrip(t *testing.T) {
 
 	// Encode
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := htCodec.Encode(src, encoded, nil)
+	err := htCodec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
-	encodedData, _ := encoded.GetFrame(0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	t.Logf("RPCL Compression ratio: %.2f:1", float64(len(testData))/float64(len(encodedData)))
 
 	// Decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = htCodec.Decode(encoded, decoded, nil)
+	err = htCodec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
 
-	decodedData, _ := decoded.GetFrame(0)
-	// Verify perfect reconstruction
+	decodedData, _ := decoded.Frame(context.
+		// Verify perfect reconstruction
+		Background(), 0)
+
 	errors := 0
 	for i := 0; i < len(testData); i++ {
 		if testData[i] != decodedData[i] {
@@ -188,19 +184,14 @@ func TestHTJ2KLossyRoundTrip(t *testing.T) {
 				testData[i] = byte(i % 256)
 			}
 
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     tt.width,
-				Height:                    tt.height,
-				BitsAllocated:             8,
-				BitsStored:                8,
-				HighBit:                   7,
-				SamplesPerPixel:           1,
-				PixelRepresentation:       0,
-				PlanarConfiguration:       0,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &dicomcodec.FrameInfo{
+				Width:  tt.width,
+				Height: tt.height,
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 			src := codecHelpers.NewTestPixelData(frameInfo)
-			if err := src.AddFrame(testData); err != nil {
+			if err := src.AddFrame(context.Background(), testData); err != nil {
 				t.Fatalf("AddFrame failed: %v", err)
 			}
 
@@ -209,23 +200,25 @@ func TestHTJ2KLossyRoundTrip(t *testing.T) {
 
 			// Encode
 			encoded := codecHelpers.NewTestPixelData(frameInfo)
-			err := htCodec.Encode(src, encoded, nil)
+			err := htCodec.Encode(context.Background(), src, encoded, nil)
 			if err != nil {
 				t.Fatalf("Encode failed: %v", err)
 			}
 
-			encodedData, _ := encoded.GetFrame(0)
+			encodedData, _ := encoded.Frame(context.Background(), 0)
 			t.Logf("Quality %d - Compression ratio: %.2f:1", tt.quality, float64(len(testData))/float64(len(encodedData)))
 
 			// Decode
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			err = htCodec.Decode(encoded, decoded, nil)
+			err = htCodec.Decode(context.Background(), encoded, decoded, nil)
 			if err != nil {
 				t.Fatalf("Decode failed: %v", err)
 			}
 
-			decodedData, _ := decoded.GetFrame(0)
-			// Calculate error metrics
+			decodedData, _ := decoded.Frame(context.
+				// Calculate error metrics
+				Background(), 0)
+
 			var sumSquaredError int64
 			maxError := 0
 			for i := 0; i < len(testData); i++ {
@@ -268,19 +261,14 @@ func TestHTJ2KRGBRoundTrip(t *testing.T) {
 		testData[i*3+2] = byte((i * 3) % 256) // B
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           3,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricRGB,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 3, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(testData); err != nil {
+	if err := src.AddFrame(context.Background(), testData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -289,22 +277,24 @@ func TestHTJ2KRGBRoundTrip(t *testing.T) {
 		htCodec := NewLosslessCodec()
 
 		encoded := codecHelpers.NewTestPixelData(frameInfo)
-		err := htCodec.Encode(src, encoded, nil)
+		err := htCodec.Encode(context.Background(), src, encoded, nil)
 		if err != nil {
 			t.Fatalf("Encode failed: %v", err)
 		}
 
-		encodedData, _ := encoded.GetFrame(0)
+		encodedData, _ := encoded.Frame(context.Background(), 0)
 		t.Logf("RGB Compression ratio: %.2f:1", float64(len(testData))/float64(len(encodedData)))
 
 		decoded := codecHelpers.NewTestPixelData(frameInfo)
-		err = htCodec.Decode(encoded, decoded, nil)
+		err = htCodec.Decode(context.Background(), encoded, decoded, nil)
 		if err != nil {
 			t.Fatalf("Decode failed: %v", err)
 		}
 
-		decodedData, _ := decoded.GetFrame(0)
-		// Verify perfect reconstruction
+		decodedData, _ := decoded.Frame(context.
+			// Verify perfect reconstruction
+			Background(), 0)
+
 		errors := 0
 		for i := 0; i < len(testData); i++ {
 			if testData[i] != decodedData[i] {
@@ -333,19 +323,14 @@ func TestHTJ2K12BitRoundTrip(t *testing.T) {
 		testData[i*2+1] = byte((val >> 8) & 0xFF)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             16,
-		BitsStored:                12,
-		HighBit:                   11,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(testData); err != nil {
+	if err := src.AddFrame(context.Background(), testData); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -353,23 +338,25 @@ func TestHTJ2K12BitRoundTrip(t *testing.T) {
 
 	// Encode
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := htCodec.Encode(src, encoded, nil)
+	err := htCodec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		t.Fatalf("Encode failed: %v", err)
 	}
 
-	encodedData, _ := encoded.GetFrame(0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	t.Logf("12-bit Compression ratio: %.2f:1", float64(len(testData))/float64(len(encodedData)))
 
 	// Decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = htCodec.Decode(encoded, decoded, nil)
+	err = htCodec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
 
-	decodedData, _ := decoded.GetFrame(0)
-	// Verify perfect reconstruction
+	decodedData, _ := decoded.Frame(context.
+		// Verify perfect reconstruction
+		Background(), 0)
+
 	errors := 0
 	maxError := 0
 	for i := 0; i < int(width*height); i++ {

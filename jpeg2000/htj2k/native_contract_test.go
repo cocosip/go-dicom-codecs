@@ -6,9 +6,11 @@ import (
 	"reflect"
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/internal/common/codestream"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 const (
@@ -135,7 +137,7 @@ func TestHTJ2KProgressionMatchesFoDicomSyntaxContract(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			params := tt.codec.GetDefaultParameters().(*Parameters)
+			params := tt.codec.DefaultParameters().(*Parameters)
 			params.SetParameter("progressionOrder", 0)
 			encoded := encodeNativeContractFrameWithParameters(t, tt.codec, params)
 			cs, err := codestream.NewParser(encoded).Parse()
@@ -154,26 +156,23 @@ func encodeNativeContractFrame(t *testing.T, htCodec *Codec) []byte {
 	return encodeNativeContractFrameWithParameters(t, htCodec, nil)
 }
 
-func encodeNativeContractFrameWithParameters(t *testing.T, htCodec *Codec, parameters *Parameters) []byte {
+func encodeNativeContractFrameWithParameters(t *testing.T, htCodec *Codec, parameters dicomcodec.Parameters) []byte {
 	t.Helper()
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     288,
-		Height:                    288,
-		BitsAllocated:             16,
-		BitsStored:                12,
-		HighBit:                   11,
-		SamplesPerPixel:           1,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  288,
+		Height: 288,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(make([]byte, int(frameInfo.Width)*int(frameInfo.Height)*2)); err != nil {
+	if err := src.AddFrame(context.Background(), make([]byte, int(frameInfo.Width)*int(frameInfo.Height)*2)); err != nil {
 		t.Fatalf("add source frame: %v", err)
 	}
 	dst := codecHelpers.NewTestPixelData(frameInfo)
-	if err := htCodec.Encode(src, dst, parameters); err != nil {
+	if err := htCodec.Encode(context.Background(), src, dst, parameters); err != nil {
 		t.Fatalf("encode frame: %v", err)
 	}
-	encoded, err := dst.GetFrame(0)
+	encoded, err := dst.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("read encoded frame: %v", err)
 	}
@@ -182,24 +181,21 @@ func encodeNativeContractFrameWithParameters(t *testing.T, htCodec *Codec, param
 
 func encodeNativeContractRGBFrame(t *testing.T, htCodec *Codec) []byte {
 	t.Helper()
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     288,
-		Height:                    288,
-		BitsAllocated:             16,
-		BitsStored:                12,
-		HighBit:                   11,
-		SamplesPerPixel:           3,
-		PhotometricInterpretation: photometricRGB,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  288,
+		Height: 288,
+
+		SamplesPerPixel: 3, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(make([]byte, int(frameInfo.Width)*int(frameInfo.Height)*int(frameInfo.SamplesPerPixel)*2)); err != nil {
+	if err := src.AddFrame(context.Background(), make([]byte, int(frameInfo.Width)*int(frameInfo.Height)*int(frameInfo.SamplesPerPixel)*2)); err != nil {
 		t.Fatalf("add source frame: %v", err)
 	}
 	dst := codecHelpers.NewTestPixelData(frameInfo)
-	if err := htCodec.Encode(src, dst, nil); err != nil {
+	if err := htCodec.Encode(context.Background(), src, dst, nil); err != nil {
 		t.Fatalf("encode frame: %v", err)
 	}
-	encoded, err := dst.GetFrame(0)
+	encoded, err := dst.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("read encoded frame: %v", err)
 	}

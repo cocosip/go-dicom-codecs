@@ -2,10 +2,11 @@ package rle
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 	"testing"
-
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 const (
@@ -32,36 +33,31 @@ func TestRLECodec_EncodeDecodeSimple(t *testing.T) {
 		pixelData[i] = byte(i % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := newTestPixelData(frameInfo)
-	_ = src.AddFrame(pixelData)
+	_ = src.AddFrame(context.Background(), pixelData)
 	encoded := newTestPixelData(frameInfo)
-	if err := codec.Encode(src, encoded, nil); err != nil {
+	if err := codec.Encode(context.Background(), src, encoded, nil); err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
 
-	encodedData, _ := encoded.GetFrame(0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	if len(encodedData) == 0 {
 		t.Fatal("Encode() produced no data")
 	}
 
 	decoded := newTestPixelData(frameInfo)
-	if err := codec.Decode(encoded, decoded, nil); err != nil {
+	if err := codec.Decode(context.Background(), encoded, decoded, nil); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
 
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	if !bytes.Equal(pixelData, decodedData[:len(pixelData)]) {
 		t.Error("Decoded data does not match original")
 	}
@@ -77,31 +73,26 @@ func TestRLECodec_EncodeDecodeRepeating(t *testing.T) {
 		pixelData[i] = byte(i/10) % 16
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := newTestPixelData(frameInfo)
-	_ = src.AddFrame(pixelData)
+	_ = src.AddFrame(context.Background(), pixelData)
 	encoded := newTestPixelData(frameInfo)
-	if err := codec.Encode(src, encoded, nil); err != nil {
+	if err := codec.Encode(context.Background(), src, encoded, nil); err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
 
 	decoded := newTestPixelData(frameInfo)
-	if err := codec.Decode(encoded, decoded, nil); err != nil {
+	if err := codec.Decode(context.Background(), encoded, decoded, nil); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
 
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	if !bytes.Equal(pixelData, decodedData[:len(pixelData)]) {
 		t.Error("Decoded data does not match original")
 	}
@@ -120,31 +111,26 @@ func TestRLECodec_EncodeDecodeRGB(t *testing.T) {
 		pixelData[i+2] = byte((i/3 + 100) % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           samplesPerPixel,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricRGB,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: samplesPerPixel, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 	}
 
 	src := newTestPixelData(frameInfo)
-	_ = src.AddFrame(pixelData)
+	_ = src.AddFrame(context.Background(), pixelData)
 	encoded := newTestPixelData(frameInfo)
-	if err := codec.Encode(src, encoded, nil); err != nil {
+	if err := codec.Encode(context.Background(), src, encoded, nil); err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
 
 	decoded := newTestPixelData(frameInfo)
-	if err := codec.Decode(encoded, decoded, nil); err != nil {
+	if err := codec.Decode(context.Background(), encoded, decoded, nil); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
 
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	if !bytes.Equal(pixelData, decodedData[:len(pixelData)]) {
 		t.Error("Decoded RGB data does not match original")
 	}
@@ -162,31 +148,26 @@ func TestRLECodec_Encode16Bit(t *testing.T) {
 		pixelData[i+1] = byte((value >> 8) & 0xFF)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             16,
-		BitsStored:                16,
-		HighBit:                   15,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 16, HighBit: 15, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := newTestPixelData(frameInfo)
-	_ = src.AddFrame(pixelData)
+	_ = src.AddFrame(context.Background(), pixelData)
 	encoded := newTestPixelData(frameInfo)
-	if err := codec.Encode(src, encoded, nil); err != nil {
+	if err := codec.Encode(context.Background(), src, encoded, nil); err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
 
 	decoded := newTestPixelData(frameInfo)
-	if err := codec.Decode(encoded, decoded, nil); err != nil {
+	if err := codec.Decode(context.Background(), encoded, decoded, nil); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
 
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	if !bytes.Equal(pixelData, decodedData[:len(pixelData)]) {
 		t.Error("Decoded 16-bit data does not match original")
 	}

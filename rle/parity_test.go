@@ -2,46 +2,47 @@ package rle
 
 import (
 	"bytes"
+	"context"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 	"testing"
-
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 func TestRLECodecRoundTripPixelLayouts(t *testing.T) {
 	tests := []struct {
 		name string
-		info *imagetypes.FrameInfo
+		info *dicomcodec.FrameInfo
 		data []byte
 	}{
 		{
 			name: "8-bit monochrome",
-			info: &imagetypes.FrameInfo{
-				Width: 10, Height: 10, BitsAllocated: 8, BitsStored: 8, HighBit: 7,
-				SamplesPerPixel: 1, PlanarConfiguration: 0, PhotometricInterpretation: photometricMonochrome2,
+			info: &dicomcodec.FrameInfo{
+				Width: 10, Height: 10,
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			},
 			data: patternedBytes(100, 1),
 		},
 		{
 			name: "16-bit monochrome",
-			info: &imagetypes.FrameInfo{
-				Width: 8, Height: 8, BitsAllocated: 16, BitsStored: 16, HighBit: 15,
-				SamplesPerPixel: 1, PlanarConfiguration: 0, PhotometricInterpretation: photometricMonochrome2,
+			info: &dicomcodec.FrameInfo{
+				Width: 8, Height: 8,
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 16, HighBit: 15, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			},
 			data: patternedBytes(128, 3),
 		},
 		{
 			name: "8-bit RGB interleaved",
-			info: &imagetypes.FrameInfo{
-				Width: 8, Height: 8, BitsAllocated: 8, BitsStored: 8, HighBit: 7,
-				SamplesPerPixel: 3, PlanarConfiguration: 0, PhotometricInterpretation: photometricRGB,
+			info: &dicomcodec.FrameInfo{
+				Width: 8, Height: 8,
+				SamplesPerPixel: 3, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 			},
 			data: patternedBytes(192, 5),
 		},
 		{
 			name: "8-bit RGB planar",
-			info: &imagetypes.FrameInfo{
-				Width: 8, Height: 8, BitsAllocated: 8, BitsStored: 8, HighBit: 7,
-				SamplesPerPixel: 3, PlanarConfiguration: 1, PhotometricInterpretation: photometricRGB,
+			info: &dicomcodec.FrameInfo{
+				Width: 8, Height: 8,
+				SamplesPerPixel: 3, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(1), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 			},
 			data: patternedBytes(192, 7),
 		},
@@ -63,30 +64,30 @@ func patternedBytes(length, factor int) []byte {
 	return result
 }
 
-func encodeFrame(t *testing.T, codec *Codec, info *imagetypes.FrameInfo, frame []byte) []byte {
+func encodeFrame(t *testing.T, codec *Codec, info *dicomcodec.FrameInfo, frame []byte) []byte {
 	t.Helper()
 	source := newTestPixelData(info)
-	_ = source.AddFrame(frame)
+	_ = source.AddFrame(context.Background(), frame)
 	destination := newTestPixelData(info)
-	if err := codec.Encode(source, destination, nil); err != nil {
+	if err := codec.Encode(context.Background(), source, destination, nil); err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
-	encoded, err := destination.GetFrame(0)
+	encoded, err := destination.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return encoded
 }
 
-func assertDecodedFrame(t *testing.T, codec *Codec, info *imagetypes.FrameInfo, encoded, want []byte) {
+func assertDecodedFrame(t *testing.T, codec *Codec, info *dicomcodec.FrameInfo, encoded, want []byte) {
 	t.Helper()
 	source := newTestPixelData(info)
-	_ = source.AddFrame(encoded)
+	_ = source.AddFrame(context.Background(), encoded)
 	destination := newTestPixelData(info)
-	if err := codec.Decode(source, destination, nil); err != nil {
+	if err := codec.Decode(context.Background(), source, destination, nil); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
-	got, err := destination.GetFrame(0)
+	got, err := destination.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

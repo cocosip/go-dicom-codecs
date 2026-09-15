@@ -1,9 +1,9 @@
 package lossless
 
 import (
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 	"testing"
-
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 func TestNewLosslessParametersMatchesOpenJPEGDefaults(t *testing.T) {
@@ -23,15 +23,14 @@ func TestNewLosslessParametersMatchesOpenJPEGDefaults(t *testing.T) {
 func TestConfigureLosslessEncodeParamsExpandsOpenJPEGLayers(t *testing.T) {
 	codec := NewCodec()
 	params := NewLosslessParameters()
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           852,
-		Height:          1100,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		SamplesPerPixel: 1,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  852,
+		Height: 1100,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 0, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 
-	encParams := codec.configureLosslessEncodeParams(frameInfo, params)
+	encParams := codec.configureLosslessEncodeParams(*frameInfo, params)
 
 	if encParams.TargetRatio != 20 {
 		t.Fatalf("TargetRatio = %v, want 20", encParams.TargetRatio)
@@ -59,15 +58,14 @@ func TestConfigureLosslessEncodeParamsExpandsOpenJPEGLayers(t *testing.T) {
 func TestConfigureLosslessEncodeParamsScalesFinalRateForStoredBits(t *testing.T) {
 	codec := NewCodec()
 	params := NewLosslessParameters()
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           288,
-		Height:          288,
-		BitsAllocated:   16,
-		BitsStored:      12,
-		SamplesPerPixel: 1,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  288,
+		Height: 288,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 0, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 
-	encParams := codec.configureLosslessEncodeParams(frameInfo, params)
+	encParams := codec.configureLosslessEncodeParams(*frameInfo, params)
 
 	if encParams.TargetRatio != 15 {
 		t.Fatalf("TargetRatio = %v, want 15", encParams.TargetRatio)

@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
-	"github.com/cocosip/go-dicom/pkg/imaging"
 
 	// Register codecs
+	"context"
 	_ "github.com/cocosip/go-dicom-codecs/jpeg/baseline"
 	_ "github.com/cocosip/go-dicom-codecs/jpeg/extended"
 	_ "github.com/cocosip/go-dicom-codecs/jpeg/lossless"
@@ -20,6 +20,7 @@ import (
 	_ "github.com/cocosip/go-dicom-codecs/jpeg2000/lossless"
 	_ "github.com/cocosip/go-dicom-codecs/jpeg2000/lossy"
 	_ "github.com/cocosip/go-dicom-codecs/jpegls/lossless"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixeldata"
 )
 
 func main() {
@@ -43,11 +44,11 @@ func main() {
 		panic(err)
 	}
 	ds := res.Dataset
-	pd, err := imaging.CreatePixelData(ds)
+	pd, err := pixeldata.FromDataset(ds)
 	if err != nil {
 		panic(err)
 	}
-	frame0, err := pd.GetFrame(0)
+	frame0, err := pd.Frame(context.Background(), 0)
 	if err != nil {
 		panic(err)
 	}

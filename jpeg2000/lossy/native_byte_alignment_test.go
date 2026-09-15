@@ -2,58 +2,62 @@ package lossy
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
+	"github.com/cocosip/go-dicom/pkg/dicom/tag"
+	"github.com/cocosip/go-dicom/pkg/dicom/transcode"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
-	"github.com/cocosip/go-dicom/pkg/imaging"
 	imagingcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixeldata"
 )
 
 func TestNativeJpeg2000LossyByteAlignmentFor70(t *testing.T) {
-	fixtureRoot := os.Getenv("GO_DICOM_CODEC_NATIVE_J2K_FIXTURE_ROOT")
-	if fixtureRoot == "" {
-		fixtureRoot = `D:\`
-	}
+	fixtureRoot := filepath.Join("..", "..", "test-data", "jpeg2000", "native-alignment")
 	sourcePath := filepath.Join(fixtureRoot, "70.dcm")
-	nativePath := filepath.Join(fixtureRoot, "70-native", "70_j2k_lossy.dcm")
-	if _, err := os.Stat(sourcePath); err != nil {
-		t.Skipf("native alignment fixture is unavailable: %v", err)
-	}
-	if _, err := os.Stat(nativePath); err != nil {
-		t.Skipf("native alignment fixture is unavailable: %v", err)
-	}
+	nativePath := filepath.Join(fixtureRoot, "70_j2k_lossy.dcm")
 
 	source, err := parser.ParseFile(sourcePath, parser.WithReadOption(parser.ReadAll))
 	if err != nil {
 		t.Fatalf("parse source: %v", err)
 	}
-	sourcePixelData, err := imaging.CreatePixelData(source.Dataset)
+	sourcePixelData, err := pixeldata.FromDataset(source.Dataset)
 	if err != nil {
 		t.Fatalf("read source PixelData: %v", err)
 	}
-	info := sourcePixelData.GetFrameInfo()
-	t.Logf("Source frame: %dx%d samples=%d bitsAllocated=%d bitsStored=%d pixelRepresentation=%d photometric=%s", info.Width, info.Height, info.SamplesPerPixel, info.BitsAllocated, info.BitsStored, info.PixelRepresentation, info.PhotometricInterpretation)
-	transcoder := imagingcodec.NewTranscoder(
+	info := sourcePixelData.FrameInfo()
+	t.Logf("Source frame: %dx%d samples=%d bitsAllocated=%d bitsStored=%d pixelRepresentation=%d photometric=%s", info.Width, info.Height, info.SamplesPerPixel, info.BitDepth.BitsAllocated, info.BitDepth.BitsStored, info.PixelRepresentation, info.PhotometricInterpretation.Value)
+	manager, err := transcode.NewManager(imagingcodec.GlobalRegistry())
+	if err != nil {
+		t.Fatalf("create transcode manager: %v", err)
+	}
+	transcoder, err := manager.NewTranscoder(
 		source.TransferSyntax,
-		transfer.JPEG2000Lossy,
-		imagingcodec.WithCodecRegistry(imagingcodec.GetGlobalRegistry()),
-		imagingcodec.WithStrictDICOMVR(false),
+		transfer.JPEG2000,
+		transcode.WithStrictDICOMVR(false),
 	)
-	encodedDataset, err := transcoder.Transcode(source.Dataset)
+	if err != nil {
+		t.Fatalf("create transcoder: %v", err)
+	}
+	sourceDataset := source.Dataset.Clone()
+	sourceDataset.SetAutoValidate(false)
+	encodedDataset, err := transcoder.Transcode(context.Background(), sourceDataset)
 	if err != nil {
 		t.Fatalf("encode source with JPEG 2000 lossy: %v", err)
 	}
-	encodedPixelData, err := imaging.CreatePixelData(encodedDataset)
+	if !encodedDataset.Contains(tag.PatientAge) {
+		t.Fatal("encoded dataset does not preserve Patient Age")
+	}
+	encodedPixelData, err := pixeldata.FromDataset(encodedDataset)
 	if err != nil {
 		t.Fatalf("read Go encoded PixelData: %v", err)
 	}
-	actual, err := encodedPixelData.GetFrame(0)
+	actual, err := encodedPixelData.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("read Go encoded frame: %v", err)
 	}
@@ -62,11 +66,11 @@ func TestNativeJpeg2000LossyByteAlignmentFor70(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse Native baseline: %v", err)
 	}
-	nativePixelData, err := imaging.CreatePixelData(native.Dataset)
+	nativePixelData, err := pixeldata.FromDataset(native.Dataset)
 	if err != nil {
 		t.Fatalf("read Native PixelData: %v", err)
 	}
-	expected, err := nativePixelData.GetFrame(0)
+	expected, err := nativePixelData.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("read Native encoded frame: %v", err)
 	}

@@ -2,11 +2,11 @@
 package lossless
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 var _ codec.Codec = (*JPEGLSLosslessCodec)(nil)
@@ -33,26 +33,23 @@ func (c *JPEGLSLosslessCodec) TransferSyntax() *transfer.Syntax {
 	return c.transferSyntax
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *JPEGLSLosslessCodec) GetDefaultParameters() codec.Parameters {
-	return codec.NewBaseParameters()
+// DefaultParameters returns the default codec parameters.
+func (c *JPEGLSLosslessCodec) DefaultParameters() codec.Parameters {
+	return codec.NoParameters{}
 }
 
 // Encode encodes pixel data to JPEG-LS Lossless format
-func (c *JPEGLSLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *JPEGLSLosslessCodec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Validate bit depth (JPEG-LS supports 2-16 bits)
-	if frameInfo.BitsStored < 2 || frameInfo.BitsStored > 16 {
-		return fmt.Errorf("JPEG-LS supports 2-16 bit depth, got %d bits", frameInfo.BitsStored)
+	if frameInfo.BitDepth.BitsStored < 2 || frameInfo.BitDepth.BitsStored > 16 {
+		return fmt.Errorf("JPEG-LS supports 2-16 bit depth, got %d bits", frameInfo.BitDepth.BitsStored)
 	}
 
 	// Process all frames
@@ -62,7 +59,7 @@ func (c *JPEGLSLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newPixel
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -81,14 +78,14 @@ func (c *JPEGLSLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newPixel
 			int(frameInfo.Width),
 			int(frameInfo.Height),
 			int(frameInfo.SamplesPerPixel),
-			int(frameInfo.BitsStored),
+			int(frameInfo.BitDepth.BitsStored),
 		)
 		if err != nil {
 			return fmt.Errorf("JPEG-LS Lossless encode failed for frame %d: %w", frameIndex, err)
 		}
 
 		// Add encoded frame to destination
-		if err := newPixelData.AddFrame(jpegData); err != nil {
+		if err := newPixelData.AddFrame(ctx, jpegData); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -97,16 +94,13 @@ func (c *JPEGLSLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newPixel
 }
 
 // Decode decodes JPEG-LS Lossless data to uncompressed pixel data
-func (c *JPEGLSLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *JPEGLSLosslessCodec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
@@ -115,7 +109,7 @@ func (c *JPEGLSLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newPixel
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -142,7 +136,7 @@ func (c *JPEGLSLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newPixel
 		// No pixel value shifting needed - the codec preserves the original two's complement encoding.
 
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(pixelData); err != nil {
+		if err := newPixelData.AddFrame(ctx, pixelData); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -152,9 +146,11 @@ func (c *JPEGLSLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newPixel
 
 // RegisterJPEGLSLosslessCodec registers the JPEG-LS Lossless codec with the global registry
 func RegisterJPEGLSLosslessCodec() {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	jpegLSCodec := NewJPEGLSLosslessCodec()
-	registry.RegisterCodec(transfer.JPEGLSLossless, jpegLSCodec)
+	if _, err := registry.Replace(jpegLSCodec); err != nil {
+		panic(err)
+	}
 }
 
 func init() {

@@ -2,11 +2,11 @@
 package nearlossless
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 var _ codec.Codec = (*JPEGLSNearLosslessCodec)(nil)
@@ -39,49 +39,37 @@ func (c *JPEGLSNearLosslessCodec) TransferSyntax() *transfer.Syntax {
 	return c.transferSyntax
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *JPEGLSNearLosslessCodec) GetDefaultParameters() codec.Parameters {
+// DefaultParameters returns the default codec parameters.
+func (c *JPEGLSNearLosslessCodec) DefaultParameters() codec.Parameters {
 	params := NewNearLosslessParameters()
 	params.NEAR = c.defaultNEAR
 	return params
 }
 
 // Encode encodes pixel data to JPEG-LS Near-Lossless format
-func (c *JPEGLSNearLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *JPEGLSNearLosslessCodec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Validate bit depth (JPEG-LS supports 2-16 bits)
-	if frameInfo.BitsStored < 2 || frameInfo.BitsStored > 16 {
-		return fmt.Errorf("JPEG-LS supports 2-16 bit depth, got %d bits", frameInfo.BitsStored)
+	if frameInfo.BitDepth.BitsStored < 2 || frameInfo.BitDepth.BitsStored > 16 {
+		return fmt.Errorf("JPEG-LS supports 2-16 bit depth, got %d bits", frameInfo.BitDepth.BitsStored)
 	}
 
 	// Get encoding parameters
 	var nearLosslessParams *JPEGLSNearLosslessParameters
-	if parameters != nil {
-		// Try to use typed parameters if provided
-		if jp, ok := parameters.(*JPEGLSNearLosslessParameters); ok {
-			nearLosslessParams = jp
-		} else {
-			// Fallback: create from generic parameters
-			nearLosslessParams = NewNearLosslessParameters()
-			if n := parameters.GetParameter("near"); n != nil {
-				if nInt, ok := n.(int); ok && nInt >= 0 && nInt <= 255 {
-					nearLosslessParams.NEAR = nInt
-				}
-			}
-		}
+	if parameters == nil {
+		nearLosslessParams = c.DefaultParameters().(*JPEGLSNearLosslessParameters)
 	} else {
-		// Use codec defaults
-		nearLosslessParams = NewNearLosslessParameters()
-		nearLosslessParams.NEAR = c.defaultNEAR
+		var ok bool
+		nearLosslessParams, ok = parameters.(*JPEGLSNearLosslessParameters)
+		if !ok || nearLosslessParams == nil {
+			return fmt.Errorf("%w: JPEG-LS Near-Lossless requires *JPEGLSNearLosslessParameters, got %T", codec.ErrInvalidParameters, parameters)
+		}
 	}
 
 	// Validate parameters
@@ -97,7 +85,7 @@ func (c *JPEGLSNearLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newP
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -112,7 +100,7 @@ func (c *JPEGLSNearLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newP
 			int(frameInfo.Width),
 			int(frameInfo.Height),
 			int(frameInfo.SamplesPerPixel),
-			int(frameInfo.BitsStored),
+			int(frameInfo.BitDepth.BitsStored),
 			near,
 		)
 		if err != nil {
@@ -120,7 +108,7 @@ func (c *JPEGLSNearLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newP
 		}
 
 		// Add encoded frame to destination
-		if err := newPixelData.AddFrame(jpegData); err != nil {
+		if err := newPixelData.AddFrame(ctx, jpegData); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -129,16 +117,13 @@ func (c *JPEGLSNearLosslessCodec) Encode(oldPixelData imagetypes.PixelData, newP
 }
 
 // Decode decodes JPEG-LS Near-Lossless data to uncompressed pixel data
-func (c *JPEGLSNearLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *JPEGLSNearLosslessCodec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
@@ -147,7 +132,7 @@ func (c *JPEGLSNearLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newP
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -157,7 +142,7 @@ func (c *JPEGLSNearLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newP
 		}
 
 		// Decode using the JPEG-LS near-lossless decoder
-		pixelData, width, height, _, _, near, err := Decode(frameData)
+		pixelData, width, height, _, _, _, err := Decode(frameData)
 		if err != nil {
 			return fmt.Errorf("JPEG-LS Near-Lossless decode failed for frame %d: %w", frameIndex, err)
 		}
@@ -170,13 +155,8 @@ func (c *JPEGLSNearLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newP
 			return fmt.Errorf("decoded height (%d) doesn't match expected (%d)", height, frameInfo.Height)
 		}
 
-		// Store NEAR value in parameters if provided
-		if parameters != nil {
-			parameters.SetParameter("near", near)
-		}
-
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(pixelData); err != nil {
+		if err := newPixelData.AddFrame(ctx, pixelData); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -186,9 +166,11 @@ func (c *JPEGLSNearLosslessCodec) Decode(oldPixelData imagetypes.PixelData, newP
 
 // RegisterJPEGLSNearLosslessCodec registers the JPEG-LS Near-Lossless codec with the global registry
 func RegisterJPEGLSNearLosslessCodec(defaultNEAR int) {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	jpegLSCodec := NewJPEGLSNearLosslessCodec(defaultNEAR)
-	registry.RegisterCodec(transfer.JPEGLSNearLossless, jpegLSCodec)
+	if _, err := registry.Replace(jpegLSCodec); err != nil {
+		panic(err)
+	}
 }
 
 func init() {

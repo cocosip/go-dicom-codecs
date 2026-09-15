@@ -6,8 +6,9 @@ import (
 	"os"
 	"testing"
 
+	"context"
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
-	"github.com/cocosip/go-dicom/pkg/imaging"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixeldata"
 )
 
 const native12BitProcess24Path = `D:\6-native\6_jpeg_process2_4.dcm`
@@ -42,7 +43,7 @@ func TestEncodeNative12BitProcess24FramesMatchNativeCodestream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFile(source) error = %v", err)
 	}
-	sourcePixelData, err := imaging.CreatePixelData(sourceResult.Dataset)
+	sourcePixelData, err := pixeldata.FromDataset(sourceResult.Dataset)
 	if err != nil {
 		t.Fatalf("CreatePixelData(source) error = %v", err)
 	}
@@ -50,13 +51,13 @@ func TestEncodeNative12BitProcess24FramesMatchNativeCodestream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFile(native) error = %v", err)
 	}
-	nativePixelData, err := imaging.CreatePixelData(nativeResult.Dataset)
+	nativePixelData, err := pixeldata.FromDataset(nativeResult.Dataset)
 	if err != nil {
 		t.Fatalf("CreatePixelData(native) error = %v", err)
 	}
 
 	for frameIndex := 0; frameIndex < 7; frameIndex++ {
-		source, err := sourcePixelData.GetFrame(frameIndex)
+		source, err := sourcePixelData.Frame(context.Background(), frameIndex)
 		if err != nil {
 			t.Fatalf("GetFrame(source, %d) error = %v", frameIndex, err)
 		}
@@ -64,7 +65,7 @@ func TestEncodeNative12BitProcess24FramesMatchNativeCodestream(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Encode(frame %d) error = %v", frameIndex, err)
 		}
-		want, err := nativePixelData.GetFrame(frameIndex)
+		want, err := nativePixelData.Frame(context.Background(), frameIndex)
 		if err != nil {
 			t.Fatalf("GetFrame(native, %d) error = %v", frameIndex, err)
 		}
@@ -83,11 +84,11 @@ func TestDecodeNative12BitProcess24Frame(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFile() error = %v", err)
 	}
-	pixelData, err := imaging.CreatePixelData(result.Dataset)
+	pixelData, err := pixeldata.FromDataset(result.Dataset)
 	if err != nil {
 		t.Fatalf("CreatePixelData() error = %v", err)
 	}
-	frame, err := pixelData.GetFrame(0)
+	frame, err := pixelData.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("GetFrame(0) error = %v", err)
 	}
@@ -107,11 +108,11 @@ func TestDecodeNative12BitProcess24Frame(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFile(source) error = %v", err)
 	}
-	sourcePixelData, err := imaging.CreatePixelData(sourceResult.Dataset)
+	sourcePixelData, err := pixeldata.FromDataset(sourceResult.Dataset)
 	if err != nil {
 		t.Fatalf("CreatePixelData(source) error = %v", err)
 	}
-	source, err := sourcePixelData.GetFrame(0)
+	source, err := sourcePixelData.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("GetFrame(source) error = %v", err)
 	}

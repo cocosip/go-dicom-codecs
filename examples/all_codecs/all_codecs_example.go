@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom-codecs/jpeg/baseline"
 	"github.com/cocosip/go-dicom-codecs/jpeg/lossless"
@@ -11,7 +12,7 @@ import (
 	"github.com/cocosip/go-dicom-codecs/rle"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func main() {
@@ -37,25 +38,20 @@ func main() {
 	fmt.Printf("Test image: %dx%d grayscale, %d bytes\n\n", width, height, len(pixelData))
 
 	// Prepare source PixelData
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: "MONOCHROME2",
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("AddFrame error: %v\n", err)
 		return
 	}
 
 	// Get global registry
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 
 	// Test JPEG Baseline (Lossy)
 	fmt.Println("--- JPEG Baseline (Process 1) - Lossy ---")
@@ -78,9 +74,9 @@ func main() {
 	testRGBImage(registry)
 }
 
-func testCodec(registry *codec.Registry, ts *transfer.Syntax, src imagetypes.PixelData, isLossy bool) {
+func testCodec(registry *codec.Registry, ts *transfer.Syntax, src codec.FrameSource, isLossy bool) {
 	// Get codec from registry
-	c, exists := registry.GetCodec(ts)
+	c, exists := registry.Lookup(ts)
 	if !exists {
 		fmt.Printf("鉁?Codec not found for %s\n", ts.UID().UID())
 		return
@@ -90,28 +86,29 @@ func testCodec(registry *codec.Registry, ts *transfer.Syntax, src imagetypes.Pix
 	fmt.Printf("Transfer Syntax: %s\n", ts.UID().UID())
 
 	// Encode
-	encoded := codecHelpers.NewTestPixelData(src.GetFrameInfo())
-	err := c.Encode(src, encoded, nil)
+	srcInfo := src.FrameInfo()
+	encoded := codecHelpers.NewTestPixelData(&srcInfo)
+	err := c.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		fmt.Printf("鉁?Encode failed: %v\n", err)
 		return
 	}
 
-	srcData, _ := src.GetFrame(0)
-	encodedData, _ := encoded.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	ratio := float64(len(srcData)) / float64(len(encodedData))
 	fmt.Printf("Compressed: %d bytes (%.2fx)\n", len(encodedData), ratio)
 
 	// Decode
-	decoded := codecHelpers.NewTestPixelData(src.GetFrameInfo())
-	err = c.Decode(encoded, decoded, nil)
+	decoded := codecHelpers.NewTestPixelData(&srcInfo)
+	err = c.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		fmt.Printf("鉁?Decode failed: %v\n", err)
 		return
 	}
 
 	// Verify
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	if isLossy {
 		// For lossy, check quality
 		maxDiff := 0
@@ -145,7 +142,7 @@ func testCodec(registry *codec.Registry, ts *transfer.Syntax, src imagetypes.Pix
 	}
 }
 
-func compareCodecs(registry *codec.Registry, src imagetypes.PixelData) {
+func compareCodecs(registry *codec.Registry, src codec.FrameSource) {
 	codecs := []struct {
 		name string
 		ts   *transfer.Syntax
@@ -159,20 +156,21 @@ func compareCodecs(registry *codec.Registry, src imagetypes.PixelData) {
 	fmt.Println("鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€")
 
 	for _, entry := range codecs {
-		c, exists := registry.GetCodec(entry.ts)
+		c, exists := registry.Lookup(entry.ts)
 		if !exists {
 			continue
 		}
 
-		encoded := codecHelpers.NewTestPixelData(src.GetFrameInfo())
-		err := c.Encode(src, encoded, nil)
+		srcInfo := src.FrameInfo()
+		encoded := codecHelpers.NewTestPixelData(&srcInfo)
+		err := c.Encode(context.Background(), src, encoded, nil)
 		if err != nil {
 			fmt.Printf("%-20s %12s %10s %12s\n", entry.name, "ERROR", "-", "-")
 			continue
 		}
 
-		srcData, _ := src.GetFrame(0)
-		encodedData, _ := encoded.GetFrame(0)
+		srcData, _ := src.Frame(context.Background(), 0)
+		encodedData, _ := encoded.Frame(context.Background(), 0)
 		ratio := float64(len(srcData)) / float64(len(encodedData))
 		codecType := "Lossless"
 		if entry.ts == transfer.JPEGBaseline8Bit {
@@ -198,19 +196,14 @@ func testRGBImage(registry *codec.Registry) {
 		}
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           uint16(components),
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: "RGB",
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: uint16(components), BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("RGB"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("AddFrame error: %v\n", err)
 		return
 	}
@@ -218,20 +211,20 @@ func testRGBImage(registry *codec.Registry) {
 	fmt.Printf("RGB image: %dx%d, %d bytes\n\n", width, height, len(pixelData))
 
 	// Test with Baseline (best for RGB photos)
-	c, exists := registry.GetCodec(transfer.JPEGBaseline8Bit)
+	c, exists := registry.Lookup(transfer.JPEGBaseline8Bit)
 	if exists {
 		encoded := codecHelpers.NewTestPixelData(frameInfo)
-		err := c.Encode(src, encoded, nil)
+		err := c.Encode(context.Background(), src, encoded, nil)
 		if err != nil {
 			fmt.Printf("RGB Baseline encode failed: %v\n", err)
 		} else {
-			srcData, _ := src.GetFrame(0)
-			encodedData, _ := encoded.GetFrame(0)
+			srcData, _ := src.Frame(context.Background(), 0)
+			encodedData, _ := encoded.Frame(context.Background(), 0)
 			ratio := float64(len(srcData)) / float64(len(encodedData))
 			fmt.Printf("JPEG Baseline: %d bytes (%.2fx compression)\n", len(encodedData), ratio)
 
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			err = c.Decode(encoded, decoded, nil)
+			err = c.Decode(context.Background(), encoded, decoded, nil)
 			if err != nil {
 				fmt.Printf("RGB Baseline decode failed: %v\n", err)
 			} else {
@@ -241,25 +234,25 @@ func testRGBImage(registry *codec.Registry) {
 	}
 
 	// Test with Lossless SV1
-	c, exists = registry.GetCodec(transfer.JPEGLosslessSV1)
+	c, exists = registry.Lookup(transfer.JPEGLosslessSV1)
 	if exists {
 		encoded := codecHelpers.NewTestPixelData(frameInfo)
-		err := c.Encode(src, encoded, nil)
+		err := c.Encode(context.Background(), src, encoded, nil)
 		if err != nil {
 			fmt.Printf("RGB Lossless SV1 encode failed: %v\n", err)
 		} else {
-			srcData, _ := src.GetFrame(0)
-			encodedData, _ := encoded.GetFrame(0)
+			srcData, _ := src.Frame(context.Background(), 0)
+			encodedData, _ := encoded.Frame(context.Background(), 0)
 			ratio := float64(len(srcData)) / float64(len(encodedData))
 			fmt.Printf("JPEG Lossless SV1: %d bytes (%.2fx compression)\n", len(encodedData), ratio)
 
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			err = c.Decode(encoded, decoded, nil)
+			err = c.Decode(context.Background(), encoded, decoded, nil)
 			if err != nil {
 				fmt.Printf("RGB Lossless SV1 decode failed: %v\n", err)
 			} else {
 				// Check if lossless
-				decodedData, _ := decoded.GetFrame(0)
+				decodedData, _ := decoded.Frame(context.Background(), 0)
 				errors := 0
 				for i := 0; i < len(srcData); i++ {
 					if decodedData[i] != srcData[i] {

@@ -7,14 +7,16 @@ import (
 	"path/filepath"
 	"testing"
 
+	"context"
 	"github.com/cocosip/go-dicom/pkg/dicom/dataset"
 	"github.com/cocosip/go-dicom/pkg/dicom/element"
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
 	"github.com/cocosip/go-dicom/pkg/dicom/tag"
+	"github.com/cocosip/go-dicom/pkg/dicom/transcode"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/dicom/vr"
-	"github.com/cocosip/go-dicom/pkg/imaging"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixeldata"
 )
 
 func TestTranscode12BitPixelsWritesStoredPrecisionToHTJ2K(t *testing.T) {
@@ -41,7 +43,7 @@ func TestTranscode12BitPixelsWritesStoredPrecisionToHTJ2K(t *testing.T) {
 	addTestElement(t, ds, element.NewOtherWord(tag.PixelData, pixels))
 
 	outputPath := filepath.Join(t.TempDir(), "stored-precision-12-htj2k.dcm")
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	if err := transcodeDICOMFile(ds, outputPath, transfer.ExplicitVRLittleEndian, transfer.HTJ2KLossless, registry); err != nil {
 		t.Fatalf("transcode native DICOM to HTJ2K: %v", err)
 	}
@@ -60,11 +62,11 @@ func TestTranscode12BitPixelsWritesStoredPrecisionToHTJ2K(t *testing.T) {
 		t.Fatalf("HighBit = %d, want 11", got)
 	}
 
-	encodedPixelData, err := imaging.CreatePixelData(parsed.Dataset)
+	encodedPixelData, err := pixeldata.FromDataset(parsed.Dataset)
 	if err != nil {
 		t.Fatalf("create encapsulated pixel data: %v", err)
 	}
-	encodedFrame, err := encodedPixelData.GetFrame(0)
+	encodedFrame, err := encodedPixelData.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("read encapsulated frame: %v", err)
 	}
@@ -76,16 +78,23 @@ func TestTranscode12BitPixelsWritesStoredPrecisionToHTJ2K(t *testing.T) {
 		t.Fatalf("HTJ2K Ssiz = 0x%02X, want unsigned 12-bit 0x0B", ssiz)
 	}
 
-	decoder := codec.NewTranscoder(parsed.TransferSyntax, transfer.ExplicitVRLittleEndian, codec.WithCodecRegistry(registry))
-	decodedDataset, err := decoder.Transcode(parsed.Dataset)
+	manager, err := transcode.NewManager(registry)
+	if err != nil {
+		t.Fatalf("create transcode manager: %v", err)
+	}
+	decoder, err := manager.NewTranscoder(parsed.TransferSyntax, transfer.ExplicitVRLittleEndian)
+	if err != nil {
+		t.Fatalf("create decoder: %v", err)
+	}
+	decodedDataset, err := decoder.Transcode(context.Background(), parsed.Dataset)
 	if err != nil {
 		t.Fatalf("transcode HTJ2K DICOM back to native: %v", err)
 	}
-	decodedPixelData, err := imaging.CreatePixelData(decodedDataset)
+	decodedPixelData, err := pixeldata.FromDataset(decodedDataset)
 	if err != nil {
 		t.Fatalf("create decoded pixel data: %v", err)
 	}
-	decodedFrame, err := decodedPixelData.GetFrame(0)
+	decodedFrame, err := decodedPixelData.Frame(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("read decoded frame: %v", err)
 	}

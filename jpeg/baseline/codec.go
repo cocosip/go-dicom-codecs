@@ -1,11 +1,12 @@
 package baseline
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 var _ codec.Codec = (*Codec)(nil)
@@ -38,49 +39,37 @@ func (c *Codec) TransferSyntax() *transfer.Syntax {
 	return c.transferSyntax
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *Codec) GetDefaultParameters() codec.Parameters {
+// DefaultParameters returns the default codec parameters.
+func (c *Codec) DefaultParameters() codec.Parameters {
 	params := NewBaselineParameters()
 	params.Quality = c.quality
 	return params
 }
 
 // Encode encodes pixel data to JPEG Baseline format
-func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// JPEG Baseline only supports 8-bit data
-	if frameInfo.BitsStored > 8 {
-		return fmt.Errorf("JPEG Baseline only supports 8-bit data, got %d bits", frameInfo.BitsStored)
+	if frameInfo.BitDepth.BitsStored > 8 {
+		return fmt.Errorf("JPEG Baseline only supports 8-bit data, got %d bits", frameInfo.BitDepth.BitsStored)
 	}
 
 	// Get encoding parameters
 	var baselineParams *JPEGBaselineParameters
-	if parameters != nil {
-		// Try to use typed parameters if provided
-		if jp, ok := parameters.(*JPEGBaselineParameters); ok {
-			baselineParams = jp
-		} else {
-			// Fallback: create from generic parameters
-			baselineParams = NewBaselineParameters()
-			if q := parameters.GetParameter("quality"); q != nil {
-				if qInt, ok := q.(int); ok && qInt >= 1 && qInt <= 100 {
-					baselineParams.Quality = qInt
-				}
-			}
-		}
+	if parameters == nil {
+		baselineParams = c.DefaultParameters().(*JPEGBaselineParameters)
 	} else {
-		// Use codec defaults
-		baselineParams = NewBaselineParameters()
-		baselineParams.Quality = c.quality
+		var ok bool
+		baselineParams, ok = parameters.(*JPEGBaselineParameters)
+		if !ok || baselineParams == nil {
+			return fmt.Errorf("%w: JPEG Baseline requires *JPEGBaselineParameters, got %T", codec.ErrInvalidParameters, parameters)
+		}
 	}
 
 	// Validate parameters
@@ -88,8 +77,8 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		return fmt.Errorf("invalid JPEG Baseline parameters: %w", err)
 	}
 	quality := baselineParams.Quality
-	if frameInfo.SamplesPerPixel == 3 && frameInfo.PhotometricInterpretation == "RGB" {
-		setOutputColorMetadata(newPixelData, "YBR_FULL_422", 0)
+	if frameInfo.SamplesPerPixel == 3 && frameInfo.PhotometricInterpretation.Value == pixel.RGBPhotometric.Value {
+		setOutputColorMetadata(newPixelData, pixel.YbrFull422, pixel.InterleavedPlanar)
 	}
 
 	// Process all frames
@@ -99,7 +88,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -121,7 +110,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Add encoded frame to destination
-		if err := newPixelData.AddFrame(jpegData); err != nil {
+		if err := newPixelData.AddFrame(ctx, jpegData); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -130,16 +119,13 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 }
 
 // Decode decodes JPEG Baseline data to uncompressed pixel data
-func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
+	frameInfo := oldPixelData.FrameInfo()
 
 	// Process all frames
 	frameCount := oldPixelData.FrameCount()
@@ -148,7 +134,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -171,11 +157,11 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 			return fmt.Errorf("decoded height (%d) doesn't match expected (%d)", height, frameInfo.Height)
 		}
 		if components == 3 {
-			setOutputColorMetadata(newPixelData, "RGB", 0)
+			setOutputColorMetadata(newPixelData, pixel.RGBPhotometric, pixel.InterleavedPlanar)
 		}
 
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(pixelData); err != nil {
+		if err := newPixelData.AddFrame(ctx, pixelData); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -183,27 +169,27 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	return nil
 }
 
-func setOutputColorMetadata(pixelData imagetypes.PixelData, photometric string, planarConfiguration uint16) {
-	info := pixelData.GetFrameInfo()
-	if info == nil {
-		return
-	}
-	info.PhotometricInterpretation = photometric
+func setOutputColorMetadata(pixelData codec.FrameSink, photometric *pixel.PhotometricInterpretation, planarConfiguration pixel.PlanarConfiguration) {
+	info := pixelDataFrameInfo(pixelData)
+	info.PhotometricInterpretation = *photometric
 	info.PlanarConfiguration = planarConfiguration
-	if setter, ok := pixelData.(frameInfoSetter); ok {
-		setter.SetFrameInfo(info)
-	}
+	_ = pixelData.SetFrameInfo(info)
 }
 
-type frameInfoSetter interface {
-	SetFrameInfo(info *imagetypes.FrameInfo)
+func pixelDataFrameInfo(pixelData codec.FrameSink) codec.FrameInfo {
+	if source, ok := pixelData.(codec.FrameSource); ok {
+		return source.FrameInfo()
+	}
+	return codec.FrameInfo{}
 }
 
 // RegisterBaselineCodec registers the JPEG Baseline codec with the global registry
 func RegisterBaselineCodec(quality int) {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	baselineCodec := NewBaselineCodec(quality)
-	registry.RegisterCodec(transfer.JPEGBaseline8Bit, baselineCodec)
+	if _, err := registry.Replace(baselineCodec); err != nil {
+		panic(err)
+	}
 }
 
 func init() {

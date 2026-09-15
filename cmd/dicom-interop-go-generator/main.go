@@ -13,16 +13,18 @@ import (
 	"sort"
 	"strings"
 
+	"context"
 	_ "github.com/cocosip/go-dicom-codecs/jpeg2000/htj2k"
 	"github.com/cocosip/go-dicom/pkg/dicom/dataset"
 	"github.com/cocosip/go-dicom/pkg/dicom/element"
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
 	"github.com/cocosip/go-dicom/pkg/dicom/tag"
+	dicomtranscode "github.com/cocosip/go-dicom/pkg/dicom/transcode"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/dicom/vr"
 	"github.com/cocosip/go-dicom/pkg/dicom/writer"
-	"github.com/cocosip/go-dicom/pkg/imaging"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixeldata"
 )
 
 const defaultBundleRoot = "test-data/htj2k/interop-v1"
@@ -228,13 +230,19 @@ func decodeInputDataset(encoded *dataset.Dataset) (*dataset.Dataset, error) {
 }
 
 func transcode(source *dataset.Dataset, sourceSyntax, targetSyntax *transfer.Syntax) (*dataset.Dataset, error) {
-	transcoder := codec.NewTranscoder(
+	manager, err := dicomtranscode.NewManager(codec.GlobalRegistry())
+	if err != nil {
+		return nil, err
+	}
+	transcoder, err := manager.NewTranscoder(
 		sourceSyntax,
 		targetSyntax,
-		codec.WithCodecRegistry(codec.GetGlobalRegistry()),
-		codec.WithStrictDICOMVR(false),
+		dicomtranscode.WithStrictDICOMVR(false),
 	)
-	return transcoder.Transcode(source)
+	if err != nil {
+		return nil, err
+	}
+	return transcoder.Transcode(context.Background(), source)
 }
 
 func transferSyntax(uid string) (*transfer.Syntax, error) {
@@ -274,7 +282,7 @@ func writeDatasetArtifact(root, slashPath string, data *dataset.Dataset, syntax 
 }
 
 func writeCodestreamArtifacts(root string, paths []string, data *dataset.Dataset, artifacts map[string]artifactDigest) error {
-	pixels, err := imaging.CreatePixelData(data)
+	pixels, err := pixeldata.FromDataset(data)
 	if err != nil {
 		return err
 	}
@@ -282,7 +290,7 @@ func writeCodestreamArtifacts(root string, paths []string, data *dataset.Dataset
 		return fmt.Errorf("encoded frame count = %d, want %d", pixels.FrameCount(), len(paths))
 	}
 	for frame, slashPath := range paths {
-		content, err := pixels.GetFrame(frame)
+		content, err := pixels.Frame(context.Background(), frame)
 		if err != nil {
 			return err
 		}
@@ -298,7 +306,7 @@ func writeCodestreamArtifacts(root string, paths []string, data *dataset.Dataset
 }
 
 func writeRawArtifacts(root string, paths []string, data *dataset.Dataset, image bundleImage, artifacts map[string]artifactDigest) error {
-	pixels, err := imaging.CreatePixelData(data)
+	pixels, err := pixeldata.FromDataset(data)
 	if err != nil {
 		return err
 	}
@@ -307,7 +315,7 @@ func writeRawArtifacts(root string, paths []string, data *dataset.Dataset, image
 	}
 	expectedLength := image.Width * image.Height * image.SamplesPerPixel * image.BitsAllocated / 8
 	for frame, slashPath := range paths {
-		content, err := pixels.GetFrame(frame)
+		content, err := pixels.Frame(context.Background(), frame)
 		if err != nil {
 			return err
 		}

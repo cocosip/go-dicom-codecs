@@ -3,9 +3,10 @@ package nearlossless
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 // TestSinglePixelImage tests encoding/decoding of a 1x1 image
@@ -28,37 +29,31 @@ func TestSinglePixelImage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			pixelData := []byte{tc.pixel}
 
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     1,
-				Height:                    1,
-				BitsAllocated:             8,
-				BitsStored:                8,
-				HighBit:                   7,
-				SamplesPerPixel:           1,
-				PixelRepresentation:       0,
-				PlanarConfiguration:       0,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &codec.FrameInfo{
+				Width:  1,
+				Height: 1,
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 
 			src := codecHelpers.NewTestPixelData(frameInfo)
-			if err := src.AddFrame(pixelData); err != nil {
+			if err := src.AddFrame(context.Background(), pixelData); err != nil {
 				t.Fatalf("AddFrame failed: %v", err)
 			}
 
-			params := codec.NewBaseParameters()
-			params.SetParameter("near", tc.near)
+			params := NewNearLosslessParameters().WithNEAR(tc.near)
 
 			encoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Encode(src, encoded, params); err != nil {
+			if err := c.Encode(context.Background(), src, encoded, params); err != nil {
 				t.Fatalf("Encode() failed: %v", err)
 			}
 
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Decode(encoded, decoded, nil); err != nil {
+			if err := c.Decode(context.Background(), encoded, decoded, nil); err != nil {
 				t.Fatalf("Decode() failed: %v", err)
 			}
 
-			decodedFrame, err := decoded.GetFrame(0)
+			decodedFrame, err := decoded.Frame(context.Background(), 0)
 			if err != nil {
 				t.Fatalf("GetFrame failed: %v", err)
 			}
@@ -101,37 +96,31 @@ func TestSingleLineImage(t *testing.T) {
 				pixelData[i] = byte((i * 13) % 256)
 			}
 
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     uint16(tc.width),
-				Height:                    1,
-				BitsAllocated:             8,
-				BitsStored:                8,
-				HighBit:                   7,
-				SamplesPerPixel:           1,
-				PixelRepresentation:       0,
-				PlanarConfiguration:       0,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &codec.FrameInfo{
+				Width:  uint16(tc.width),
+				Height: 1,
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 
 			src := codecHelpers.NewTestPixelData(frameInfo)
-			if err := src.AddFrame(pixelData); err != nil {
+			if err := src.AddFrame(context.Background(), pixelData); err != nil {
 				t.Fatalf("AddFrame failed: %v", err)
 			}
 
-			params := codec.NewBaseParameters()
-			params.SetParameter("near", tc.near)
+			params := NewNearLosslessParameters().WithNEAR(tc.near)
 
 			encoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Encode(src, encoded, params); err != nil {
+			if err := c.Encode(context.Background(), src, encoded, params); err != nil {
 				t.Fatalf("Encode() failed: %v", err)
 			}
 
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Decode(encoded, decoded, nil); err != nil {
+			if err := c.Decode(context.Background(), encoded, decoded, nil); err != nil {
 				t.Fatalf("Decode() failed: %v", err)
 			}
 
-			decodedFrame, err := decoded.GetFrame(0)
+			decodedFrame, err := decoded.Frame(context.Background(), 0)
 			if err != nil {
 				t.Fatalf("GetFrame failed: %v", err)
 			}
@@ -181,37 +170,31 @@ func TestSingleColumnImage(t *testing.T) {
 				pixelData[i] = byte((i * 17) % 256)
 			}
 
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     1,
-				Height:                    uint16(tc.height),
-				BitsAllocated:             8,
-				BitsStored:                8,
-				HighBit:                   7,
-				SamplesPerPixel:           1,
-				PixelRepresentation:       0,
-				PlanarConfiguration:       0,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &codec.FrameInfo{
+				Width:  1,
+				Height: uint16(tc.height),
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 
 			src := codecHelpers.NewTestPixelData(frameInfo)
-			if err := src.AddFrame(pixelData); err != nil {
+			if err := src.AddFrame(context.Background(), pixelData); err != nil {
 				t.Fatalf("AddFrame failed: %v", err)
 			}
 
-			params := codec.NewBaseParameters()
-			params.SetParameter("near", tc.near)
+			params := NewNearLosslessParameters().WithNEAR(tc.near)
 
 			encoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Encode(src, encoded, params); err != nil {
+			if err := c.Encode(context.Background(), src, encoded, params); err != nil {
 				t.Fatalf("Encode() failed: %v", err)
 			}
 
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Decode(encoded, decoded, nil); err != nil {
+			if err := c.Decode(context.Background(), encoded, decoded, nil); err != nil {
 				t.Fatalf("Decode() failed: %v", err)
 			}
 
-			decodedFrame, err := decoded.GetFrame(0)
+			decodedFrame, err := decoded.Frame(context.Background(), 0)
 			if err != nil {
 				t.Fatalf("GetFrame failed: %v", err)
 			}

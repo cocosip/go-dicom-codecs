@@ -8,7 +8,7 @@ import (
 	_ "github.com/cocosip/go-dicom-codecs/jpeg2000/lossless"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func main() {
@@ -28,8 +28,8 @@ func main() {
 func registryUsageExample() {
 	// Get codec from registry
 	// The codec is automatically registered via init() when the package is imported
-	registry := codec.GetGlobalRegistry()
-	j2kCodec, exists := registry.GetCodec(transfer.JPEG2000Lossless)
+	registry := codec.GlobalRegistry()
+	j2kCodec, exists := registry.Lookup(transfer.JPEG2000Lossless)
 	if !exists {
 		fmt.Println("JPEG 2000 Lossless codec not found in registry")
 		return
@@ -49,23 +49,18 @@ func registryUsageExample() {
 
 	fmt.Println("Example workflow:")
 	fmt.Println("  1. Import package: _ \"github.com/cocosip/go-dicom-codecs/jpeg2000/lossless\"")
-	fmt.Println("  2. Get codec: registry.GetCodec(transfer.JPEG2000Lossless)")
+	fmt.Println("  2. Get codec: registry.Lookup(transfer.JPEG2000Lossless)")
 	fmt.Println("  3. Create src PixelData with compressed JPEG 2000 data")
 	fmt.Println("  4. Call codec.Decode(src, dst, nil)")
 	fmt.Println("  5. Use dst.Data for uncompressed pixel data")
 	fmt.Println()
 
 	// Example structure (with placeholder data)
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     512,
-		Height:                    512,
-		BitsAllocated:             16,
-		BitsStored:                12,
-		HighBit:                   11,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: "MONOCHROME2",
+	frameInfo := &codec.FrameInfo{
+		Width:  512,
+		Height: 512,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 11, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
 	// Data would contain actual JPEG 2000 codestream
@@ -74,9 +69,9 @@ func registryUsageExample() {
 
 	fmt.Printf("Example source metadata:\n")
 	fmt.Printf("  Dimensions: %dx%d\n", frameInfo.Width, frameInfo.Height)
-	fmt.Printf("  Bit depth: %d bits (allocated: %d)\n", frameInfo.BitsStored, frameInfo.BitsAllocated)
+	fmt.Printf("  Bit depth: %d bits (allocated: %d)\n", frameInfo.BitDepth.BitsStored, frameInfo.BitDepth.BitsAllocated)
 	fmt.Printf("  Components: %d\n", frameInfo.SamplesPerPixel)
-	fmt.Printf("  Photometric: %s\n", frameInfo.PhotometricInterpretation)
+	fmt.Printf("  Photometric: %s\n", frameInfo.PhotometricInterpretation.Value)
 	fmt.Println()
 
 	fmt.Println("To decode:")
@@ -89,8 +84,8 @@ func registryUsageExample() {
 }
 
 func codecInfoExample() {
-	registry := codec.GetGlobalRegistry()
-	j2kCodec, exists := registry.GetCodec(transfer.JPEG2000Lossless)
+	registry := codec.GlobalRegistry()
+	j2kCodec, exists := registry.Lookup(transfer.JPEG2000Lossless)
 	if !exists {
 		fmt.Println("Codec not found")
 		return

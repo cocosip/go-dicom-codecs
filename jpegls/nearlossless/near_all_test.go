@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 // TestAllNEARValues tests a comprehensive range of NEAR values
@@ -24,37 +25,31 @@ func TestAllNEARValues(t *testing.T) {
 
 	for _, near := range nearValues {
 		t.Run(fmt.Sprintf("NEAR=%d", near), func(t *testing.T) {
-			frameInfo := &imagetypes.FrameInfo{
-				Width:                     uint16(width),
-				Height:                    uint16(height),
-				BitsAllocated:             8,
-				BitsStored:                8,
-				HighBit:                   7,
-				SamplesPerPixel:           1,
-				PixelRepresentation:       0,
-				PlanarConfiguration:       0,
-				PhotometricInterpretation: photometricMonochrome2,
+			frameInfo := &codec.FrameInfo{
+				Width:  uint16(width),
+				Height: uint16(height),
+
+				SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 			}
 
 			src := codecHelpers.NewTestPixelData(frameInfo)
-			if err := src.AddFrame(pixelData); err != nil {
+			if err := src.AddFrame(context.Background(), pixelData); err != nil {
 				t.Fatalf("AddFrame failed: %v", err)
 			}
 
-			params := codec.NewBaseParameters()
-			params.SetParameter("near", near)
+			params := NewNearLosslessParameters().WithNEAR(near)
 
 			encoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Encode(src, encoded, params); err != nil {
+			if err := c.Encode(context.Background(), src, encoded, params); err != nil {
 				t.Fatalf("Encode() failed: %v", err)
 			}
 
 			decoded := codecHelpers.NewTestPixelData(frameInfo)
-			if err := c.Decode(encoded, decoded, nil); err != nil {
+			if err := c.Decode(context.Background(), encoded, decoded, nil); err != nil {
 				t.Fatalf("Decode() failed: %v", err)
 			}
 
-			decodedFrame, err := decoded.GetFrame(0)
+			decodedFrame, err := decoded.Frame(context.Background(), 0)
 			if err != nil {
 				t.Fatalf("GetFrame failed: %v", err)
 			}

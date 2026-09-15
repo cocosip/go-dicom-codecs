@@ -4,11 +4,13 @@ package main
 import (
 	"fmt"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	j2k "github.com/cocosip/go-dicom-codecs/jpeg2000"
 	lossless "github.com/cocosip/go-dicom-codecs/jpeg2000/lossless"
 	lossy "github.com/cocosip/go-dicom-codecs/jpeg2000/lossy"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func main() {
@@ -34,21 +36,19 @@ func main() {
 		w, h, comps := 8, 8, 3
 		n := w * h
 		src := make([]byte, n*comps)
-		frameInfo := &imagetypes.FrameInfo{
-			Width:           uint16(w),
-			Height:          uint16(h),
-			BitsAllocated:   8,
-			BitsStored:      8,
-			HighBit:         7,
-			SamplesPerPixel: uint16(comps),
+		frameInfo := &dicomcodec.FrameInfo{
+			Width:  uint16(w),
+			Height: uint16(h),
+
+			SamplesPerPixel: uint16(comps), BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 		}
 		pdIn := codecHelpers.NewTestPixelData(frameInfo)
-		if err := pdIn.AddFrame(src); err != nil {
+		if err := pdIn.AddFrame(context.Background(), src); err != nil {
 			fmt.Println("add frame error:", err)
 			return
 		}
 		pdOut := codecHelpers.NewTestPixelData(frameInfo)
-		if err := enc.Encode(pdIn, pdOut, p); err != nil {
+		if err := enc.Encode(context.Background(), pdIn, pdOut, p); err != nil {
 			fmt.Println("encode error:", err)
 			return
 		}
@@ -64,21 +64,19 @@ func main() {
 		w, h, comps := 8, 8, 2
 		n := w * h
 		src := make([]byte, n*comps)
-		frameInfo := &imagetypes.FrameInfo{
-			Width:           uint16(w),
-			Height:          uint16(h),
-			BitsAllocated:   8,
-			BitsStored:      8,
-			HighBit:         7,
-			SamplesPerPixel: uint16(comps),
+		frameInfo := &dicomcodec.FrameInfo{
+			Width:  uint16(w),
+			Height: uint16(h),
+
+			SamplesPerPixel: uint16(comps), BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 		}
 		pdIn := codecHelpers.NewTestPixelData(frameInfo)
-		if err := pdIn.AddFrame(src); err != nil {
+		if err := pdIn.AddFrame(context.Background(), src); err != nil {
 			fmt.Println("add frame error:", err)
 			return
 		}
 		pdOut := codecHelpers.NewTestPixelData(frameInfo)
-		if err := enc.Encode(pdIn, pdOut, p); err != nil {
+		if err := enc.Encode(context.Background(), pdIn, pdOut, p); err != nil {
 			fmt.Println("encode error:", err)
 			return
 		}

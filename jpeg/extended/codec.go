@@ -2,11 +2,11 @@
 package extended
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 var _ codec.Codec = (*Codec)(nil)
@@ -40,11 +40,11 @@ func (c *Codec) Name() string {
 
 // TransferSyntax returns the transfer syntax this codec handles
 func (c *Codec) TransferSyntax() *transfer.Syntax {
-	return transfer.JPEGProcess2_4
+	return transfer.JPEGExtended12Bit
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *Codec) GetDefaultParameters() codec.Parameters {
+// DefaultParameters returns the default codec parameters.
+func (c *Codec) DefaultParameters() codec.Parameters {
 	params := NewExtendedParameters()
 	params.Quality = c.quality
 	params.BitDepth = c.bitDepth
@@ -52,18 +52,15 @@ func (c *Codec) GetDefaultParameters() codec.Parameters {
 }
 
 // Encode encodes pixel data using JPEG Extended
-func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
 
 	// Get frame info
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return fmt.Errorf("failed to get frame info from source pixel data")
-	}
-	if frameInfo.BitsStored > 12 {
-		return fmt.Errorf("JPEG Extended only supports up to 12-bit data, got %d bits", frameInfo.BitsStored)
+	frameInfo := oldPixelData.FrameInfo()
+	if frameInfo.BitDepth.BitsStored > 12 {
+		return fmt.Errorf("JPEG Extended only supports up to 12-bit data, got %d bits", frameInfo.BitDepth.BitsStored)
 	}
 
 	// Extract parameters
@@ -73,29 +70,14 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 	// Get encoding parameters
 	var extendedParams *JPEGExtendedParameters
-	if parameters != nil {
-		// Try to use typed parameters if provided
-		if jp, ok := parameters.(*JPEGExtendedParameters); ok {
-			extendedParams = jp
-		} else {
-			// Fallback: create from generic parameters
-			extendedParams = NewExtendedParameters()
-			if q := parameters.GetParameter("quality"); q != nil {
-				if qInt, ok := q.(int); ok && qInt >= 1 && qInt <= 100 {
-					extendedParams.Quality = qInt
-				}
-			}
-			if bd := parameters.GetParameter("bitDepth"); bd != nil {
-				if bdInt, ok := bd.(int); ok && (bdInt == 8 || bdInt == 12) {
-					extendedParams.BitDepth = bdInt
-				}
-			}
-		}
+	if parameters == nil {
+		extendedParams = c.DefaultParameters().(*JPEGExtendedParameters)
 	} else {
-		// Use codec defaults
-		extendedParams = NewExtendedParameters()
-		extendedParams.Quality = c.quality
-		extendedParams.BitDepth = c.bitDepth
+		var ok bool
+		extendedParams, ok = parameters.(*JPEGExtendedParameters)
+		if !ok || extendedParams == nil {
+			return fmt.Errorf("%w: JPEG Extended requires *JPEGExtendedParameters, got %T", codec.ErrInvalidParameters, parameters)
+		}
 	}
 
 	// Validate parameters
@@ -105,9 +87,9 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 	// Determine bit depth from source if not explicitly set
 	bitDepth := extendedParams.BitDepth
-	if frameInfo.BitsStored > 0 && frameInfo.BitsStored <= 8 {
+	if frameInfo.BitDepth.BitsStored > 0 && frameInfo.BitDepth.BitsStored <= 8 {
 		bitDepth = 8
-	} else if frameInfo.BitsStored > 8 && frameInfo.BitsStored <= 12 {
+	} else if frameInfo.BitDepth.BitsStored > 8 && frameInfo.BitDepth.BitsStored <= 12 {
 		bitDepth = 12
 	}
 
@@ -120,7 +102,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -135,7 +117,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Add encoded frame to destination
-		if err := newPixelData.AddFrame(encoded); err != nil {
+		if err := newPixelData.AddFrame(ctx, encoded); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -144,7 +126,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 }
 
 // Decode decodes JPEG Extended data
-func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
@@ -156,7 +138,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -171,7 +153,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(decoded); err != nil {
+		if err := newPixelData.AddFrame(ctx, decoded); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -184,8 +166,10 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 // quality: 1-100 (default 90)
 func RegisterExtendedCodec(bitDepth int, quality int) {
 	c := NewExtendedCodec(bitDepth, quality)
-	registry := codec.GetGlobalRegistry()
-	registry.RegisterCodec(transfer.JPEGProcess2_4, c)
+	registry := codec.GlobalRegistry()
+	if _, err := registry.Replace(c); err != nil {
+		panic(err)
+	}
 }
 
 func init() {

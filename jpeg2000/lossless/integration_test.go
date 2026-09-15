@@ -3,18 +3,19 @@ package lossless
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 // TestCodecRegistration verifies the codec is registered in the global registry
 func TestCodecRegistration(t *testing.T) {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 
 	// Get the codec from registry
-	retrievedCodec, exists := registry.GetCodec(transfer.JPEG2000Lossless)
+	retrievedCodec, exists := registry.Lookup(transfer.JPEG2000Lossless)
 	if !exists {
 		t.Fatal("JPEG 2000 Lossless codec not found in global registry")
 	}
@@ -54,32 +55,32 @@ func TestCodecInterfaceCompliance(t *testing.T) {
 	}
 
 	// Test Encode method exists and works
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           1,
-		Height:          1,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  1,
+		Height: 1,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame([]byte{1, 2, 3}); err != nil {
+	if err := src.AddFrame(context.Background(), []byte{1, 2, 3}); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 	dst := codecHelpers.NewTestPixelData(frameInfo)
-	err := c.Encode(src, dst, nil)
+	err := c.Encode(context.Background(
 	// Encoding should work now
+	), src, dst, nil)
+
 	if err != nil {
 		t.Errorf("Encode failed: %v", err)
 	}
-	dstData, _ := dst.GetFrame(0)
+	dstData, _ := dst.Frame(context.Background(), 0)
 	if len(dstData) == 0 {
 		t.Error("Encoded data is empty")
 	}
 
 	// Test Decode method exists
 	emptyDst := codecHelpers.NewTestPixelData(frameInfo)
-	err = c.Decode(codecHelpers.NewTestPixelData(frameInfo), emptyDst, nil)
+	err = c.Decode(context.Background(), codecHelpers.NewTestPixelData(frameInfo), emptyDst, nil)
 	// We expect an error (empty data)
 	if err == nil {
 		t.Error("Decode should return error for empty data")
@@ -121,29 +122,27 @@ func TestCodecMetadata(t *testing.T) {
 func TestDecodeErrorHandling(t *testing.T) {
 	c := NewCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 
 	srcWithData := codecHelpers.NewTestPixelData(frameInfo)
-	if err := srcWithData.AddFrame([]byte{1}); err != nil {
+	if err := srcWithData.AddFrame(context.Background(), []byte{1}); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
 	srcWithInvalidData := codecHelpers.NewTestPixelData(frameInfo)
-	if err := srcWithInvalidData.AddFrame([]byte{0x00, 0x01, 0x02}); err != nil {
+	if err := srcWithInvalidData.AddFrame(context.Background(), []byte{0x00, 0x01, 0x02}); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
 	tests := []struct {
 		name          string
-		src           imagetypes.PixelData
-		dst           imagetypes.PixelData
+		src           codec.FrameSource
+		dst           codec.FrameSink
 		expectError   bool
 		errorContains string
 	}{
@@ -179,7 +178,7 @@ func TestDecodeErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := c.Decode(tt.src, tt.dst, nil)
+			err := c.Decode(context.Background(), tt.src, tt.dst, nil)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got nil")
@@ -212,37 +211,33 @@ func TestDecodeErrorHandling(t *testing.T) {
 func TestEncodeErrorHandling(t *testing.T) {
 	c := NewCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 
 	srcWithData := codecHelpers.NewTestPixelData(frameInfo)
-	if err := srcWithData.AddFrame([]byte{1}); err != nil {
+	if err := srcWithData.AddFrame(context.Background(), []byte{1}); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
-	frameInfoSmall := &imagetypes.FrameInfo{
-		Width:           8,
-		Height:          8,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfoSmall := &codec.FrameInfo{
+		Width:  8,
+		Height: 8,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	srcValid := codecHelpers.NewTestPixelData(frameInfoSmall)
-	if err := srcValid.AddFrame(make([]byte, 64)); err != nil {
+	if err := srcValid.AddFrame(context.Background(), make([]byte, 64)); err != nil {
 		t.Fatalf("AddFrame failed: %v", err)
 	}
 
 	tests := []struct {
 		name        string
-		src         imagetypes.PixelData
-		dst         imagetypes.PixelData
+		src         codec.FrameSource
+		dst         codec.FrameSink
 		expectError bool
 	}{
 		{
@@ -273,7 +268,7 @@ func TestEncodeErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := c.Encode(tt.src, tt.dst, nil)
+			err := c.Encode(context.Background(), tt.src, tt.dst, nil)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got nil")

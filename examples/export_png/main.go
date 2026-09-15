@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -17,6 +18,7 @@ import (
 	"github.com/cocosip/go-dicom/pkg/dicom/element"
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
 	"github.com/cocosip/go-dicom/pkg/dicom/tag"
+	"github.com/cocosip/go-dicom/pkg/dicom/transcode"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
 )
@@ -26,8 +28,15 @@ func decodePixels(path string) ([]byte, int, int, bool, error) {
 	if err != nil {
 		return nil, 0, 0, false, err
 	}
-	tr := codec.NewTranscoder(res.TransferSyntax, transfer.ExplicitVRLittleEndian)
-	ds, err := tr.Transcode(res.Dataset)
+	manager, err := transcode.NewManager(codec.GlobalRegistry())
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+	tr, err := manager.NewTranscoder(res.TransferSyntax, transfer.ExplicitVRLittleEndian)
+	if err != nil {
+		return nil, 0, 0, false, err
+	}
+	ds, err := tr.Transcode(context.Background(), res.Dataset)
 	if err != nil {
 		return nil, 0, 0, false, err
 	}

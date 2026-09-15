@@ -61,4 +61,3 @@ func TestPartialGroup(t *testing.T) {
 		})
 	}
 }
-

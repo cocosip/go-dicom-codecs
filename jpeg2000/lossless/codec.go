@@ -2,12 +2,12 @@
 package lossless
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg2000"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
 )
 
 var _ codec.Codec = (*Codec)(nil)
@@ -47,122 +47,62 @@ func (c *Codec) TransferSyntax() *transfer.Syntax {
 	return c.transferSyntax
 }
 
-// GetDefaultParameters returns the default codec parameters
-func (c *Codec) GetDefaultParameters() codec.Parameters {
+// DefaultParameters returns the default codec parameters.
+func (c *Codec) DefaultParameters() codec.Parameters {
 	return NewLosslessParameters()
 }
 
 // Encode encodes pixel data to JPEG 2000 Lossless format
-func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	frameInfo, err := c.validateLosslessEncodeInputs(oldPixelData, newPixelData)
 	if err != nil {
 		return err
 	}
-	losslessParams := c.extractLosslessParameters(parameters)
+	losslessParams, err := c.extractLosslessParameters(parameters)
+	if err != nil {
+		return err
+	}
 	if err := losslessParams.Validate(); err != nil {
 		return fmt.Errorf("invalid JPEG2000 lossless parameters: %w", err)
 	}
 	encParams := c.configureLosslessEncodeParams(frameInfo, losslessParams)
-	c.extractLosslessMCTParameters(encParams, losslessParams, parameters)
+	c.extractLosslessMCTParameters(encParams, losslessParams)
 	encoder := jpeg2000.NewEncoder(encParams)
-	return c.encodeLosslessAllFrames(oldPixelData, newPixelData, encoder)
+	return c.encodeLosslessAllFrames(ctx, oldPixelData, newPixelData, encoder)
 }
 
-func (c *Codec) validateLosslessEncodeInputs(oldPixelData, newPixelData imagetypes.PixelData) (*imagetypes.FrameInfo, error) {
+func (c *Codec) validateLosslessEncodeInputs(oldPixelData codec.FrameSource, newPixelData codec.FrameSink) (codec.FrameInfo, error) {
 	if oldPixelData == nil || newPixelData == nil {
-		return nil, fmt.Errorf("source and destination PixelData cannot be nil")
+		return codec.FrameInfo{}, fmt.Errorf("source and destination PixelData cannot be nil")
 	}
-	frameInfo := oldPixelData.GetFrameInfo()
-	if frameInfo == nil {
-		return nil, fmt.Errorf("failed to get frame info from source pixel data")
-	}
-	return frameInfo, nil
+	return oldPixelData.FrameInfo(), nil
 }
 
-func (c *Codec) extractLosslessParameters(parameters codec.Parameters) *JPEG2000LosslessParameters {
+func (c *Codec) extractLosslessParameters(parameters codec.Parameters) (*JPEG2000LosslessParameters, error) {
 	if parameters == nil {
-		return NewLosslessParameters()
+		return NewLosslessParameters(), nil
 	}
-	if jp, ok := parameters.(*JPEG2000LosslessParameters); ok {
-		return jp
+	losslessParams, ok := parameters.(*JPEG2000LosslessParameters)
+	if !ok || losslessParams == nil {
+		return nil, fmt.Errorf("%w: JPEG 2000 Lossless requires *JPEG2000LosslessParameters, got %T", codec.ErrInvalidParameters, parameters)
 	}
-	losslessParams := NewLosslessParameters()
-	c.extractBasicLosslessParams(losslessParams, parameters)
-	return losslessParams
+	return losslessParams, nil
 }
 
-func (c *Codec) extractBasicLosslessParams(losslessParams *JPEG2000LosslessParameters, parameters codec.Parameters) {
-	if n := parameters.GetParameter("numLevels"); n != nil {
-		if nInt, ok := n.(int); ok && nInt >= 0 && nInt <= 6 {
-			losslessParams.NumLevels = nInt
-		}
-	}
-	if v := parameters.GetParameter("allowMCT"); v != nil {
-		if b, ok := v.(bool); ok {
-			losslessParams.AllowMCT = b
-		}
-	}
-	if v := parameters.GetParameter("rate"); v != nil {
-		if r, ok := v.(int); ok && r > 0 {
-			losslessParams.Rate = r
-		}
-	}
-	if v := parameters.GetParameter("rateLevels"); v != nil {
-		if arr, ok := v.([]int); ok && len(arr) > 0 {
-			losslessParams.RateLevels = arr
-		}
-	}
-	if v := parameters.GetParameter("progressionOrder"); v != nil {
-		switch x := v.(type) {
-		case int:
-			if x >= 0 {
-				losslessParams.ProgressionOrder = uint8(x)
-			}
-		case uint8:
-			losslessParams.ProgressionOrder = x
-		}
-	}
-	if v := parameters.GetParameter("numLayers"); v != nil {
-		if nInt, ok := v.(int); ok {
-			losslessParams.NumLayers = nInt
-		}
-	}
-	if v := parameters.GetParameter("targetRatio"); v != nil {
-		switch x := v.(type) {
-		case float64:
-			losslessParams.TargetRatio = x
-		case float32:
-			losslessParams.TargetRatio = float64(x)
-		case int:
-			losslessParams.TargetRatio = float64(x)
-		}
-	}
-	if v := parameters.GetParameter("usePCRDOpt"); v != nil {
-		if b, ok := v.(bool); ok {
-			losslessParams.UsePCRDOpt = b
-		}
-	}
-	if v := parameters.GetParameter("appendLosslessLayer"); v != nil {
-		if b, ok := v.(bool); ok {
-			losslessParams.AppendLosslessLayer = b
-		}
-	}
-}
-
-func (c *Codec) configureLosslessEncodeParams(frameInfo *imagetypes.FrameInfo, losslessParams *JPEG2000LosslessParameters) *jpeg2000.EncodeParams {
+func (c *Codec) configureLosslessEncodeParams(frameInfo codec.FrameInfo, losslessParams *JPEG2000LosslessParameters) *jpeg2000.EncodeParams {
 	encParams := jpeg2000.DefaultEncodeParams(
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsStored),
-		frameInfo.PixelRepresentation != 0,
+		int(frameInfo.BitDepth.BitsStored),
+		frameInfo.PixelRepresentation.IsSigned(),
 	)
 	encParams.NumLevels = losslessParams.NumLevels
 	encParams.ProgressionOrder = losslessParams.ProgressionOrder
 	encParams.NumLayers = losslessParams.NumLayers
 	targetRatio := losslessParams.TargetRatio
 	if targetRatio <= 0 && losslessParams.Rate > 0 {
-		targetRatio = rateToTargetRatio(losslessParams.Rate, int(frameInfo.BitsStored), int(frameInfo.BitsAllocated))
+		targetRatio = rateToTargetRatio(losslessParams.Rate, int(frameInfo.BitDepth.BitsStored), int(frameInfo.BitDepth.BitsAllocated))
 	}
 	encParams.TargetRatio = targetRatio
 	encParams.UsePCRDOpt = losslessParams.UsePCRDOpt || targetRatio > 0
@@ -177,33 +117,34 @@ func (c *Codec) configureLosslessEncodeParams(frameInfo *imagetypes.FrameInfo, l
 	encParams.LayerRates = openJPEGLayerRates(
 		losslessParams.Rate,
 		losslessParams.RateLevels,
-		int(frameInfo.BitsStored),
-		int(frameInfo.BitsAllocated),
+		int(frameInfo.BitDepth.BitsStored),
+		int(frameInfo.BitDepth.BitsAllocated),
 		losslessParams.AppendLosslessLayer,
 	)
 	return encParams
 }
 
-func (c *Codec) extractLosslessMCTParameters(encParams *jpeg2000.EncodeParams, losslessParams *JPEG2000LosslessParameters, parameters codec.Parameters) {
-	if !losslessParams.AllowMCT || parameters == nil {
+func (c *Codec) extractLosslessMCTParameters(encParams *jpeg2000.EncodeParams, parameters *JPEG2000LosslessParameters) {
+	if !parameters.AllowMCT {
 		return
 	}
-	if v := parameters.GetParameter("mctMatrix"); v != nil {
+	getter := parameters
+	if v := getter.GetParameter("mctMatrix"); v != nil {
 		if m, ok := v.([][]float64); ok {
 			encParams.MCTMatrix = m
 		}
 	}
-	if v := parameters.GetParameter("inverseMctMatrix"); v != nil {
+	if v := getter.GetParameter("inverseMctMatrix"); v != nil {
 		if m, ok := v.([][]float64); ok {
 			encParams.InverseMCTMatrix = m
 		}
 	}
-	if v := parameters.GetParameter("mctOffsets"); v != nil {
+	if v := getter.GetParameter("mctOffsets"); v != nil {
 		if m, ok := v.([]int32); ok {
 			encParams.MCTOffsets = m
 		}
 	}
-	if v := parameters.GetParameter("mctNormScale"); v != nil {
+	if v := getter.GetParameter("mctNormScale"); v != nil {
 		switch x := v.(type) {
 		case float64:
 			encParams.MCTNormScale = x
@@ -211,40 +152,40 @@ func (c *Codec) extractLosslessMCTParameters(encParams *jpeg2000.EncodeParams, l
 			encParams.MCTNormScale = float64(x)
 		}
 	}
-	if v := parameters.GetParameter("mctAssocType"); v != nil {
+	if v := getter.GetParameter("mctAssocType"); v != nil {
 		if t, ok := v.(uint8); ok {
 			encParams.MCTAssocType = t
 		}
 	}
-	if v := parameters.GetParameter("mctMatrixElementType"); v != nil {
+	if v := getter.GetParameter("mctMatrixElementType"); v != nil {
 		if t, ok := v.(uint8); ok {
 			encParams.MCTMatrixElementType = t
 		}
 	}
-	if v := parameters.GetParameter("mcoPrecision"); v != nil {
+	if v := getter.GetParameter("mcoPrecision"); v != nil {
 		if t, ok := v.(uint8); ok {
 			encParams.MCOPrecision = t
 		}
 	}
-	if v := parameters.GetParameter("mcoRecordOrder"); v != nil {
+	if v := getter.GetParameter("mcoRecordOrder"); v != nil {
 		if arr, ok := v.([]uint8); ok {
 			encParams.MCORecordOrder = arr
 		}
 	}
-	if v := parameters.GetParameter("mctBindings"); v != nil {
+	if v := getter.GetParameter("mctBindings"); v != nil {
 		if arr, ok := v.([]jpeg2000.MCTBindingParams); ok {
 			encParams.MCTBindings = arr
 		}
 	}
 }
 
-func (c *Codec) encodeLosslessAllFrames(oldPixelData, newPixelData imagetypes.PixelData, encoder *jpeg2000.Encoder) error {
+func (c *Codec) encodeLosslessAllFrames(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, encoder *jpeg2000.Encoder) error {
 	frameCount := oldPixelData.FrameCount()
 	if frameCount == 0 {
 		return fmt.Errorf("source pixel data is empty (no frames)")
 	}
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -255,7 +196,7 @@ func (c *Codec) encodeLosslessAllFrames(oldPixelData, newPixelData imagetypes.Pi
 		if err != nil {
 			return fmt.Errorf("JPEG 2000 encode failed for frame %d: %w", frameIndex, err)
 		}
-		if err := newPixelData.AddFrame(encoded); err != nil {
+		if err := newPixelData.AddFrame(ctx, encoded); err != nil {
 			return fmt.Errorf("failed to add encoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -263,7 +204,7 @@ func (c *Codec) encodeLosslessAllFrames(oldPixelData, newPixelData imagetypes.Pi
 }
 
 // Decode decodes JPEG 2000 Lossless data to uncompressed pixel data
-func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, _ codec.Parameters) error {
+func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, _ codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination PixelData cannot be nil")
 	}
@@ -276,7 +217,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 	for frameIndex := 0; frameIndex < frameCount; frameIndex++ {
 		// Get encoded frame data
-		frameData, err := oldPixelData.GetFrame(frameIndex)
+		frameData, err := oldPixelData.Frame(ctx, frameIndex)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", frameIndex, err)
 		}
@@ -294,7 +235,7 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		}
 
 		// Add decoded frame to destination
-		if err := newPixelData.AddFrame(decoder.GetPixelData()); err != nil {
+		if err := newPixelData.AddFrame(ctx, decoder.GetPixelData()); err != nil {
 			return fmt.Errorf("failed to add decoded frame %d: %w", frameIndex, err)
 		}
 	}
@@ -304,16 +245,20 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 
 // RegisterJPEG2000LosslessCodec registers the JPEG 2000 Lossless codec with the global registry
 func RegisterJPEG2000LosslessCodec() {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	j2kCodec := NewCodec()
-	registry.RegisterCodec(transfer.JPEG2000Lossless, j2kCodec)
+	if _, err := registry.Replace(j2kCodec); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterJPEG2000MCLosslessCodec registers JPEG 2000 Part 2 Multi-component lossless codec.
 func RegisterJPEG2000MCLosslessCodec() {
-	registry := codec.GetGlobalRegistry()
+	registry := codec.GlobalRegistry()
 	j2kCodec := NewPart2MultiComponentLosslessCodec()
-	registry.RegisterCodec(transfer.JPEG2000Part2MultiComponentLosslessOnly, j2kCodec)
+	if _, err := registry.Replace(j2kCodec); err != nil {
+		panic(err)
+	}
 }
 
 func init() {

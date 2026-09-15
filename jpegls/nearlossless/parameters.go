@@ -32,6 +32,19 @@ func NewNearLosslessParameters() *JPEGLSNearLosslessParameters {
 	}
 }
 
+// Clone returns an independent copy of the parameters.
+func (p *JPEGLSNearLosslessParameters) Clone() codec.Parameters {
+	if p == nil {
+		return (*JPEGLSNearLosslessParameters)(nil)
+	}
+	clone := *p
+	clone.params = make(map[string]interface{}, len(p.params))
+	for key, value := range p.params {
+		clone.params[key] = value
+	}
+	return &clone
+}
+
 // GetParameter retrieves a parameter by name (implements codec.Parameters)
 func (p *JPEGLSNearLosslessParameters) GetParameter(name string) interface{} {
 	switch name {

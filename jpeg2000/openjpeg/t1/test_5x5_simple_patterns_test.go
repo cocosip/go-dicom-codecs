@@ -98,4 +98,3 @@ func Test5x5SimplePatterns(t *testing.T) {
 		})
 	}
 }
-

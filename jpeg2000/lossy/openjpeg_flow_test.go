@@ -4,17 +4,15 @@ import (
 	"testing"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg2000"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func TestOpenJPEGLossyDefaultRateBuildsFoDicomLayerRates(t *testing.T) {
-	frameInfo := &imagetypes.FrameInfo{
-		Width:               852,
-		Height:              1100,
-		SamplesPerPixel:     1,
-		BitsAllocated:       8,
-		BitsStored:          8,
-		PixelRepresentation: 0,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:           852,
+		Height:          1100,
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 0, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	params := NewLossyParameters()
 	if err := params.Validate(); err != nil {
@@ -24,7 +22,7 @@ func TestOpenJPEGLossyDefaultRateBuildsFoDicomLayerRates(t *testing.T) {
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsStored),
+		int(frameInfo.BitDepth.BitsStored),
 		false,
 	)
 
@@ -51,13 +49,10 @@ func TestOpenJPEGLossyDefaultRateBuildsFoDicomLayerRates(t *testing.T) {
 }
 
 func TestOpenJPEGLossyDefaultRateScalesFinalLayerByStoredBits(t *testing.T) {
-	frameInfo := &imagetypes.FrameInfo{
-		Width:               852,
-		Height:              1100,
-		SamplesPerPixel:     1,
-		BitsAllocated:       16,
-		BitsStored:          12,
-		PixelRepresentation: 0,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:           852,
+		Height:          1100,
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 12, HighBit: 0, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	params := NewLossyParameters()
 	if err := params.Validate(); err != nil {
@@ -67,7 +62,7 @@ func TestOpenJPEGLossyDefaultRateScalesFinalLayerByStoredBits(t *testing.T) {
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsStored),
+		int(frameInfo.BitDepth.BitsStored),
 		false,
 	)
 
@@ -85,20 +80,17 @@ func TestOpenJPEGLossyDefaultRateScalesFinalLayerByStoredBits(t *testing.T) {
 }
 
 func TestTargetRatioDoesNotUseDefaultOpenJPEGLayerRates(t *testing.T) {
-	frameInfo := &imagetypes.FrameInfo{
-		Width:               64,
-		Height:              64,
-		SamplesPerPixel:     1,
-		BitsAllocated:       8,
-		BitsStored:          8,
-		PixelRepresentation: 0,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:           64,
+		Height:          64,
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 0, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	params := NewLossyParameters().WithTargetRatio(5).WithNumLayers(3)
 	encParams := jpeg2000.DefaultEncodeParams(
 		int(frameInfo.Width),
 		int(frameInfo.Height),
 		int(frameInfo.SamplesPerPixel),
-		int(frameInfo.BitsStored),
+		int(frameInfo.BitDepth.BitsStored),
 		false,
 	)
 	codec := NewCodecWithRate(80)

@@ -3,9 +3,10 @@ package lossless
 import (
 	"testing"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 // TestCodecInterface verifies the codec implements the interface
@@ -53,19 +54,17 @@ func TestCodecTransferSyntax(t *testing.T) {
 func TestDecodeNilInputs(t *testing.T) {
 	c := NewCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 
 	tests := []struct {
 		name string
-		src  imagetypes.PixelData
-		dst  imagetypes.PixelData
+		src  codec.FrameSource
+		dst  codec.FrameSink
 	}{
 		{"Both nil", nil, nil},
 		{"Src nil", nil, codecHelpers.NewTestPixelData(frameInfo)},
@@ -74,7 +73,7 @@ func TestDecodeNilInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := c.Decode(tt.src, tt.dst, nil)
+			err := c.Decode(context.Background(), tt.src, tt.dst, nil)
 			if err == nil {
 				t.Error("Expected error for nil input, got nil")
 			}
@@ -86,18 +85,16 @@ func TestDecodeNilInputs(t *testing.T) {
 func TestDecodeEmptyData(t *testing.T) {
 	c := NewCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
 	dst := codecHelpers.NewTestPixelData(frameInfo)
 
-	err := c.Decode(src, dst, nil)
+	err := c.Decode(context.Background(), src, dst, nil)
 	if err == nil {
 		t.Error("Expected error for empty data, got nil")
 	}
@@ -107,21 +104,19 @@ func TestDecodeEmptyData(t *testing.T) {
 func TestDecodeInvalidData(t *testing.T) {
 	c := NewCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame([]byte{0x00, 0x01, 0x02, 0x03}); err != nil {
+	if err := src.AddFrame(context.Background(), []byte{0x00, 0x01, 0x02, 0x03}); err != nil {
 		t.Fatalf("failed to add invalid frame: %v", err)
 	}
 	dst := codecHelpers.NewTestPixelData(frameInfo)
 
-	err := c.Decode(src, dst, nil)
+	err := c.Decode(context.Background(), src, dst, nil)
 	if err == nil {
 		t.Error("Expected error for invalid data, got nil")
 	}
@@ -138,35 +133,33 @@ func TestEncodeNotImplemented(t *testing.T) {
 		pixelData[i] = byte(i % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		t.Fatalf("failed to add frame: %v", err)
 	}
 	dst := codecHelpers.NewTestPixelData(frameInfo)
 
-	err := c.Encode(src, dst, nil)
+	err := c.Encode(context.Background(), src, dst, nil)
 	if err != nil {
 		t.Errorf("Encoding failed: %v", err)
 	}
 
 	// Verify output
-	dstData, _ := dst.GetFrame(0)
+	dstData, _ := dst.Frame(context.Background(), 0)
 	if len(dstData) == 0 {
 		t.Error("Encoded data is empty")
 	}
-	if dst.GetFrameInfo().Width != src.GetFrameInfo().Width {
-		t.Errorf("Width mismatch: got %d, want %d", dst.GetFrameInfo().Width, src.GetFrameInfo().Width)
+	if dst.FrameInfo().Width != src.FrameInfo().Width {
+		t.Errorf("Width mismatch: got %d, want %d", dst.FrameInfo().Width, src.FrameInfo().Width)
 	}
-	if dst.GetFrameInfo().Height != src.GetFrameInfo().Height {
-		t.Errorf("Height mismatch: got %d, want %d", dst.GetFrameInfo().Height, src.GetFrameInfo().Height)
+	if dst.FrameInfo().Height != src.FrameInfo().Height {
+		t.Errorf("Height mismatch: got %d, want %d", dst.FrameInfo().Height, src.FrameInfo().Height)
 	}
 }
 
@@ -174,23 +167,21 @@ func TestEncodeNotImplemented(t *testing.T) {
 func TestEncodeNilInputs(t *testing.T) {
 	c := NewCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	dstPixel := codecHelpers.NewTestPixelData(frameInfo)
-	if err := dstPixel.AddFrame([]byte{1}); err != nil {
+	if err := dstPixel.AddFrame(context.Background(), []byte{1}); err != nil {
 		t.Fatalf("failed to add frame: %v", err)
 	}
 
 	tests := []struct {
 		name string
-		src  imagetypes.PixelData
-		dst  imagetypes.PixelData
+		src  codec.FrameSource
+		dst  codec.FrameSink
 	}{
 		{"Both nil", nil, nil},
 		{"Src nil", nil, codecHelpers.NewTestPixelData(frameInfo)},
@@ -199,7 +190,7 @@ func TestEncodeNilInputs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := c.Encode(tt.src, tt.dst, nil)
+			err := c.Encode(context.Background(), tt.src, tt.dst, nil)
 			if err == nil {
 				t.Error("Expected error for nil input, got nil")
 			}
@@ -211,21 +202,19 @@ func TestEncodeNilInputs(t *testing.T) {
 func TestEncodeEmptyData(t *testing.T) {
 	c := NewCodec()
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:           64,
-		Height:          64,
-		BitsAllocated:   8,
-		BitsStored:      8,
-		HighBit:         7,
-		SamplesPerPixel: 1,
+	frameInfo := &codec.FrameInfo{
+		Width:  64,
+		Height: 64,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation("MONOCHROME2"),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
 	dst := codecHelpers.NewTestPixelData(frameInfo)
 
-	if err := src.AddFrame([]byte{}); err != nil {
+	if err := src.AddFrame(context.Background(), []byte{}); err != nil {
 		t.Fatalf("failed to add frame to src: %v", err)
 	}
-	err := c.Encode(src, dst, nil)
+	err := c.Encode(context.Background(), src, dst, nil)
 	if err == nil {
 		t.Error("Expected error for empty data, got nil")
 	}

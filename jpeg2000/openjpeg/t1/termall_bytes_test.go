@@ -151,4 +151,3 @@ func TestTERMALLBytesComparison(t *testing.T) {
 		t.Logf("Decoded values: %v", decoded5[:16])
 	}
 }
-

@@ -51,4 +51,3 @@ func TestSquareSizes(t *testing.T) {
 		})
 	}
 }
-

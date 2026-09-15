@@ -1,68 +1,62 @@
 package baseline
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 func TestCodecEncodeReportsYCbCrOutputMetadata(t *testing.T) {
-	info := &imagetypes.FrameInfo{
-		Width:                     8,
-		Height:                    8,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           3,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricRGB,
+	info := &dicomcodec.FrameInfo{
+		Width:  8,
+		Height: 8,
+
+		SamplesPerPixel: 3, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 	}
 	source := newMetadataPixelData(info, false)
-	if err := source.AddFrame(make([]byte, 8*8*3)); err != nil {
+	if err := source.AddFrame(context.Background(), make([]byte, 8*8*3)); err != nil {
 		t.Fatal(err)
 	}
 	encoded := newMetadataPixelData(info, true)
 
-	if err := NewBaselineCodec(90).Encode(source, encoded, nil); err != nil {
+	if err := NewBaselineCodec(90).Encode(context.Background(), source, encoded, nil); err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
-	if got := encoded.GetFrameInfo().PhotometricInterpretation; got != "YBR_FULL_422" {
+	if got := encoded.FrameInfo().PhotometricInterpretation.Value; got != "YBR_FULL_422" {
 		t.Fatalf("encoded PhotometricInterpretation = %q, want YBR_FULL_422", got)
 	}
 }
 
 func TestCodecDecodeReportsRGBInterleavedOutputMetadata(t *testing.T) {
-	encodeInfo := &imagetypes.FrameInfo{
-		Width:                     8,
-		Height:                    8,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           3,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricRGB,
+	encodeInfo := &dicomcodec.FrameInfo{
+		Width:  8,
+		Height: 8,
+
+		SamplesPerPixel: 3, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
 	}
 	source := newMetadataPixelData(encodeInfo, false)
-	if err := source.AddFrame(make([]byte, 8*8*3)); err != nil {
+	if err := source.AddFrame(context.Background(), make([]byte, 8*8*3)); err != nil {
 		t.Fatal(err)
 	}
 	encoded := newMetadataPixelData(encodeInfo, true)
 	codec := NewBaselineCodec(90)
-	if err := codec.Encode(source, encoded, nil); err != nil {
+	if err := codec.Encode(context.Background(), source, encoded, nil); err != nil {
 		t.Fatalf("Encode() error = %v", err)
 	}
 
 	decodeInfo := *encodeInfo
-	decodeInfo.PhotometricInterpretation = "YBR_FULL_422"
+	decodeInfo.PhotometricInterpretation = *pixel.YbrFull422
 	decodeInfo.PlanarConfiguration = 1
 	decoded := newMetadataPixelData(&decodeInfo, false)
-	if err := codec.Decode(encoded, decoded, nil); err != nil {
+	if err := codec.Decode(context.Background(), encoded, decoded, nil); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
-	got := decoded.GetFrameInfo()
-	if got.PhotometricInterpretation != photometricRGB {
-		t.Fatalf("decoded PhotometricInterpretation = %q, want RGB", got.PhotometricInterpretation)
+	got := decoded.FrameInfo()
+	if got.PhotometricInterpretation.Value != photometricRGB {
+		t.Fatalf("decoded PhotometricInterpretation = %q, want RGB", got.PhotometricInterpretation.Value)
 	}
 	if got.PlanarConfiguration != 0 {
 		t.Fatalf("decoded PlanarConfiguration = %d, want 0", got.PlanarConfiguration)
@@ -71,37 +65,39 @@ func TestCodecDecodeReportsRGBInterleavedOutputMetadata(t *testing.T) {
 
 type metadataPixelData struct {
 	frames       [][]byte
-	info         imagetypes.FrameInfo
+	info         dicomcodec.FrameInfo
 	encapsulated bool
 }
 
-func newMetadataPixelData(info *imagetypes.FrameInfo, encapsulated bool) *metadataPixelData {
+func newMetadataPixelData(info *dicomcodec.FrameInfo, encapsulated bool) *metadataPixelData {
 	return &metadataPixelData{info: *info, encapsulated: encapsulated}
 }
 
-func (pd *metadataPixelData) GetFrame(index int) ([]byte, error) {
+func (pd *metadataPixelData) Frame(_ context.Context, index int) ([]byte, error) {
 	if index < 0 || index >= len(pd.frames) {
 		return nil, fmt.Errorf("frame %d out of range", index)
 	}
 	return pd.frames[index], nil
 }
 
-func (pd *metadataPixelData) AddFrame(frame []byte) error {
+func (pd *metadataPixelData) AddFrame(_ context.Context, frame []byte) error {
 	pd.frames = append(pd.frames, append([]byte(nil), frame...))
 	return nil
 }
 
 func (pd *metadataPixelData) FrameCount() int { return len(pd.frames) }
 
-func (pd *metadataPixelData) GetFrameInfo() *imagetypes.FrameInfo {
-	info := pd.info
-	return &info
-}
+func (pd *metadataPixelData) FrameInfo() dicomcodec.FrameInfo { return pd.info }
 
-func (pd *metadataPixelData) SetFrameInfo(info *imagetypes.FrameInfo) {
-	if info != nil {
-		pd.info = *info
+func (pd *metadataPixelData) SetFrameInfo(info dicomcodec.FrameInfo) error {
+	if err := info.Validate(); err != nil {
+		return err
 	}
+	pd.info = info
+	return nil
 }
 
-func (pd *metadataPixelData) IsEncapsulated() bool { return pd.encapsulated }
+func (pd *metadataPixelData) Encapsulated() bool { return pd.encapsulated }
+
+var _ dicomcodec.FrameSource = (*metadataPixelData)(nil)
+var _ dicomcodec.FrameSink = (*metadataPixelData)(nil)

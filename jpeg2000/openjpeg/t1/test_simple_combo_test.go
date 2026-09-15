@@ -1,6 +1,8 @@
 package t1
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestSimpleCombo(t *testing.T) {
 	tests := []struct {
@@ -60,4 +62,3 @@ func TestSimpleCombo(t *testing.T) {
 		})
 	}
 }
-

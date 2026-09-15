@@ -4,11 +4,12 @@ package main
 import (
 	"fmt"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom-codecs/jpeg/lossless"
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 const photometricMonochrome2 = "MONOCHROME2"
@@ -43,19 +44,14 @@ func directUsage() {
 	}
 
 	// Create source PixelData
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("AddFrame error: %v\n", err)
 		return
 	}
@@ -66,28 +62,28 @@ func directUsage() {
 
 	// Encode
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := losslessCodec.Encode(src, encoded, nil)
+	err := losslessCodec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		fmt.Printf("Encode error: %v\n", err)
 		return
 	}
 
-	srcData, _ := src.GetFrame(0)
-	encodedData, _ := encoded.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	fmt.Printf("Original size: %d bytes\n", len(srcData))
 	fmt.Printf("Compressed size: %d bytes\n", len(encodedData))
 	fmt.Printf("Compression ratio: %.2fx\n", float64(len(srcData))/float64(len(encodedData)))
 
 	// Decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = losslessCodec.Decode(encoded, decoded, nil)
+	err = losslessCodec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		fmt.Printf("Decode error: %v\n", err)
 		return
 	}
 
 	// Verify lossless reconstruction
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	errors := 0
 	for i := 0; i < len(srcData); i++ {
 		if decodedData[i] != srcData[i] {
@@ -107,8 +103,8 @@ func registryUsage() {
 	lossless.RegisterLosslessCodec(1) // Register with predictor 1
 
 	// Get codec from registry
-	registry := codec.GetGlobalRegistry()
-	retrievedCodec, exists := registry.GetCodec(transfer.JPEGLossless)
+	registry := codec.GlobalRegistry()
+	retrievedCodec, exists := registry.Lookup(transfer.JPEGLossless)
 	if !exists {
 		fmt.Println("Codec not found in registry")
 		return
@@ -123,46 +119,41 @@ func registryUsage() {
 		pixelData[i] = byte(i % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("AddFrame error: %v\n", err)
 		return
 	}
 
 	// Encode using retrieved codec
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := retrievedCodec.Encode(src, encoded, nil)
+	err := retrievedCodec.Encode(context.Background(), src, encoded, nil)
 	if err != nil {
 		fmt.Printf("Encode error: %v\n", err)
 		return
 	}
 
-	srcData, _ := src.GetFrame(0)
-	encodedData, _ := encoded.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	fmt.Printf("Compressed size: %d bytes (%.2fx)\n",
 		len(encodedData), float64(len(srcData))/float64(len(encodedData)))
 
 	// Decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = retrievedCodec.Decode(encoded, decoded, nil)
+	err = retrievedCodec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		fmt.Printf("Decode error: %v\n", err)
 		return
 	}
 
 	// Verify
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	errors := 0
 	for i := 0; i < len(srcData); i++ {
 		if decodedData[i] != srcData[i] {
@@ -190,37 +181,31 @@ func parametersUsage() {
 		}
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     uint16(width),
-		Height:                    uint16(height),
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &codec.FrameInfo{
+		Width:  uint16(width),
+		Height: uint16(height),
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		fmt.Printf("AddFrame error: %v\n", err)
 		return
 	}
 
 	// Create parameters and override predictor
-	params := codec.NewBaseParameters()
-	params.SetParameter("predictor", 5) // Use predictor 5
+	params := lossless.NewLosslessParameters().WithPredictor(5)
 
 	// Encode with parameters
 	encoded := codecHelpers.NewTestPixelData(frameInfo)
-	err := losslessCodec.Encode(src, encoded, params)
+	err := losslessCodec.Encode(context.Background(), src, encoded, params)
 	if err != nil {
 		fmt.Printf("Encode error: %v\n", err)
 		return
 	}
 
-	srcData, _ := src.GetFrame(0)
-	encodedData, _ := encoded.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	encodedData, _ := encoded.Frame(context.Background(), 0)
 	fmt.Printf("Codec default: %s\n", losslessCodec.Name())
 	fmt.Printf("Using predictor from parameters: 5 (Ra + ((Rb - Rc) >> 1))\n")
 	fmt.Printf("Compressed size: %d bytes (%.2fx)\n",
@@ -228,14 +213,14 @@ func parametersUsage() {
 
 	// Decode
 	decoded := codecHelpers.NewTestPixelData(frameInfo)
-	err = losslessCodec.Decode(encoded, decoded, nil)
+	err = losslessCodec.Decode(context.Background(), encoded, decoded, nil)
 	if err != nil {
 		fmt.Printf("Decode error: %v\n", err)
 		return
 	}
 
 	// Verify
-	decodedData, _ := decoded.GetFrame(0)
+	decodedData, _ := decoded.Frame(context.Background(), 0)
 	errors := 0
 	for i := 0; i < len(srcData); i++ {
 		if decodedData[i] != srcData[i] {

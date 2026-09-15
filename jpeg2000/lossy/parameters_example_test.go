@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"log"
 
+	"context"
 	codecHelpers "github.com/cocosip/go-dicom-codecs/codec"
 	"github.com/cocosip/go-dicom-codecs/jpeg2000/lossy"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
+	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 // Example demonstrates the recommended type-safe way to use parameters
@@ -19,20 +21,15 @@ func Example_typeSafeParameters() {
 		pixelData[i] = byte(i % 256)
 	}
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		log.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -43,13 +40,13 @@ func Example_typeSafeParameters() {
 		WithNumLevels(5)
 
 	dst := codecHelpers.NewTestPixelData(frameInfo)
-	err := c.Encode(src, dst, params)
+	err := c.Encode(context.Background(), src, dst, params)
 	if err != nil {
 		log.Fatalf("Encoding failed: %v", err)
 	}
 
-	srcData, _ := src.GetFrame(0)
-	dstData, _ := dst.GetFrame(0)
+	srcData, _ := src.Frame(context.Background(), 0)
+	dstData, _ := dst.Frame(context.Background(), 0)
 	fmt.Printf("Encoded with rate %d\n", params.Rate)
 	fmt.Printf("Compression ratio: %.2f:1\n", float64(len(srcData))/float64(len(dstData)))
 
@@ -65,20 +62,15 @@ func Example_legacyParameters() {
 	height := uint16(64)
 	pixelData := make([]byte, int(width)*int(height))
 
-	frameInfo := &imagetypes.FrameInfo{
-		Width:                     width,
-		Height:                    height,
-		BitsAllocated:             8,
-		BitsStored:                8,
-		HighBit:                   7,
-		SamplesPerPixel:           1,
-		PixelRepresentation:       0,
-		PlanarConfiguration:       0,
-		PhotometricInterpretation: photometricMonochrome2,
+	frameInfo := &dicomcodec.FrameInfo{
+		Width:  width,
+		Height: height,
+
+		SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7, IsSigned: pixel.Representation(0).IsSigned()}, PixelRepresentation: pixel.Representation(0), PlanarConfiguration: pixel.PlanarConfiguration(0), PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
 	}
 
 	src := codecHelpers.NewTestPixelData(frameInfo)
-	if err := src.AddFrame(pixelData); err != nil {
+	if err := src.AddFrame(context.Background(), pixelData); err != nil {
 		log.Fatalf("AddFrame failed: %v", err)
 	}
 
@@ -91,7 +83,7 @@ func Example_legacyParameters() {
 	params.SetParameter("numLevels", 3)
 
 	dst := codecHelpers.NewTestPixelData(frameInfo)
-	err := c.Encode(src, dst, params)
+	err := c.Encode(context.Background(), src, dst, params)
 	if err != nil {
 		log.Fatalf("Encoding failed: %v", err)
 	}

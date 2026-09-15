@@ -6,13 +6,14 @@ package rle
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
-	"github.com/cocosip/go-dicom/pkg/imaging/imagetypes"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixel"
 )
 
 var _ codec.Codec = (*Codec)(nil)
@@ -30,19 +31,19 @@ func (c *Codec) Name() string { return "RLE Lossless" }
 // TransferSyntax returns the RLE Lossless transfer syntax.
 func (c *Codec) TransferSyntax() *transfer.Syntax { return transfer.RLELossless }
 
-// GetDefaultParameters returns default parameters for this codec.
-func (c *Codec) GetDefaultParameters() codec.Parameters { return codec.NewBaseParameters() }
+// DefaultParameters returns default parameters for this codec.
+func (c *Codec) DefaultParameters() codec.Parameters { return codec.NoParameters{} }
 
 // Encode encodes pixel data from oldPixelData to newPixelData.
-func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Encode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination pixel data must not be nil")
 	}
 
-	frameInfo := oldPixelData.GetFrameInfo()
+	frameInfo := oldPixelData.FrameInfo()
 	frameCount := oldPixelData.FrameCount()
 	for i := 0; i < frameCount; i++ {
-		srcFrame, err := oldPixelData.GetFrame(i)
+		srcFrame, err := oldPixelData.Frame(ctx, i)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", i, err)
 		}
@@ -51,7 +52,7 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		if err := c.encodeFrame(srcFrame, &dstFrame, frameInfo, parameters); err != nil {
 			return fmt.Errorf("failed to encode frame %d: %w", i, err)
 		}
-		if err := newPixelData.AddFrame(dstFrame); err != nil {
+		if err := newPixelData.AddFrame(ctx, dstFrame); err != nil {
 			return fmt.Errorf("failed to add frame %d: %w", i, err)
 		}
 	}
@@ -59,15 +60,15 @@ func (c *Codec) Encode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 }
 
 // Decode decodes pixel data from oldPixelData to newPixelData.
-func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetypes.PixelData, parameters codec.Parameters) error {
+func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newPixelData codec.FrameSink, parameters codec.Parameters) error {
 	if oldPixelData == nil || newPixelData == nil {
 		return fmt.Errorf("source and destination pixel data must not be nil")
 	}
 
-	frameInfo := oldPixelData.GetFrameInfo()
+	frameInfo := oldPixelData.FrameInfo()
 	frameCount := oldPixelData.FrameCount()
 	for i := 0; i < frameCount; i++ {
-		srcFrame, err := oldPixelData.GetFrame(i)
+		srcFrame, err := oldPixelData.Frame(ctx, i)
 		if err != nil {
 			return fmt.Errorf("failed to get frame %d: %w", i, err)
 		}
@@ -76,25 +77,22 @@ func (c *Codec) Decode(oldPixelData imagetypes.PixelData, newPixelData imagetype
 		if err := c.decodeFrame(srcFrame, &dstFrame, frameInfo, parameters); err != nil {
 			return fmt.Errorf("failed to decode frame %d: %w", i, err)
 		}
-		if err := newPixelData.AddFrame(dstFrame); err != nil {
+		if err := newPixelData.AddFrame(ctx, dstFrame); err != nil {
 			return fmt.Errorf("failed to add frame %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func (c *Codec) encodeFrame(src []byte, dst *[]byte, info *imagetypes.FrameInfo, _ codec.Parameters) error {
+func (c *Codec) encodeFrame(src []byte, dst *[]byte, info codec.FrameInfo, _ codec.Parameters) error {
 	if len(src) == 0 {
 		return fmt.Errorf("source frame data must not be empty")
 	}
-	if info == nil {
-		return fmt.Errorf("frame info must not be nil")
-	}
 
 	pixelCount := int(info.Width) * int(info.Height)
-	bytesAllocated := int((info.BitsAllocated-1)/8 + 1)
+	bytesAllocated := int((info.BitDepth.BitsAllocated-1)/8 + 1)
 	numberOfSegments := bytesAllocated * int(info.SamplesPerPixel)
-	isInterleaved := info.PlanarConfiguration == 0
+	isInterleaved := info.PlanarConfiguration == pixel.InterleavedPlanar
 	encoder := newRLEEncoder()
 
 	for s := 0; s < numberOfSegments; s++ {
@@ -127,18 +125,15 @@ func (c *Codec) encodeFrame(src []byte, dst *[]byte, info *imagetypes.FrameInfo,
 	return nil
 }
 
-func (c *Codec) decodeFrame(src []byte, dst *[]byte, info *imagetypes.FrameInfo, _ codec.Parameters) error {
+func (c *Codec) decodeFrame(src []byte, dst *[]byte, info codec.FrameInfo, _ codec.Parameters) error {
 	if len(src) == 0 {
 		return fmt.Errorf("source frame data must not be empty")
 	}
-	if info == nil {
-		return fmt.Errorf("frame info must not be nil")
-	}
 
 	pixelCount := int(info.Width) * int(info.Height)
-	bytesAllocated := int((info.BitsAllocated-1)/8 + 1)
+	bytesAllocated := int((info.BitDepth.BitsAllocated-1)/8 + 1)
 	numberOfSegments := bytesAllocated * int(info.SamplesPerPixel)
-	isInterleaved := info.PlanarConfiguration == 0
+	isInterleaved := info.PlanarConfiguration == pixel.InterleavedPlanar
 
 	frameSize := bytesAllocated * int(info.SamplesPerPixel) * int(info.Width) * int(info.Height)
 	if (frameSize & 1) == 1 {
@@ -410,8 +405,10 @@ func (d *rleDecoder) decode(buffer []byte, start int, sampleOffset int, rleData 
 
 // RegisterRLECodec registers the RLE Lossless codec with the global registry.
 func RegisterRLECodec() {
-	registry := codec.GetGlobalRegistry()
-	registry.RegisterCodec(transfer.RLELossless, NewRLECodec())
+	registry := codec.GlobalRegistry()
+	if _, err := registry.Replace(NewRLECodec()); err != nil {
+		panic(err)
+	}
 }
 
 func init() { RegisterRLECodec() }

@@ -14,7 +14,7 @@ import (
 	"github.com/cocosip/go-dicom/pkg/dicom/parser"
 	"github.com/cocosip/go-dicom/pkg/dicom/tag"
 	"github.com/cocosip/go-dicom/pkg/dicom/vr"
-	"github.com/cocosip/go-dicom/pkg/imaging"
+	"github.com/cocosip/go-dicom/pkg/imaging/pixeldata"
 )
 
 const outsideDICOMPath = "../outside.dcm"
@@ -99,7 +99,7 @@ func TestGenerateGoArtifactsAddsAllGoDirectionsWithExactFoDicomCodestreams(t *te
 			if parsed.TransferSyntax.UID().UID() != syntax.TransferSyntaxUID {
 				t.Fatalf("%s/%s transfer syntax = %s, want %s", fixture.Image.Name, syntax.Name, parsed.TransferSyntax.UID().UID(), syntax.TransferSyntaxUID)
 			}
-			pixels, err := imaging.CreatePixelData(parsed.Dataset)
+			pixels, err := pixeldata.FromDataset(parsed.Dataset)
 			if err != nil {
 				t.Fatalf("read %s/%s Go DICOM pixel data: %v", fixture.Image.Name, syntax.Name, err)
 			}

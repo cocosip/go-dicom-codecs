@@ -21,11 +21,19 @@ func TestDefaultQualityMatchesFoDicom(t *testing.T) {
 		t.Errorf("JPEGBaselineParameters{Quality: 0}.Validate() quality = %d, want 90", got)
 	}
 
-	if got := NewBaselineCodec(0).GetDefaultParameters().GetParameter("quality"); got != 90 {
+	defaults, ok := NewBaselineCodec(0).DefaultParameters().(*JPEGBaselineParameters)
+	if !ok {
+		t.Fatalf("DefaultParameters() type = %T, want *JPEGBaselineParameters", defaults)
+	}
+	if got := defaults.Quality; got != 90 {
 		t.Errorf("NewBaselineCodec(0) default quality = %v, want 90", got)
 	}
 
-	if got := NewBaselineCodec(75).GetDefaultParameters().GetParameter("quality"); got != 75 {
+	defaults, ok = NewBaselineCodec(75).DefaultParameters().(*JPEGBaselineParameters)
+	if !ok {
+		t.Fatalf("DefaultParameters() type = %T, want *JPEGBaselineParameters", defaults)
+	}
+	if got := defaults.Quality; got != 75 {
 		t.Errorf("NewBaselineCodec(75) default quality = %v, want 75", got)
 	}
 }

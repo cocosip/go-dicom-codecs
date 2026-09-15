@@ -91,6 +91,19 @@ func NewHTJ2KLosslessParameters() *Parameters {
 	}
 }
 
+// Clone returns an independent copy of the parameters.
+func (p *Parameters) Clone() codec.Parameters {
+	if p == nil {
+		return (*Parameters)(nil)
+	}
+	clone := *p
+	clone.params = make(map[string]interface{}, len(p.params))
+	for key, value := range p.params {
+		clone.params[key] = value
+	}
+	return &clone
+}
+
 // GetParameter retrieves a parameter by name (implements codec.Parameters)
 func (p *Parameters) GetParameter(name string) interface{} {
 	switch name {

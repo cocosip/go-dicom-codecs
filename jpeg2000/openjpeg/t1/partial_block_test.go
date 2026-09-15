@@ -40,7 +40,7 @@ func TestPartialBlock32x64(t *testing.T) {
 	data := make([]int32, width*height)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			data[y*width+x] = int32((x + y) % 256 - 128) // -128 to 127 (DC level shifted)
+			data[y*width+x] = int32((x+y)%256 - 128) // -128 to 127 (DC level shifted)
 		}
 	}
 
@@ -99,7 +99,7 @@ func TestPartialBlock64x32(t *testing.T) {
 	data := make([]int32, width*height)
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			data[y*width+x] = int32((x + y) % 256 - 128)
+			data[y*width+x] = int32((x+y)%256 - 128)
 		}
 	}
 
@@ -149,4 +149,3 @@ func TestPartialBlock64x32(t *testing.T) {
 		t.Log("鉁?Perfect reconstruction")
 	}
 }
-
