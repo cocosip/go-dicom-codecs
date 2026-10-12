@@ -18,7 +18,7 @@ type HTBlockDecoder struct {
 	// Component decoders
 	mel    *MELDecoderSpec
 	magsgn *MagSgnDecoder
-	vlc    vlcQuadDecoder
+	vlc    VLCQuadDecoder
 
 	// Decoded coefficients
 	data []int32
@@ -206,9 +206,9 @@ func (h *HTBlockDecoder) parseSegments(codeblock []byte) error {
 	return fmt.Errorf("invalid HTJ2K code-block layout: %w", err)
 }
 
-// NewVLCDecoderForward creates a forward VLC decoder that implements vlcQuadDecoder.
+// NewVLCDecoderForward creates a forward VLC decoder that implements VLCQuadDecoder.
 // Used when VLC segment is stored in forward byte order (encoder writes forward).
-func NewVLCDecoderForward(data []byte) vlcQuadDecoder {
+func NewVLCDecoderForward(data []byte) VLCQuadDecoder {
 	return NewVLCDecoder(data)
 }
 
@@ -237,7 +237,7 @@ func parseLegacySegments(codeblock []byte) (magsgnData, melData, vlcData []byte,
 }
 
 // NewVLCReverseDecoder creates a reverse VLC decoder for standard HTJ2K cleanup suffixes.
-func NewVLCReverseDecoder(data []byte) vlcQuadDecoder {
+func NewVLCReverseDecoder(data []byte) VLCQuadDecoder {
 	decoder := NewVLCDecoder(data)
 	reverse := &reverseBitReader{data: data}
 	decoder.reader = reverse

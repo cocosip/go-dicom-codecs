@@ -91,7 +91,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.1
+          version: v2.14.0
           install-mode: goinstall
           args: --timeout=10m ${{ env.GO_PACKAGES }}
 

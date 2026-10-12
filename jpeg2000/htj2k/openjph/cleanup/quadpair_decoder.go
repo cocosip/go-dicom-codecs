@@ -36,8 +36,8 @@ type QuadPairResult struct {
 	HasSecondQuad     bool // False if QW is odd and this is the last pair
 }
 
-// vlcQuadDecoder provides VLC decoding plus bit-level access for UVLC.
-type vlcQuadDecoder interface {
+// VLCQuadDecoder provides VLC decoding plus bit-level access for UVLC.
+type VLCQuadDecoder interface {
 	DecodeQuadWithContext(context uint8, isFirstRow bool) (uint8, uint8, uint8, uint8, bool)
 	ReadBit() (uint8, error)
 	ReadBitsLE(n int) (uint32, error)
@@ -45,7 +45,7 @@ type vlcQuadDecoder interface {
 
 // QuadPairDecoder decodes quad-pairs from the VLC bit-stream
 type QuadPairDecoder struct {
-	vlcDecoder  vlcQuadDecoder
+	vlcDecoder  VLCQuadDecoder
 	uvlcDecoder *UVLCDecoder
 	context     *ContextComputer
 	mel         *MELDecoderSpec
@@ -58,7 +58,7 @@ func NewQuadPairDecoder(vlcData []byte, widthInQuads, heightInQuads int) *QuadPa
 }
 
 // NewQuadPairDecoderWithVLC creates a quad-pair decoder with a custom VLC decoder.
-func NewQuadPairDecoderWithVLC(vlc vlcQuadDecoder, widthInQuads, heightInQuads int) *QuadPairDecoder {
+func NewQuadPairDecoderWithVLC(vlc VLCQuadDecoder, widthInQuads, heightInQuads int) *QuadPairDecoder {
 	return &QuadPairDecoder{
 		vlcDecoder:  vlc,
 		uvlcDecoder: NewUVLCDecoder(vlc),
