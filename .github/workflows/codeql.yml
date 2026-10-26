@@ -13,6 +13,10 @@ permissions:
   contents: read
   security-events: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   GO_PACKAGES: ./codec/... ./cmd/... ./jpeg/... ./jpeg2000/... ./jpegls/... ./examples/...
 
