@@ -1,8 +1,6 @@
 package lossless14sv1
 
 import (
-	"io"
-
 	"github.com/cocosip/go-dicom-codecs/jpeg/standard"
 )
 
@@ -246,39 +244,8 @@ func (d *Decoder) parseSOS(reader *standard.Reader) error {
 
 // decodeScan decodes the scan data straight into interleaved pixel bytes.
 func (d *Decoder) decodeScan(reader *standard.Reader) ([]byte, error) {
-	scan := make([]byte, 0, 64*1024)
-	for {
-		b, err := reader.ReadByte()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		if b == 0xFF {
-			b2, err := reader.ReadByte()
-			if err == io.EOF {
-				scan = append(scan, b)
-				break
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			if b2 == 0x00 {
-				// Byte stuffing
-				scan = append(scan, b, b2)
-			} else if standard.IsRST(uint16(0xFF00) | uint16(b2)) {
-				continue
-			} else {
-				break
-			}
-		} else {
-			scan = append(scan, b)
-		}
-	}
-
+	// A private copy keeps the decoder off the large file buffer.
+	scan := append([]byte(nil), reader.ReadEntropySegment()...)
 	huffDec := standard.NewHuffmanDecoder(scan)
 
 	comps := len(d.components)
@@ -295,47 +262,57 @@ func (d *Decoder) decodeScan(reader *standard.Reader) ([]byte, error) {
 		}
 	}
 
-	prev := make([][]int32, comps)
-	cur := make([][]int32, comps)
+	// Lossless SV1 predicts from the left sample and, at the start of a row,
+	// from the sample above, so two flat rows of samples are enough.
+	prev := make([]int32, comps*d.width)
+	cur := make([]int32, comps*d.width)
 	for i := range prev {
-		prev[i] = make([]int32, d.width)
-		cur[i] = make([]int32, d.width)
+		prev[i] = int32(defaultVal)
 	}
 
 	rowStride := d.width * comps * bytesPerSample
 	for row := 0; row < d.height; row++ {
 		out := pixelData[row*rowStride : row*rowStride+rowStride]
-		for col := 0; col < d.width; col++ {
+		for i := 0; i < comps; i++ {
+			diff, err := huffDec.DecodeLossless(tables[i])
+			if err != nil {
+				return nil, err
+			}
+			sample := int(prev[i]) + diff
+			if sample < 0 {
+				sample += modulus
+			} else if sample >= modulus {
+				sample -= modulus
+			}
+			cur[i] = int32(sample)
+			if bytesPerSample == 1 {
+				out[i] = byte(sample)
+			} else {
+				out[i*2] = byte(sample)
+				out[i*2+1] = byte(sample >> 8)
+			}
+		}
+
+		for col := 1; col < d.width; col++ {
+			base := col * comps
 			for i := 0; i < comps; i++ {
 				diff, err := huffDec.DecodeLossless(tables[i])
 				if err != nil {
 					return nil, err
 				}
-
-				var predicted int
-				switch {
-				case col > 0:
-					predicted = int(cur[i][col-1])
-				case row > 0:
-					predicted = int(prev[i][col])
-				default:
-					predicted = defaultVal
-				}
-
-				sample := predicted + diff
+				id := base + i
+				sample := int(cur[id-comps]) + diff
 				if sample < 0 {
 					sample += modulus
 				} else if sample >= modulus {
 					sample -= modulus
 				}
-				cur[i][col] = int32(sample)
-
+				cur[id] = int32(sample)
 				if bytesPerSample == 1 {
-					out[col*comps+i] = byte(sample)
+					out[id] = byte(sample)
 				} else {
-					off := (col*comps + i) * 2
-					out[off] = byte(sample)
-					out[off+1] = byte(sample >> 8)
+					out[id*2] = byte(sample)
+					out[id*2+1] = byte(sample >> 8)
 				}
 			}
 		}

@@ -2,8 +2,8 @@ package extended
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
-	"io"
 	"math/bits"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg/standard"
@@ -234,7 +234,7 @@ func (e *sequential12Encoder) quantizeBlock(dst []int32, blockX, blockY int) {
 		for y := 0; y < 8; y++ {
 			source := e.pixels[(startY+y)*e.width*2+startX*2:]
 			for x := 0; x < 8; x++ {
-				transformed[y*8+x] = int32(int(source[x*2])|int(source[x*2+1])<<8) - 2048
+				transformed[y*8+x] = int32(binary.LittleEndian.Uint16(source[x*2:])) - 2048
 			}
 		}
 	} else {
@@ -575,33 +575,7 @@ func (d *sequential12Decoder) parseSOS(reader *standard.Reader) error {
 }
 
 func (d *sequential12Decoder) decodeScan(reader *standard.Reader) error {
-	scan := make([]byte, 0, 64*1024)
-	for {
-		value, err := reader.ReadByte()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if value != 0xff {
-			scan = append(scan, value)
-			continue
-		}
-		next, err := reader.ReadByte()
-		if err != nil {
-			return err
-		}
-		if next == 0 {
-			scan = append(scan, value, next)
-			continue
-		}
-		if standard.IsRST(uint16(0xff00) | uint16(next)) {
-			continue
-		}
-		break
-	}
-
+	scan := reader.ReadEntropySegment()
 	decoder := standard.NewHuffmanDecoder(scan)
 	for blockY := 0; blockY < standard.DivCeil(d.height, 8); blockY++ {
 		for blockX := 0; blockX < standard.DivCeil(d.width, 8); blockX++ {
@@ -637,14 +611,8 @@ func (d *sequential12Decoder) decodeBlock(decoder *standard.HuffmanDecoder, bloc
 	for y := 0; y < maxY; y++ {
 		row := d.pixels[rowOffset+y*rowStride:]
 		for x := 0; x < maxX; x++ {
-			value := int(transformed[y*8+x])
-			if value < 0 {
-				value = 0
-			} else if value > 4095 {
-				value = 4095
-			}
-			row[x*2] = byte(value)
-			row[x*2+1] = byte(value >> 8)
+			value := min(max(int(transformed[y*8+x]), 0), 4095)
+			binary.LittleEndian.PutUint16(row[x*2:], uint16(value))
 		}
 	}
 	return nil

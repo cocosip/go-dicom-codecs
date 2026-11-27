@@ -119,9 +119,9 @@ func (r *Reader) Read(p []byte) (int, error) {
 
 // ReadEntropySegment returns the entropy-coded bytes up to the next marker and
 // leaves the reader positioned at that marker. Byte stuffing is preserved, so
-// the Huffman decoder can remove it. It reports false when a restart marker
-// interrupts the segment, in which case the caller must fall back to a copy.
-func (r *Reader) ReadEntropySegment() ([]byte, bool) {
+// the Huffman decoder can remove it. Restart markers are dropped from the scan;
+// segments that contain one are copied, the rest are returned as a view.
+func (r *Reader) ReadEntropySegment() []byte {
 	data := r.data
 	start := r.pos
 	i := start
@@ -136,13 +136,36 @@ func (r *Reader) ReadEntropySegment() ([]byte, bool) {
 			continue
 		}
 		if IsRST(uint16(0xFF00) | uint16(next)) {
-			return nil, false
+			return r.copyEntropySegment(start, i)
 		}
 		r.pos = i
-		return data[start:i], true
+		return data[start:i]
 	}
 	r.pos = len(data)
-	return data[start:], true
+	return data[start:]
+}
+
+// copyEntropySegment copies the scan bytes in [start, firstMarker), dropping
+// any restart marker it meets.
+func (r *Reader) copyEntropySegment(start, firstMarker int) []byte {
+	data := r.data
+	scan := make([]byte, 0, len(data)-start)
+	scan = append(scan, data[start:firstMarker]...)
+	i := firstMarker
+	for i+1 < len(data) {
+		marker := uint16(data[i])<<8 | uint16(data[i+1])
+		if IsRST(marker) {
+			i += 2
+			continue
+		}
+		if data[i] == 0xFF && data[i+1] != 0x00 {
+			break
+		}
+		scan = append(scan, data[i])
+		i++
+	}
+	r.pos = i
+	return scan
 }
 
 // Remaining returns the not-yet-read bytes.

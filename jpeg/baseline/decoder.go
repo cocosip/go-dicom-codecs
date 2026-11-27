@@ -354,10 +354,7 @@ func (d *Decoder) parseSOS(reader *standard.Reader) error {
 
 // decodeScan decodes the scan data
 func (d *Decoder) decodeScan(reader *standard.Reader) error {
-	scan, ok := reader.ReadEntropySegment()
-	if !ok {
-		scan = readEntropySegmentSlow(reader)
-	}
+	scan := reader.ReadEntropySegment()
 	huffDec := standard.NewHuffmanDecoder(scan)
 
 	// Decode MCUs
@@ -410,33 +407,6 @@ func (d *Decoder) decodeBlock(huffDec *standard.HuffmanDecoder, comp *Component,
 	standard.IDCT8x8(coef[:], comp.data[blockOffset:], stride)
 
 	return nil
-}
-
-// readEntropySegmentSlow copies the scan data when restart markers split it.
-func readEntropySegmentSlow(reader *standard.Reader) []byte {
-	var scan []byte
-	for {
-		b, err := reader.ReadByte()
-		if err != nil {
-			return scan
-		}
-		if b != 0xFF {
-			scan = append(scan, b)
-			continue
-		}
-		b2, err := reader.ReadByte()
-		if err != nil {
-			scan = append(scan, b)
-			return scan
-		}
-		switch {
-		case b2 == 0x00:
-			scan = append(scan, b, b2)
-		case standard.IsRST(uint16(0xFF00) | uint16(b2)):
-		default:
-			return scan
-		}
-	}
 }
 
 // componentPlane returns the component's de-blockified plane.

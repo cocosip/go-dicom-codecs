@@ -203,10 +203,8 @@ func (d *Decoder) parseSOS(reader *standard.Reader) error {
 
 // decodeScan decodes the scan data straight into interleaved pixel bytes.
 func (d *Decoder) decodeScan(reader *standard.Reader) ([]byte, error) {
-	scan, err := losslessEntropySegment(reader)
-	if err != nil {
-		return nil, err
-	}
+	// A private copy keeps the decoder off the large file buffer.
+	scan := append([]byte(nil), reader.ReadEntropySegment()...)
 	huffDec := standard.NewHuffmanDecoder(scan)
 
 	var tables [3]*standard.HuffmanTable
@@ -291,46 +289,4 @@ func (d *Decoder) decodeScan(reader *standard.Reader) ([]byte, error) {
 	}
 
 	return pixelData, nil
-}
-
-// losslessEntropySegment returns the scan bytes, copying only when a restart
-// marker splits the segment.
-func losslessEntropySegment(reader *standard.Reader) ([]byte, error) {
-	if segment, ok := reader.ReadEntropySegment(); ok {
-		// A private copy keeps the decoder off the large file buffer.
-		out := make([]byte, len(segment))
-		copy(out, segment)
-		return out, nil
-	}
-	return readEntropySegment(reader)
-}
-
-// readEntropySegment copies the entropy-coded bytes up to the next marker,
-// keeping byte stuffing so the Huffman decoder can remove it.
-func readEntropySegment(reader *standard.Reader) ([]byte, error) {
-	segment := make([]byte, 0, 64*1024)
-	for {
-		b, err := reader.ReadByte()
-		if err != nil {
-			break
-		}
-		if b != 0xFF {
-			segment = append(segment, b)
-			continue
-		}
-		b2, err := reader.ReadByte()
-		if err != nil {
-			segment = append(segment, b)
-			break
-		}
-		switch {
-		case b2 == 0x00:
-			segment = append(segment, b, b2)
-		case standard.IsRST(uint16(0xFF00) | uint16(b2)):
-			// Restart markers are not part of the bit stream.
-		default:
-			return segment, nil
-		}
-	}
-	return segment, nil
 }
