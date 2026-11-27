@@ -203,7 +203,7 @@ func (d *Decoder) parseSOS(reader *standard.Reader) error {
 
 // decodeScan decodes the scan data straight into interleaved pixel bytes.
 func (d *Decoder) decodeScan(reader *standard.Reader) ([]byte, error) {
-	scan, err := readEntropySegment(reader)
+	scan, err := losslessEntropySegment(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -229,60 +229,80 @@ func (d *Decoder) decodeScan(reader *standard.Reader) ([]byte, error) {
 	// Samples of all components are kept in one flat row buffer.
 	prev := make([]int32, comps*width)
 	cur := make([]int32, comps*width)
+	// The first row predicts against the neutral value, so seed prev with it.
+	for i := range prev {
+		prev[i] = int32(defaultVal)
+	}
 
 	rowStride := width * comps * bytesPerSample
 	for row := 0; row < d.height; row++ {
 		out := pixelData[row*rowStride : row*rowStride+rowStride]
-		firstRow := row == 0
-		base := 0
-		for col := 0; col < width; col++ {
+
+		// The first sample of a row reads its left neighbour from above.
+		for comp := 0; comp < comps; comp++ {
+			diff, err := huffDec.DecodeLossless(tables[comp])
+			if err != nil {
+				return nil, err
+			}
+			above := int(prev[comp])
+			left := defaultVal
+			if predictor == 1 {
+				left = above
+			}
+			sample := Predictor(predictor, left, above, defaultVal) + diff
+			if sample < 0 {
+				sample += modulus
+			} else if sample >= modulus {
+				sample -= modulus
+			}
+			cur[comp] = int32(sample)
+			if bytesPerSample == 1 {
+				out[comp] = byte(sample)
+			} else {
+				out[comp*2] = byte(sample)
+				out[comp*2+1] = byte(sample >> 8)
+			}
+		}
+
+		for col := 1; col < width; col++ {
+			base := col * comps
 			for comp := 0; comp < comps; comp++ {
 				diff, err := huffDec.DecodeLossless(tables[comp])
 				if err != nil {
 					return nil, err
 				}
-
 				id := base + comp
-				ra, rb, rc := defaultVal, defaultVal, defaultVal
-				if col > 0 {
-					ra = int(cur[id-comps])
-				} else if !firstRow && predictor == 1 {
-					ra = int(prev[id])
-				}
-				if !firstRow {
-					rb = int(prev[id])
-					if col > 0 {
-						rc = int(prev[id-comps])
-					}
-				}
-
-				predicted := defaultVal
-				if col != 0 || !firstRow {
-					predicted = Predictor(predictor, ra, rb, rc)
-				}
-
-				sample := predicted + diff
+				sample := Predictor(predictor, int(cur[id-comps]), int(prev[id]), int(prev[id-comps])) + diff
 				if sample < 0 {
 					sample += modulus
 				} else if sample >= modulus {
 					sample -= modulus
 				}
 				cur[id] = int32(sample)
-
 				if bytesPerSample == 1 {
 					out[id] = byte(sample)
 				} else {
-					off := id * 2
-					out[off] = byte(sample)
-					out[off+1] = byte(sample >> 8)
+					out[id*2] = byte(sample)
+					out[id*2+1] = byte(sample >> 8)
 				}
 			}
-			base += comps
 		}
 		prev, cur = cur, prev
 	}
 
 	return pixelData, nil
+}
+
+// losslessEntropySegment returns the scan bytes, copying only when a restart
+// marker splits the segment.
+func losslessEntropySegment(reader *standard.Reader) ([]byte, error) {
+	if segment, ok := reader.ReadEntropySegment(); ok {
+		// A private copy keeps the decoder off the large file buffer.
+		out := make([]byte, len(segment))
+		copy(out, segment)
+		return out, nil
+	}
+	return readEntropySegment(reader)
 }
 
 // readEntropySegment copies the entropy-coded bytes up to the next marker,

@@ -614,45 +614,15 @@ func (d *sequential12Decoder) decodeScan(reader *standard.Reader) error {
 }
 
 func (d *sequential12Decoder) decodeBlock(decoder *standard.HuffmanDecoder, blockX, blockY int) error {
-	category, err := decoder.Decode(d.dcTable)
+	var coefficients [64]int32
+	dcPred, err := decoder.DecodeBlock(d.dcTable, d.acTable, &d.qtable[0], d.dcPredictor, coefficients[:])
 	if err != nil {
 		return err
 	}
-	difference, err := decoder.ReceiveExtend(int(category))
-	if err != nil {
-		return err
-	}
-	d.dcPredictor += difference
-	var coefficients [64]int64
-	coefficients[0] = int64(d.dcPredictor * int(d.qtable[0][0]))
+	d.dcPredictor = dcPred
 
-	for k := 1; k < 64; {
-		symbol, err := decoder.Decode(d.acTable)
-		if err != nil {
-			return err
-		}
-		run, size := int(symbol>>4), int(symbol&0x0f)
-		if size == 0 {
-			if run == 15 {
-				k += 16
-				continue
-			}
-			break
-		}
-		k += run
-		if k >= 64 {
-			return standard.ErrInvalidData
-		}
-		value, err := decoder.ReceiveExtend(size)
-		if err != nil {
-			return err
-		}
-		coefficients[standard.ZigZag[k]] = int64(value * int(d.qtable[0][standard.ZigZag[k]]))
-		k++
-	}
-
-	var transformed [64]int64
-	idct12Block(&coefficients, &transformed)
+	var transformed [64]int32
+	idct12Block(coefficients[:], &transformed)
 
 	maxX := d.width - blockX*8
 	if maxX > 8 {

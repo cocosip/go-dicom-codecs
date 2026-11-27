@@ -127,7 +127,8 @@ func TestQuantizeBlockRoundsNegativeCoefficientsSymmetrically(t *testing.T) {
 	encoder := &Encoder{}
 	encoder.qtables[0] = standard.ScaleQuantTable(standard.DefaultLuminanceQuantTable, 90)
 
-	coef := encoder.quantizeBlock(bytes.Repeat([]byte{127}, 8*8), 0, 0, 8, 0)
+	var coef [64]int32
+	encoder.quantizeBlock(coef[:], bytes.Repeat([]byte{127}, 8*8), 0, 0, 8, 0)
 	if coef[0] != -3 {
 		t.Errorf("quantized DC coefficient = %d, want -3", coef[0])
 	}
@@ -137,7 +138,8 @@ func TestQuantizeBlockExtendsEdgeSamples(t *testing.T) {
 	encoder := &Encoder{}
 	encoder.qtables[0] = standard.ScaleQuantTable(standard.DefaultLuminanceQuantTable, 90)
 
-	coef := encoder.quantizeBlock([]byte{200}, 0, 0, 1, 0)
+	var coef [64]int32
+	encoder.quantizeBlock(coef[:], []byte{200}, 0, 0, 1, 0)
 	if coef[0] != 192 {
 		t.Errorf("quantized DC coefficient = %d, want 192", coef[0])
 	}

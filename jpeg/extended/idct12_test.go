@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func slowIDCT12(coef *[64]int64) [64]float64 {
+func slowIDCT12(coef *[64]int32) [64]float64 {
 	var cos [8][8]float64
 	for frequency := 0; frequency < 8; frequency++ {
 		for sample := 0; sample < 8; sample++ {
@@ -40,18 +40,18 @@ func slowIDCT12(coef *[64]int64) [64]float64 {
 // lossy JPEG.
 func TestIDCT12MatchesSlow(t *testing.T) {
 	rng := rand.New(rand.NewSource(4))
-	var coef [64]int64
+	var coef [64]int32
 	maxDiff := 0.0
 	for n := 0; n < 100; n++ {
 		for i := range coef {
 			coef[i] = 0
 			if rng.Intn(2) == 0 {
-				coef[i] = int64(rng.Intn(32769) - 16384)
+				coef[i] = int32(rng.Intn(32769) - 16384)
 			}
 		}
 		want := slowIDCT12(&coef)
-		var got [64]int64
-		idct12Block(&coef, &got)
+		var got [64]int32
+		idct12Block(coef[:], &got)
 		for i := range want {
 			d := math.Abs(want[i] - float64(got[i]))
 			if d > maxDiff {

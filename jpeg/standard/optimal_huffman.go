@@ -18,12 +18,20 @@ func BuildOptimalHuffmanTable(frequencies [256]uint64) *HuffmanTable {
 	// A pseudo-symbol prevents any real symbol from receiving an all-ones code.
 	freq[256] = 1
 
-	for {
-		c1 := smallestFrequencySymbol(freq, -1)
-		c2 := smallestFrequencySymbol(freq, c1)
-		if c2 < 0 {
-			break
+	// The merge order the original scan produces is: lowest frequency first,
+	// breaking ties toward the highest symbol index. A heap with that ordering
+	// selects exactly the same pair every round, in O(n log n).
+	heap := make(frequencyHeap, 0, 257)
+	for symbol, value := range freq {
+		if value != 0 {
+			heap = append(heap, frequencyEntry{value, symbol})
 		}
+	}
+	heap.init()
+
+	for len(heap) >= 2 {
+		c1 := heap.pop()
+		c2 := heap.pop()
 
 		freq[c1] += freq[c2]
 		freq[c2] = 0
@@ -31,6 +39,8 @@ func BuildOptimalHuffmanTable(frequencies [256]uint64) *HuffmanTable {
 		incrementCodeSize(codeSize[:], others[:], c1)
 		others[lastBranchSymbol(others[:], c1)] = c2
 		incrementCodeSize(codeSize[:], others[:], c2)
+
+		heap.push(frequencyEntry{freq[c1], c1})
 	}
 
 	for _, size := range codeSize {
@@ -77,16 +87,74 @@ func BuildOptimalHuffmanTable(frequencies [256]uint64) *HuffmanTable {
 	return table
 }
 
-func smallestFrequencySymbol(freq [257]uint64, excluded int) int {
-	symbol := -1
-	var smallest uint64
-	for i, value := range freq {
-		if value != 0 && i != excluded && (symbol < 0 || value <= smallest) {
-			symbol = i
-			smallest = value
-		}
+// frequencyEntry is one live symbol of the optimal table construction.
+type frequencyEntry struct {
+	freq   uint64
+	symbol int
+}
+
+// frequencyHeap keeps the smallest frequency on top, breaking ties toward the
+// highest symbol index so the merge order matches libjpeg.
+type frequencyHeap []frequencyEntry
+
+func (h *frequencyHeap) less(i, j int) bool {
+	if (*h)[i].freq != (*h)[j].freq {
+		return (*h)[i].freq < (*h)[j].freq
 	}
-	return symbol
+	return (*h)[i].symbol > (*h)[j].symbol
+}
+
+func (h *frequencyHeap) init() {
+	for i := len(*h)/2 - 1; i >= 0; i-- {
+		h.down(i)
+	}
+}
+
+func (h *frequencyHeap) push(e frequencyEntry) {
+	*h = append(*h, e)
+	h.up(len(*h) - 1)
+}
+
+// pop removes and returns the top entry.
+func (h *frequencyHeap) pop() int {
+	last := len(*h) - 1
+	top := (*h)[0].symbol
+	(*h)[0] = (*h)[last]
+	*h = (*h)[:last]
+	if last > 0 {
+		h.down(0)
+	}
+	return top
+}
+
+func (h *frequencyHeap) up(i int) {
+	for i > 0 {
+		parent := (i - 1) / 2
+		if !h.less(i, parent) {
+			return
+		}
+		(*h)[i], (*h)[parent] = (*h)[parent], (*h)[i]
+		i = parent
+	}
+}
+
+func (h *frequencyHeap) down(i int) {
+	n := len(*h)
+	for {
+		left := 2*i + 1
+		if left >= n {
+			return
+		}
+		smallest := left
+		if right := left + 1; right < n && h.less(right, left) {
+			smallest = right
+		}
+		if !h.less(smallest, i) {
+			return
+		}
+		(*h)[i], (*h)[smallest] = (*h)[smallest], (*h)[i]
+		i = smallest
+	}
 }
 
 func incrementCodeSize(codeSize, others []int, symbol int) {

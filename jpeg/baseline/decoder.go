@@ -1,9 +1,7 @@
 package baseline
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg/standard"
 )
@@ -356,47 +354,11 @@ func (d *Decoder) parseSOS(reader *standard.Reader) error {
 
 // decodeScan decodes the scan data
 func (d *Decoder) decodeScan(reader *standard.Reader) error {
-	// Create a Huffman decoder
-	// We'll read the rest of the data until we hit a marker
-	var scanData bytes.Buffer
-	for {
-		b, err := reader.ReadByte()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		if b == 0xFF {
-			// Peek at next byte
-			b2, err := reader.ReadByte()
-			if err == io.EOF {
-				scanData.WriteByte(b)
-				break
-			}
-			if err != nil {
-				return err
-			}
-
-			if b2 == 0x00 {
-				// Byte stuffing, keep both 0xFF and 0x00
-				scanData.WriteByte(b)
-				scanData.WriteByte(b2)
-			} else if standard.IsRST(uint16(0xFF00) | uint16(b2)) {
-				// Restart marker, ignore
-				continue
-			} else {
-				// Found a marker, we're done with scan data
-				// We've read too far, but that's okay for now
-				break
-			}
-		} else {
-			scanData.WriteByte(b)
-		}
+	scan, ok := reader.ReadEntropySegment()
+	if !ok {
+		scan = readEntropySegmentSlow(reader)
 	}
-
-	huffDec := standard.NewHuffmanDecoder(scanData.Bytes())
+	huffDec := standard.NewHuffmanDecoder(scan)
 
 	// Decode MCUs
 	mcuCols := standard.DivCeil(d.width, d.mcuWidth)
@@ -422,69 +384,22 @@ func (d *Decoder) decodeScan(reader *standard.Reader) error {
 
 // decodeBlock decodes a single 8x8 block
 func (d *Decoder) decodeBlock(huffDec *standard.HuffmanDecoder, comp *Component, blockX, blockY int) error {
-	var coef [64]int32
-
-	// Decode DC coefficient
 	dcTable := d.dcTables[comp.dcTableSelector]
 	if dcTable == nil {
 		return standard.ErrInvalidDHT
 	}
-
-	s, err := huffDec.Decode(dcTable)
-	if err != nil {
-		return err
-	}
-
-	diff, err := huffDec.ReceiveExtend(int(s))
-	if err != nil {
-		return err
-	}
-
-	comp.dcPred += diff
-	coef[0] = int32(comp.dcPred)
-
-	// Decode AC coefficients
 	acTable := d.acTables[comp.acTableSelector]
 	if acTable == nil {
 		return standard.ErrInvalidDHT
 	}
 
-	k := 1
-	for k < 64 {
-		rs, err := huffDec.Decode(acTable)
-		if err != nil {
-			return err
-		}
-
-		r := int(rs >> 4)   // Run length of zeros
-		s := int(rs & 0x0F) // Coefficient size
-
-		if s == 0 {
-			if r == 15 {
-				// ZRL: skip 16 zeros
-				k += 16
-			} else {
-				// EOB: end of block
-				break
-			}
-		} else {
-			k += r
-
-			if k >= 64 {
-				return standard.ErrInvalidData
-			}
-
-			val, err := huffDec.ReceiveExtend(s)
-			if err != nil {
-				return err
-			}
-
-			coef[standard.ZigZag[k]] = int32(val)
-			k++
-		}
+	var coef [64]int32
+	dcPred, err := huffDec.DecodeBlock(dcTable, acTable, &d.qtables[comp.Tq], comp.dcPred, coef[:])
+	if err != nil {
+		return err
 	}
+	comp.dcPred = dcPred
 
-	qtable := &d.qtables[comp.Tq]
 	stride := comp.width * 8
 	blockOffset := blockY*8*stride + blockX*8
 	if blockOffset+7*stride+8 > len(comp.data) {
@@ -492,12 +407,36 @@ func (d *Decoder) decodeBlock(huffDec *standard.HuffmanDecoder, comp *Component,
 		return nil
 	}
 
-	for i := 0; i < 64; i++ {
-		coef[i] *= qtable[i]
-	}
 	standard.IDCT8x8(coef[:], comp.data[blockOffset:], stride)
 
 	return nil
+}
+
+// readEntropySegmentSlow copies the scan data when restart markers split it.
+func readEntropySegmentSlow(reader *standard.Reader) []byte {
+	var scan []byte
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			return scan
+		}
+		if b != 0xFF {
+			scan = append(scan, b)
+			continue
+		}
+		b2, err := reader.ReadByte()
+		if err != nil {
+			scan = append(scan, b)
+			return scan
+		}
+		switch {
+		case b2 == 0x00:
+			scan = append(scan, b, b2)
+		case standard.IsRST(uint16(0xFF00) | uint16(b2)):
+		default:
+			return scan
+		}
+	}
 }
 
 // componentPlane returns the component's de-blockified plane.
@@ -512,6 +451,10 @@ func (d *Decoder) convertToPixels() []byte {
 
 	if numComponents == 1 {
 		comp := d.components[0]
+		// Without padding the plane is already the output buffer.
+		if comp.width*8 == d.width && comp.height*8 == d.height {
+			return comp.data
+		}
 		plane := componentPlane(comp)
 		planeWidth := comp.width * 8
 		for y := 0; y < d.height; y++ {

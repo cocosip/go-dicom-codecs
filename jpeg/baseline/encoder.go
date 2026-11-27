@@ -2,6 +2,7 @@ package baseline
 
 import (
 	"bytes"
+	"math/bits"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg/standard"
 )
@@ -25,6 +26,8 @@ type Encoder struct {
 	// so the DCT runs once instead of once per Huffman pass.
 	coefs []int32
 	ycbcr *YCbCrData
+	// freq accumulates the symbol frequencies while the blocks are quantized.
+	freq huffmanFrequencies
 }
 
 // Encode encodes pixel data to JPEG Baseline format
@@ -61,30 +64,7 @@ func Encode(pixelData []byte, width, height, components, quality int) ([]byte, e
 		enc.prepareQuantTable(t)
 	}
 
-	// Initialize Huffman tables
-	enc.dcTables[0] = standard.BuildStandardHuffmanTable(
-		standard.StandardDCLuminanceBits,
-		standard.StandardDCLuminanceValues,
-	)
-	enc.acTables[0] = standard.BuildStandardHuffmanTable(
-		standard.StandardACLuminanceBits,
-		standard.StandardACLuminanceValues,
-	)
-	enc.dcTables[1] = standard.BuildStandardHuffmanTable(
-		standard.StandardDCChrominanceBits,
-		standard.StandardDCChrominanceValues,
-	)
-	enc.acTables[1] = standard.BuildStandardHuffmanTable(
-		standard.StandardACChrominanceBits,
-		standard.StandardACChrominanceValues,
-	)
-
-	// Build Huffman codes
-	enc.dcCodes[0] = standard.BuildHuffmanCodes(enc.dcTables[0])
-	enc.acCodes[0] = standard.BuildHuffmanCodes(enc.acTables[0])
-	enc.dcCodes[1] = standard.BuildHuffmanCodes(enc.dcTables[1])
-	enc.acCodes[1] = standard.BuildHuffmanCodes(enc.acTables[1])
-
+	// The Huffman tables are optimized below, so no standard table is built.
 	if err := enc.computeCoefficients(pixelData); err != nil {
 		return nil, err
 	}
@@ -279,10 +259,12 @@ func (enc *Encoder) computeCoefficients(pixelData []byte) error {
 	if enc.components == 1 {
 		enc.coefs = make([]int32, blockCount*64)
 		index := 0
+		var dcPred [3]int
 		for blockY := 0; blockY < blocksHigh; blockY++ {
 			for blockX := 0; blockX < blocksWide; blockX++ {
-				coef := enc.quantizeBlock(pixelData, blockX, blockY, enc.width, 0)
-				copy(enc.coefs[index*64:], coef[:])
+				block := enc.coefs[index*64 : index*64+64]
+				enc.quantizeBlock(block, pixelData, blockX, blockY, enc.width, 0)
+				countCoefficients(&enc.freq, block, 0, &dcPred[0])
 				index++
 			}
 		}
@@ -295,11 +277,13 @@ func (enc *Encoder) computeCoefficients(pixelData []byte) error {
 	tables := [3]int{0, 1, 1}
 	enc.coefs = make([]int32, blockCount*3*64)
 	index := 0
+	var dcPred [3]int
 	for blockY := 0; blockY < blocksHigh; blockY++ {
 		for blockX := 0; blockX < blocksWide; blockX++ {
 			for comp := 0; comp < 3; comp++ {
-				coef := enc.quantizeBlock(planes[comp], blockX, blockY, stride, tables[comp])
-				copy(enc.coefs[index*64:], coef[:])
+				block := enc.coefs[index*64 : index*64+64]
+				enc.quantizeBlock(block, planes[comp], blockX, blockY, stride, tables[comp])
+				countCoefficients(&enc.freq, block, tables[comp], &dcPred[comp])
 				index++
 			}
 		}
@@ -482,7 +466,7 @@ func (enc *Encoder) prepareQuantTable(tableIdx int) {
 	}
 }
 
-func (enc *Encoder) quantizeBlock(data []byte, blockX, blockY, stride, tableIdx int) [64]int32 {
+func (enc *Encoder) quantizeBlock(dst []int32, data []byte, blockX, blockY, stride, tableIdx int) {
 	// Extract the 8x8 block, clamping only at the right and bottom edges.
 	var block [64]byte
 	dataHeight := len(data) / stride
@@ -528,10 +512,8 @@ func (enc *Encoder) quantizeBlock(data []byte, blockX, blockY, stride, tableIdx 
 		if c < 0 {
 			q = -q
 		}
-		coef[i] = q
+		dst[i] = q
 	}
-
-	return coef
 }
 
 type huffmanFrequencies struct {
@@ -540,23 +522,7 @@ type huffmanFrequencies struct {
 }
 
 func (enc *Encoder) optimizeHuffmanTables() error {
-	frequencies := &huffmanFrequencies{}
-
-	tables := [3]int{0, 1, 1}
-	var dcPred [3]int
-	index := 0
-	for i := 0; i < len(enc.coefs)/(64*enc.components); i++ {
-		for comp := 0; comp < enc.components; comp++ {
-			coef := enc.coefs[index*64 : index*64+64]
-			tableIdx := 0
-			if enc.components == 3 {
-				tableIdx = tables[comp]
-			}
-			countCoefficients(frequencies, coef, tableIdx, &dcPred[comp])
-			index++
-		}
-	}
-
+	frequencies := &enc.freq
 	tableCount := 1
 	if enc.components == 3 {
 		tableCount = 2
@@ -600,11 +566,5 @@ func huffmanCategory(value int) int {
 	if value < 0 {
 		value = -value
 	}
-
-	category := 0
-	for value > 0 {
-		category++
-		value >>= 1
-	}
-	return category
+	return bits.Len(uint(value))
 }

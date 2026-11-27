@@ -117,6 +117,34 @@ func (r *Reader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// ReadEntropySegment returns the entropy-coded bytes up to the next marker and
+// leaves the reader positioned at that marker. Byte stuffing is preserved, so
+// the Huffman decoder can remove it. It reports false when a restart marker
+// interrupts the segment, in which case the caller must fall back to a copy.
+func (r *Reader) ReadEntropySegment() ([]byte, bool) {
+	data := r.data
+	start := r.pos
+	i := start
+	for i+1 < len(data) {
+		if data[i] != 0xFF {
+			i++
+			continue
+		}
+		next := data[i+1]
+		if next == 0x00 {
+			i += 2
+			continue
+		}
+		if IsRST(uint16(0xFF00) | uint16(next)) {
+			return nil, false
+		}
+		r.pos = i
+		return data[start:i], true
+	}
+	r.pos = len(data)
+	return data[start:], true
+}
+
 // Remaining returns the not-yet-read bytes.
 func (r *Reader) Remaining() []byte {
 	return r.data[r.pos:]

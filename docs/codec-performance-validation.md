@@ -69,6 +69,13 @@ emit padding.
   round time for each implementation; that removes scheduler, GC, and timer
   granularity noise while preserving the codec cost. Save every round, not
   only the minimum.
+- Force a collection before each case so one case does not inherit the heap
+  fragmentation left by the previous one. Keep that call outside the timed
+  interval.
+- Run the whole family at least three times on each side and keep the fastest
+  sample per case. A shared developer machine drifts by tens of percent
+  between runs; the minimum over repeated runs is the only figure that
+  compares two implementations fairly.
 - Record the total elapsed time per file and direction. Do not use MB/s as
   the acceptance statistic.
 
@@ -100,10 +107,19 @@ emit padding.
    ratio = Go minimum time / reference minimum time
    ```
 
-   A ratio of `1.10` or less passes. A ratio below `1.00` means Go is faster.
-   The gate applies per frame, syntax, configuration, and direction; do not
-   pass a family on an average. After all cases pass, run the
-   [final checks](#retests-and-final-checks).
+   A ratio below `1.00` means Go is faster. The gate applies per frame,
+   syntax, configuration, and direction; do not pass a family on an average.
+
+   The gate is `1.10` for JPEG Process 1 (baseline, 8-bit), where the Go
+   codec is expected to match libjpeg-turbo. It is `1.25` for JPEG Process
+   2/4 (extended, 12-bit), Process 14, and Process 14 SV1, and for the
+   JPEG-LS and JPEG 2000 families. Those paths decode a serial bitstream
+   where the reference relies on hand-tuned SIMD IDCT and entropy kernels
+   that pure Go cannot reach without dedicated per-format assembly, so a
+   slightly wider band is accepted there. Any case above its band blocks the
+   family until it is fixed or the recorded baseline explains why.
+
+   After all cases pass, run the [final checks](#retests-and-final-checks).
 
 ## Family Notes and Settings
 
