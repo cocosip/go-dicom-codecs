@@ -85,14 +85,26 @@ func NewHuffmanDecoder(data []byte) *HuffmanDecoder {
 // refill ensures that at least n bits are buffered.
 func (d *HuffmanDecoder) refill(n int) {
 	for d.nBits < n && d.readErr == nil {
-		if d.pos >= len(d.data) {
+		pos := d.pos
+		data := d.data
+		// Fast path: four plain bytes with no stuffing can be loaded at once.
+		if pos+4 <= len(data) && data[pos] != 0xFF && data[pos+1] != 0xFF &&
+			data[pos+2] != 0xFF && data[pos+3] != 0xFF {
+			d.bits = d.bits<<32 |
+				uint64(data[pos])<<24 | uint64(data[pos+1])<<16 |
+				uint64(data[pos+2])<<8 | uint64(data[pos+3])
+			d.nBits += 32
+			d.pos += 4
+			continue
+		}
+		if pos >= len(data) {
 			d.readErr = io.ErrUnexpectedEOF
 			return
 		}
-		b := d.data[d.pos]
+		b := data[pos]
 		d.pos++
 		if b == 0xFF {
-			if d.pos >= len(d.data) {
+			if d.pos >= len(data) {
 				d.readErr = io.ErrUnexpectedEOF
 				return
 			}
@@ -214,4 +226,70 @@ func (d *HuffmanDecoder) ReceiveLosslessDifference(category int) (int, error) {
 		return -1 << 15, nil
 	}
 	return d.ReceiveExtend(category)
+}
+
+// DecodeLossless reads one DC category and its difference in a single call.
+// It is the hot path of JPEG lossless decoding.
+func (d *HuffmanDecoder) DecodeLossless(table *HuffmanTable) (int, error) {
+	if d.nBits < 16 && !d.refillFast() {
+		d.refill(16)
+		if d.nBits < 10 {
+			return d.decodeLosslessSlow(table)
+		}
+	}
+	entry := table.lookupTable[uint32(d.bits>>uint(d.nBits-10))&0x3FF]
+	if entry >= 0 {
+		d.nBits -= int(entry >> 8)
+		category := int(entry & 0xFF)
+		if category == 16 {
+			return -1 << 15, nil
+		}
+		if category == 0 {
+			return 0, nil
+		}
+		if d.nBits < category {
+			d.refill(category)
+			if d.nBits < category {
+				if d.readErr != nil {
+					return 0, d.readErr
+				}
+				return 0, io.ErrUnexpectedEOF
+			}
+		}
+		d.nBits -= category
+		value := int(uint32(d.bits>>uint(d.nBits)) & ((1 << uint(category)) - 1))
+		if value < 1<<uint(category-1) {
+			value += (-1 << uint(category)) + 1
+		}
+		return value, nil
+	}
+	return d.decodeLosslessSlow(table)
+}
+
+// refillFast loads 32 bits when the next four bytes need no unstuffing.
+// It reports whether it added bits.
+func (d *HuffmanDecoder) refillFast() bool {
+	pos := d.pos
+	if pos+4 > len(d.data) {
+		return false
+	}
+	data := d.data
+	if data[pos] == 0xFF || data[pos+1] == 0xFF || data[pos+2] == 0xFF || data[pos+3] == 0xFF {
+		return false
+	}
+	d.bits = d.bits<<32 |
+		uint64(data[pos])<<24 | uint64(data[pos+1])<<16 |
+		uint64(data[pos+2])<<8 | uint64(data[pos+3])
+	d.nBits += 32
+	d.pos += 4
+	return true
+}
+
+// decodeLosslessSlow handles codes longer than the fast lookup covers.
+func (d *HuffmanDecoder) decodeLosslessSlow(table *HuffmanTable) (int, error) {
+	category, err := d.Decode(table)
+	if err != nil {
+		return 0, err
+	}
+	return d.ReceiveLosslessDifference(int(category))
 }

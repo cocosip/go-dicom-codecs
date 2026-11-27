@@ -19,7 +19,7 @@ type Component struct {
 	dcTableSelector int    // DC Huffman table selector
 	acTableSelector int    // AC Huffman table selector
 	dcPred          int    // DC prediction value
-	data            []byte // Decoded component data
+	data            []byte // Decoded component plane, row stride width*8
 }
 
 // Decoder represents a JPEG Baseline decoder
@@ -178,7 +178,7 @@ func (d *Decoder) parseSOF(reader *standard.Reader) error {
 	for _, comp := range d.components {
 		comp.width = standard.DivCeil(d.width*comp.H, maxH*8)
 		comp.height = standard.DivCeil(d.height*comp.V, maxV*8)
-		comp.data = make([]byte, comp.width*comp.height*64)
+		comp.data = make([]byte, comp.width*8*comp.height*8)
 	}
 
 	_ = mcuCols
@@ -485,8 +485,9 @@ func (d *Decoder) decodeBlock(huffDec *standard.HuffmanDecoder, comp *Component,
 	}
 
 	qtable := &d.qtables[comp.Tq]
-	blockOffset := (blockY*comp.width + blockX) * 64
-	if blockOffset+63 >= len(comp.data) {
+	stride := comp.width * 8
+	blockOffset := blockY*8*stride + blockX*8
+	if blockOffset+7*stride+8 > len(comp.data) {
 		// Block is outside the component data, skip it
 		return nil
 	}
@@ -494,25 +495,14 @@ func (d *Decoder) decodeBlock(huffDec *standard.HuffmanDecoder, comp *Component,
 	for i := 0; i < 64; i++ {
 		coef[i] *= qtable[i]
 	}
-	standard.IDCTFast(coef[:], comp.data[blockOffset:], 8)
+	standard.IDCT8x8(coef[:], comp.data[blockOffset:], stride)
 
 	return nil
 }
 
-// componentPlane de-blockifies one component into a row-major plane.
+// componentPlane returns the component's de-blockified plane.
 func componentPlane(comp *Component) []byte {
-	planeWidth := comp.width * 8
-	plane := make([]byte, planeWidth*comp.height*8)
-	for by := 0; by < comp.height; by++ {
-		for bx := 0; bx < comp.width; bx++ {
-			src := comp.data[(by*comp.width+bx)*64:]
-			for r := 0; r < 8; r++ {
-				dst := (by*8+r)*planeWidth + bx*8
-				copy(plane[dst:dst+8], src[r*8:r*8+8])
-			}
-		}
-	}
-	return plane
+	return comp.data
 }
 
 // convertToPixels converts component data to interleaved pixel data

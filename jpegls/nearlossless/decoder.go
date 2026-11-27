@@ -42,8 +42,7 @@ func Decode(jpegLSData []byte) ([]byte, int, int, int, int, int, error) {
 
 // decode performs the actual decoding
 func (dec *Decoder) decode(jpegLSData []byte) ([]byte, int, int, int, int, int, error) {
-	r := bytes.NewReader(jpegLSData)
-	reader := standard.NewReader(r)
+	reader := standard.NewReader(jpegLSData)
 
 	// Read SOI marker
 	marker, err := reader.ReadMarker()

@@ -4,22 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg/standard"
 )
 
 const sequential12Precision = 12
-
-var sequential12Cos = func() [8][8]float64 {
-	var table [8][8]float64
-	for frequency := 0; frequency < 8; frequency++ {
-		for sample := 0; sample < 8; sample++ {
-			table[frequency][sample] = math.Cos(float64((2*sample+1)*frequency) * math.Pi / 16)
-		}
-	}
-	return table
-}()
 
 func encodeSequential12(pixelData []byte, width, height, components, quality int) ([]byte, error) {
 	if width <= 0 || height <= 0 {
@@ -597,8 +586,8 @@ func (d *sequential12Decoder) decodeBlock(decoder *standard.HuffmanDecoder, bloc
 		return err
 	}
 	d.dcPredictor += difference
-	var coefficients [64]float64
-	coefficients[0] = float64(d.dcPredictor * int(d.qtable[0][0]))
+	var coefficients [64]int64
+	coefficients[0] = int64(d.dcPredictor * int(d.qtable[0][0]))
 
 	for k := 1; k < 64; {
 		symbol, err := decoder.Decode(d.acTable)
@@ -621,35 +610,31 @@ func (d *sequential12Decoder) decodeBlock(decoder *standard.HuffmanDecoder, bloc
 		if err != nil {
 			return err
 		}
-		coefficients[standard.ZigZag[k]] = float64(value * int(d.qtable[0][standard.ZigZag[k]]))
+		coefficients[standard.ZigZag[k]] = int64(value * int(d.qtable[0][standard.ZigZag[k]]))
 		k++
 	}
 
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			sum := 0.0
-			for v := 0; v < 8; v++ {
-				for u := 0; u < 8; u++ {
-					scale := 1.0
-					if u == 0 {
-						scale /= math.Sqrt2
-					}
-					if v == 0 {
-						scale /= math.Sqrt2
-					}
-					sum += scale * coefficients[v*8+u] * sequential12Cos[u][x] * sequential12Cos[v][y]
-				}
-			}
-			imageX, imageY := blockX*8+x, blockY*8+y
-			if imageX >= d.width || imageY >= d.height {
-				continue
-			}
-			value := int(math.Round(sum/4 + 2048))
+	var transformed [64]int64
+	idct12Block(&coefficients, &transformed)
+
+	maxX := d.width - blockX*8
+	if maxX > 8 {
+		maxX = 8
+	}
+	maxY := d.height - blockY*8
+	if maxY > 8 {
+		maxY = 8
+	}
+	for y := 0; y < maxY; y++ {
+		imageY := blockY*8 + y
+		for x := 0; x < maxX; x++ {
+			value := int(transformed[y*8+x])
 			if value < 0 {
 				value = 0
 			} else if value > 4095 {
 				value = 4095
 			}
+			imageX := blockX*8 + x
 			offset := (imageY*d.width + imageX) * 2
 			d.pixels[offset] = byte(value)
 			d.pixels[offset+1] = byte(value >> 8)
