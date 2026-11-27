@@ -65,12 +65,8 @@ func Encode(pixelData []byte, width, height, components, quality int) ([]byte, e
 	}
 
 	// The Huffman tables are optimized below, so no standard table is built.
-	if err := enc.computeCoefficients(pixelData); err != nil {
-		return nil, err
-	}
-	if err := enc.optimizeHuffmanTables(); err != nil {
-		return nil, err
-	}
+	enc.computeCoefficients(pixelData)
+	enc.optimizeHuffmanTables()
 
 	var buf bytes.Buffer
 	writer := standard.NewWriter(&buf)
@@ -251,7 +247,7 @@ func (enc *Encoder) writeSOS(writer *standard.Writer, pixelData []byte) error {
 
 // computeCoefficients runs the DCT and quantization once per block and keeps
 // the result for the Huffman passes.
-func (enc *Encoder) computeCoefficients(pixelData []byte) error {
+func (enc *Encoder) computeCoefficients(pixelData []byte) {
 	blocksWide := standard.DivCeil(enc.width, 8)
 	blocksHigh := standard.DivCeil(enc.height, 8)
 	blockCount := blocksWide * blocksHigh
@@ -268,7 +264,7 @@ func (enc *Encoder) computeCoefficients(pixelData []byte) error {
 				index++
 			}
 		}
-		return nil
+		return
 	}
 
 	enc.ycbcr = enc.rgbToYCbCr(pixelData)
@@ -288,7 +284,6 @@ func (enc *Encoder) computeCoefficients(pixelData []byte) error {
 			}
 		}
 	}
-	return nil
 }
 
 // encodeScan encodes the scan data
@@ -521,7 +516,7 @@ type huffmanFrequencies struct {
 	ac [2][256]uint64
 }
 
-func (enc *Encoder) optimizeHuffmanTables() error {
+func (enc *Encoder) optimizeHuffmanTables() {
 	frequencies := &enc.freq
 	tableCount := 1
 	if enc.components == 3 {
@@ -533,8 +528,6 @@ func (enc *Encoder) optimizeHuffmanTables() error {
 		enc.dcCodes[tableIdx] = standard.BuildHuffmanCodes(enc.dcTables[tableIdx])
 		enc.acCodes[tableIdx] = standard.BuildHuffmanCodes(enc.acTables[tableIdx])
 	}
-
-	return nil
 }
 
 func countCoefficients(frequencies *huffmanFrequencies, coef []int32, tableIdx int, dcPred *int) {

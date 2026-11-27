@@ -11,6 +11,7 @@ type HuffmanEncoder struct {
 	buf   []byte // Entropy bytes; written out on Flush
 	bits  uint32 // Bit buffer
 	nBits int    // Number of bits in buffer
+	err   error  // First write error, surfaced by WriteBits and Flush
 }
 
 // NewHuffmanEncoder creates a new Huffman encoder
@@ -21,7 +22,7 @@ func NewHuffmanEncoder(w io.Writer) *HuffmanEncoder {
 // WriteBits writes n bits
 func (e *HuffmanEncoder) WriteBits(bits uint32, n int) error {
 	if n == 0 {
-		return nil
+		return e.err
 	}
 
 	e.bits = (e.bits << uint(n)) | (bits & ((1 << uint(n)) - 1))
@@ -33,7 +34,7 @@ func (e *HuffmanEncoder) WriteBits(bits uint32, n int) error {
 		e.nBits -= 8
 	}
 
-	return nil
+	return e.err
 }
 
 // writeByte appends a byte with byte stuffing.
@@ -53,7 +54,9 @@ func (e *HuffmanEncoder) flushBuf() {
 	if len(e.buf) == 0 {
 		return
 	}
-	e.w.Write(e.buf)
+	if e.err == nil {
+		_, e.err = e.w.Write(e.buf)
+	}
 	e.buf = e.buf[:0]
 }
 
@@ -66,12 +69,8 @@ func (e *HuffmanEncoder) Flush() error {
 		e.nBits = 0
 		e.bits = 0
 	}
-	if len(e.buf) == 0 {
-		return nil
-	}
-	_, err := e.w.Write(e.buf)
-	e.buf = e.buf[:0]
-	return err
+	e.flushBuf()
+	return e.err
 }
 
 // HuffmanCode represents a Huffman code
