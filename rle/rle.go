@@ -5,11 +5,11 @@
 package rle
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
+	"unsafe"
 
 	"github.com/cocosip/go-dicom/pkg/dicom/transfer"
 	"github.com/cocosip/go-dicom/pkg/imaging/codec"
@@ -84,39 +84,62 @@ func (c *Codec) Decode(ctx context.Context, oldPixelData codec.FrameSource, newP
 	return nil
 }
 
+// segmentLayout returns the first source position and the stride between
+// consecutive samples of an RLE segment.
+func segmentLayout(segment, bytesAllocated, samples, pixelCount int, interleaved bool) (pos, stride int) {
+	sample := segment / bytesAllocated
+	sabyte := segment % bytesAllocated
+	if interleaved {
+		pos = sample * bytesAllocated
+		stride = bytesAllocated * samples
+	} else {
+		pos = sample * bytesAllocated * pixelCount
+		stride = bytesAllocated
+	}
+	pos += bytesAllocated - sabyte - 1
+	return pos, stride
+}
+
 func (c *Codec) encodeFrame(src []byte, dst *[]byte, info codec.FrameInfo, _ codec.Parameters) error {
 	if len(src) == 0 {
 		return fmt.Errorf("source frame data must not be empty")
 	}
 
 	pixelCount := int(info.Width) * int(info.Height)
-	bytesAllocated := int((info.BitDepth.BitsAllocated-1)/8 + 1)
-	numberOfSegments := bytesAllocated * int(info.SamplesPerPixel)
+	if pixelCount <= 0 {
+		return fmt.Errorf("invalid frame dimensions %dx%d", info.Width, info.Height)
+	}
+	bitsAllocated := int(info.BitDepth.BitsAllocated)
+	if bitsAllocated <= 0 {
+		return fmt.Errorf("invalid bits allocated: %d", bitsAllocated)
+	}
+	bytesAllocated := (bitsAllocated + 7) / 8
+	samples := int(info.SamplesPerPixel)
+	numberOfSegments := bytesAllocated * samples
+	if numberOfSegments < 1 || numberOfSegments > 15 {
+		return fmt.Errorf("invalid number of RLE segments: %d", numberOfSegments)
+	}
 	isInterleaved := info.PlanarConfiguration == pixel.InterleavedPlanar
-	encoder := newRLEEncoder()
+
+	// Validate every segment once; the encoder loop can then skip per-pixel
+	// bounds checks.
+	for s := 0; s < numberOfSegments; s++ {
+		pos, stride := segmentLayout(s, bytesAllocated, samples, pixelCount, isInterleaved)
+		end := pos + (pixelCount-1)*stride
+		if end >= len(src) {
+			return fmt.Errorf("read position %d exceeds frame buffer length %d", end, len(src))
+		}
+	}
+
+	// One literal control byte per 128 pixels is the worst case, plus a little
+	// room for segment padding and replicate controls.
+	capacity := 64 + numberOfSegments*(pixelCount+(pixelCount+127)/128+2) + 2
+	encoder := newRLEEncoderWithCapacity(capacity)
 
 	for s := 0; s < numberOfSegments; s++ {
+		pos, stride := segmentLayout(s, bytesAllocated, samples, pixelCount, isInterleaved)
 		encoder.NextSegment()
-		sample := s / bytesAllocated
-		sabyte := s % bytesAllocated
-
-		var pos, offset int
-		if isInterleaved {
-			pos = sample * bytesAllocated
-			offset = numberOfSegments
-		} else {
-			pos = sample * bytesAllocated * pixelCount
-			offset = bytesAllocated
-		}
-		pos += bytesAllocated - sabyte - 1
-
-		for p := 0; p < pixelCount; p++ {
-			if pos >= len(src) {
-				return fmt.Errorf("read position %d exceeds frame buffer length %d", pos, len(src))
-			}
-			encoder.Encode(src[pos])
-			pos += offset
-		}
+		encoder.EncodeSegment(src, pos, stride, pixelCount)
 		encoder.Flush()
 	}
 
@@ -131,11 +154,22 @@ func (c *Codec) decodeFrame(src []byte, dst *[]byte, info codec.FrameInfo, _ cod
 	}
 
 	pixelCount := int(info.Width) * int(info.Height)
-	bytesAllocated := int((info.BitDepth.BitsAllocated-1)/8 + 1)
-	numberOfSegments := bytesAllocated * int(info.SamplesPerPixel)
+	if pixelCount <= 0 {
+		return fmt.Errorf("invalid frame dimensions %dx%d", info.Width, info.Height)
+	}
+	bitsAllocated := int(info.BitDepth.BitsAllocated)
+	if bitsAllocated <= 0 {
+		return fmt.Errorf("invalid bits allocated: %d", bitsAllocated)
+	}
+	bytesAllocated := (bitsAllocated + 7) / 8
+	samples := int(info.SamplesPerPixel)
+	numberOfSegments := bytesAllocated * samples
+	if numberOfSegments < 1 || numberOfSegments > 15 {
+		return fmt.Errorf("invalid number of RLE segments: %d", numberOfSegments)
+	}
 	isInterleaved := info.PlanarConfiguration == pixel.InterleavedPlanar
 
-	frameSize := bytesAllocated * int(info.SamplesPerPixel) * int(info.Width) * int(info.Height)
+	frameSize := bytesAllocated * samples * int(info.Width) * int(info.Height)
 	if (frameSize & 1) == 1 {
 		frameSize++
 	}
@@ -150,20 +184,11 @@ func (c *Codec) decodeFrame(src []byte, dst *[]byte, info codec.FrameInfo, _ cod
 	}
 
 	for s := 0; s < numberOfSegments; s++ {
-		sample := s / bytesAllocated
-		sabyte := s % bytesAllocated
-
-		var pos, offset int
-		if isInterleaved {
-			pos = sample * bytesAllocated
-			offset = int(info.SamplesPerPixel) * bytesAllocated
-		} else {
-			pos = sample * bytesAllocated * pixelCount
-			offset = bytesAllocated
+		pos, stride := segmentLayout(s, bytesAllocated, samples, pixelCount, isInterleaved)
+		if pos+(pixelCount-1)*stride >= frameSize {
+			return fmt.Errorf("RLE segment %d exceeds output buffer length %d", s, frameSize)
 		}
-		pos += bytesAllocated - sabyte - 1
-
-		if err := decoder.DecodeSegment(s, frameData, pos, offset); err != nil {
+		if err := decoder.DecodeSegment(s, frameData, pos, stride); err != nil {
 			return fmt.Errorf("failed to decode segment %d: %w", s, err)
 		}
 	}
@@ -173,126 +198,144 @@ func (c *Codec) decodeFrame(src []byte, dst *[]byte, info codec.FrameInfo, _ cod
 }
 
 type rleEncoder struct {
-	count      int
-	offsets    [15]uint32
-	buffer     bytes.Buffer
-	tempBuffer [132]byte
-	prevByte   int
-	repeatCnt  int
-	bufferPos  int
+	count     int
+	offsets   [15]uint32
+	out       []byte
+	prevByte  int
+	repeatCnt int
+	litCtrl   int
+	litLen    int
 }
 
-func newRLEEncoder() *rleEncoder {
-	enc := &rleEncoder{prevByte: -1}
-	_ = binary.Write(&enc.buffer, binary.LittleEndian, uint32(enc.count))
-	for i := 0; i < 15; i++ {
-		_ = binary.Write(&enc.buffer, binary.LittleEndian, enc.offsets[i])
+func newRLEEncoder() *rleEncoder { return newRLEEncoderWithCapacity(0) }
+
+func newRLEEncoderWithCapacity(capacity int) *rleEncoder {
+	if capacity < 64 {
+		capacity = 64
 	}
-	return enc
+	return &rleEncoder{
+		out:      make([]byte, 64, capacity),
+		prevByte: -1,
+		litCtrl:  -1,
+	}
 }
 
 func (e *rleEncoder) NextSegment() {
 	e.Flush()
-	if (e.buffer.Len() & 1) == 1 {
-		e.buffer.WriteByte(0x00)
+	if (len(e.out) & 1) == 1 {
+		e.out = append(e.out, 0x00)
 	}
-	e.offsets[e.count] = uint32(e.buffer.Len())
+	e.offsets[e.count] = uint32(len(e.out))
 	e.count++
 }
 
 func (e *rleEncoder) Encode(b byte) {
 	if int(b) == e.prevByte {
 		e.repeatCnt++
-		if e.repeatCnt > 2 && e.bufferPos > 0 {
-			for e.bufferPos > 0 {
-				count := min(128, e.bufferPos)
-				e.buffer.WriteByte(byte(count - 1))
-				e.buffer.Write(e.tempBuffer[:count])
-				copy(e.tempBuffer[:], e.tempBuffer[count:e.bufferPos])
-				e.bufferPos -= count
-			}
-		} else if e.repeatCnt > 128 {
-			count := min(e.repeatCnt, 128)
-			e.buffer.WriteByte(byte(257 - count))
-			e.buffer.WriteByte(byte(e.prevByte))
-			e.repeatCnt -= count
-		}
-	} else {
-		switch e.repeatCnt {
-		case 0:
-		case 1:
-			e.tempBuffer[e.bufferPos] = byte(e.prevByte)
-			e.bufferPos++
-		case 2:
-			e.tempBuffer[e.bufferPos] = byte(e.prevByte)
-			e.bufferPos++
-			e.tempBuffer[e.bufferPos] = byte(e.prevByte)
-			e.bufferPos++
-		default:
-			for e.repeatCnt > 0 {
-				count := min(e.repeatCnt, 128)
-				e.buffer.WriteByte(byte(257 - count))
-				e.buffer.WriteByte(byte(e.prevByte))
-				e.repeatCnt -= count
-			}
-		}
-
-		for e.bufferPos > 128 {
-			count := min(128, e.bufferPos)
-			e.buffer.WriteByte(byte(count - 1))
-			e.buffer.Write(e.tempBuffer[:count])
-			copy(e.tempBuffer[:], e.tempBuffer[count:e.bufferPos])
-			e.bufferPos -= count
-		}
-
-		e.prevByte = int(b)
-		e.repeatCnt = 1
+		return
 	}
+	e.emitRun(e.prevByte, e.repeatCnt, false)
+	e.prevByte = int(b)
+	e.repeatCnt = 1
+}
+
+// EncodeSegment emits all runs of one segment except the final run, which is
+// left pending for Flush. src[start], src[start+stride], ... are the samples.
+func (e *rleEncoder) EncodeSegment(src []byte, start, stride, count int) {
+	if count <= 0 {
+		return
+	}
+	prev := src[start]
+	run := 1
+	pos := start + stride
+	for p := 1; p < count; p++ {
+		b := src[pos]
+		if b == prev {
+			run++
+		} else {
+			e.emitRun(int(prev), run, false)
+			prev = b
+			run = 1
+		}
+		pos += stride
+	}
+	e.prevByte = int(prev)
+	e.repeatCnt = run
+}
+
+func (e *rleEncoder) emitRun(b, run int, atEnd bool) {
+	if run <= 0 {
+		return
+	}
+	if !atEnd && run < 3 {
+		e.appendLiteral(byte(b), run)
+		return
+	}
+	if atEnd && run == 1 {
+		e.appendLiteral(byte(b), 1)
+		return
+	}
+
+	e.closeLiteral()
+	for run > 128 {
+		e.emitReplicate(byte(b), 128)
+		run -= 128
+	}
+	if run >= 2 && (atEnd || run >= 3) {
+		e.emitReplicate(byte(b), run)
+	} else if run > 0 {
+		e.appendLiteral(byte(b), run)
+	}
+}
+
+func (e *rleEncoder) appendLiteral(b byte, count int) {
+	for i := 0; i < count; i++ {
+		if e.litLen == 128 {
+			e.out[e.litCtrl] = 127
+			e.litCtrl = -1
+			e.litLen = 0
+		}
+		if e.litCtrl < 0 {
+			e.litCtrl = len(e.out)
+			e.out = append(e.out, 0)
+		}
+		e.out = append(e.out, b)
+		e.litLen++
+	}
+}
+
+func (e *rleEncoder) closeLiteral() {
+	if e.litCtrl >= 0 && e.litLen > 0 {
+		e.out[e.litCtrl] = byte(e.litLen - 1)
+	}
+	e.litCtrl = -1
+	e.litLen = 0
+}
+
+func (e *rleEncoder) emitReplicate(b byte, count int) {
+	e.out = append(e.out, byte(257-count), b)
 }
 
 func (e *rleEncoder) Flush() {
-	if e.repeatCnt < 2 {
-		for e.repeatCnt > 0 {
-			e.tempBuffer[e.bufferPos] = byte(e.prevByte)
-			e.bufferPos++
-			e.repeatCnt--
-		}
-	}
-	for e.bufferPos > 0 {
-		count := min(128, e.bufferPos)
-		e.buffer.WriteByte(byte(count - 1))
-		e.buffer.Write(e.tempBuffer[:count])
-		copy(e.tempBuffer[:], e.tempBuffer[count:e.bufferPos])
-		e.bufferPos -= count
-	}
-	if e.repeatCnt >= 2 {
-		for e.repeatCnt > 0 {
-			count := min(e.repeatCnt, 128)
-			e.buffer.WriteByte(byte(257 - count))
-			e.buffer.WriteByte(byte(e.prevByte))
-			e.repeatCnt -= count
-		}
-	}
+	e.emitRun(e.prevByte, e.repeatCnt, true)
+	e.closeLiteral()
 	e.prevByte = -1
 	e.repeatCnt = 0
-	e.bufferPos = 0
 }
 
 func (e *rleEncoder) MakeEvenLength() {
-	if (e.buffer.Len() & 1) == 1 {
-		e.buffer.WriteByte(0x00)
+	if (len(e.out) & 1) == 1 {
+		e.out = append(e.out, 0x00)
 	}
 }
 
 func (e *rleEncoder) GetBuffer() []byte {
 	e.Flush()
-	result := e.buffer.Bytes()
-	buf := bytes.NewBuffer(result[:0])
-	_ = binary.Write(buf, binary.LittleEndian, uint32(e.count))
+	binary.LittleEndian.PutUint32(e.out[0:4], uint32(e.count))
 	for i := 0; i < 15; i++ {
-		_ = binary.Write(buf, binary.LittleEndian, e.offsets[i])
+		binary.LittleEndian.PutUint32(e.out[4+i*4:], e.offsets[i])
 	}
-	return result
+	return e.out
 }
 
 type rleDecoder struct {
@@ -306,24 +349,17 @@ func newRLEDecoder(data []byte) (*rleDecoder, error) {
 		return nil, fmt.Errorf("RLE data too short: need at least 64 bytes, got %d", len(data))
 	}
 	dec := &rleDecoder{data: data}
-	reader := bytes.NewReader(data)
-	var numSegments uint32
-	if err := binary.Read(reader, binary.LittleEndian, &numSegments); err != nil {
-		return nil, fmt.Errorf("failed to read number of segments: %w", err)
-	}
+	numSegments := int(binary.LittleEndian.Uint32(data[0:4]))
 	if numSegments < 1 || numSegments > 15 {
 		return nil, fmt.Errorf("invalid number of RLE segments: %d (must be 1-15)", numSegments)
 	}
-	dec.NumberOfSegments = int(numSegments)
+	dec.NumberOfSegments = numSegments
 	for i := 0; i < 15; i++ {
-		var offset uint32
-		if err := binary.Read(reader, binary.LittleEndian, &offset); err != nil {
-			return nil, fmt.Errorf("failed to read offset %d: %w", i, err)
-		}
-		if i < int(numSegments) && int(offset) > len(data) {
+		offset := int(binary.LittleEndian.Uint32(data[4+i*4:]))
+		if i < numSegments && offset > len(data) {
 			return nil, fmt.Errorf("RLE segment %d offset %d exceeds data length %d", i, offset, len(data))
 		}
-		dec.offsets[i] = int(offset)
+		dec.offsets[i] = offset
 	}
 	return dec, nil
 }
@@ -332,27 +368,38 @@ func (d *rleDecoder) DecodeSegment(segment int, buffer []byte, start int, sample
 	if segment < 0 || segment >= d.NumberOfSegments {
 		return fmt.Errorf("segment number %d out of range [0, %d)", segment, d.NumberOfSegments)
 	}
-	return d.decode(buffer, start, sampleOffset, d.data, d.getSegmentOffset(segment), d.getSegmentLength(segment))
+	return d.decode(buffer, start, sampleOffset, d.data, d.offsets[segment], d.segmentLength(segment))
 }
 
-func (d *rleDecoder) getSegmentOffset(segment int) int { return d.offsets[segment] }
-
-func (d *rleDecoder) getSegmentLength(segment int) int {
-	offset := d.getSegmentOffset(segment)
+func (d *rleDecoder) segmentLength(segment int) int {
+	offset := d.offsets[segment]
 	if segment < d.NumberOfSegments-1 {
-		return d.getSegmentOffset(segment+1) - offset
+		return d.offsets[segment+1] - offset
 	}
 	return len(d.data) - offset
 }
 
+// decode expands one PackBits segment into a strided plane of buffer. Each run
+// is bounds-checked before it is written, so the strided writes can safely use
+// unsafe pointer arithmetic to avoid a bounds check on every byte.
 func (d *rleDecoder) decode(buffer []byte, start int, sampleOffset int, rleData []byte, offset int, count int) error {
+	if start < 0 || start >= len(buffer) {
+		return fmt.Errorf("invalid RLE output start: %d", start)
+	}
+	if sampleOffset <= 0 {
+		return fmt.Errorf("invalid RLE sample offset: %d", sampleOffset)
+	}
+	if offset < 0 || count < 0 || offset > len(rleData) {
+		return fmt.Errorf("invalid RLE segment bounds: offset %d, length %d", offset, count)
+	}
+	if offset+count > len(rleData) {
+		count = len(rleData) - offset
+	}
+
 	pos := start
 	end := offset + count
 	bufferLength := len(buffer)
 	for i := offset; i < end && pos < bufferLength; {
-		if i >= len(rleData) {
-			break
-		}
 		control := int8(rleData[i])
 		i++
 		if control >= 0 {
@@ -368,32 +415,60 @@ func (d *rleDecoder) decode(buffer []byte, start int, sampleOffset int, rleData 
 				i += length
 				pos += length
 			} else {
-				for j := 0; j < length; j++ {
-					buffer[pos] = rleData[i]
-					i++
-					pos += sampleOffset
+				// The run bound above proves that every write below is inside
+				// buffer. Strided samples make the per-byte bounds check the
+				// dominant cost, so write through a bounded base pointer.
+				base := unsafe.Pointer(&buffer[pos])
+				off := 0
+				j := 0
+				if sampleOffset == 2 {
+					for ; j+1 < length; j += 2 {
+						*(*byte)(unsafe.Add(base, off)) = rleData[i]
+						*(*byte)(unsafe.Add(base, off+2)) = rleData[i+1]
+						i += 2
+						off += 4
+					}
 				}
+				for ; j < length; j++ {
+					*(*byte)(unsafe.Add(base, off)) = rleData[i]
+					i++
+					off += sampleOffset
+				}
+				pos += length * sampleOffset
 			}
 		} else if control >= -127 {
 			length := int(-control) + 1
 			if pos+(length-1)*sampleOffset >= bufferLength {
 				return fmt.Errorf("RLE repeat run exceeds output buffer length")
 			}
-			if i >= len(rleData) || i >= end {
+			if i >= end {
 				return io.ErrUnexpectedEOF
 			}
 			b := rleData[i]
 			i++
 			if sampleOffset == 1 {
-				for j := 0; j < length; j++ {
-					buffer[pos] = b
-					pos++
+				segment := buffer[pos : pos+length]
+				for j := range segment {
+					segment[j] = b
 				}
+				pos += length
 			} else {
-				for j := 0; j < length; j++ {
-					buffer[pos] = b
-					pos += sampleOffset
+				// See the literal branch: the run bound above covers all writes.
+				base := unsafe.Pointer(&buffer[pos])
+				off := 0
+				j := 0
+				if sampleOffset == 2 {
+					for ; j+1 < length; j += 2 {
+						*(*byte)(unsafe.Add(base, off)) = b
+						*(*byte)(unsafe.Add(base, off+2)) = b
+						off += 4
+					}
 				}
+				for ; j < length; j++ {
+					*(*byte)(unsafe.Add(base, off)) = b
+					off += sampleOffset
+				}
+				pos += length * sampleOffset
 			}
 		}
 		if i+1 >= end {

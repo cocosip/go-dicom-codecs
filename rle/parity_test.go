@@ -3,9 +3,11 @@ package rle
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"testing"
+
 	dicomcodec "github.com/cocosip/go-dicom/pkg/imaging/codec"
 	pixel "github.com/cocosip/go-dicom/pkg/imaging/pixel"
-	"testing"
 )
 
 func TestRLECodecRoundTripPixelLayouts(t *testing.T) {
@@ -54,6 +56,56 @@ func TestRLECodecRoundTripPixelLayouts(t *testing.T) {
 			assertDecodedFrame(t, NewRLECodec(), test.info, encoded, test.data)
 		})
 	}
+}
+
+// TestRLECodecStridedRunBoundaries exercises the strided decode paths with
+// run lengths on both sides of the 128-byte PackBits chunk boundary.
+func TestRLECodecStridedRunBoundaries(t *testing.T) {
+	runs := []int{1, 2, 3, 4, 127, 128, 129, 130, 255, 256, 257}
+	total := 0
+	for _, n := range runs {
+		total += n
+	}
+
+	t.Run("16-bit mono", func(t *testing.T) {
+		data := make([]byte, total*2)
+		index := 0
+		for value, n := range runs {
+			for i := 0; i < n; i++ {
+				binary.LittleEndian.PutUint16(data[index*2:], uint16(value*37))
+				index++
+			}
+		}
+		info := &dicomcodec.FrameInfo{
+			Width: uint16(total), Height: 1,
+			SamplesPerPixel: 1, BitDepth: pixel.BitDepth{BitsAllocated: 16, BitsStored: 16, HighBit: 15},
+			PixelRepresentation: pixel.UnsignedPixels, PlanarConfiguration: pixel.InterleavedPlanar,
+			PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricMonochrome2),
+		}
+		encoded := encodeFrame(t, NewRLECodec(), info, data)
+		assertDecodedFrame(t, NewRLECodec(), info, encoded, data)
+	})
+
+	t.Run("8-bit RGB", func(t *testing.T) {
+		data := make([]byte, total*3)
+		index := 0
+		for value, n := range runs {
+			for i := 0; i < n; i++ {
+				data[index*3] = byte(value * 37)
+				data[index*3+1] = byte(value*37 + 1)
+				data[index*3+2] = byte(value*37 + 2)
+				index++
+			}
+		}
+		info := &dicomcodec.FrameInfo{
+			Width: uint16(total), Height: 1,
+			SamplesPerPixel: 3, BitDepth: pixel.BitDepth{BitsAllocated: 8, BitsStored: 8, HighBit: 7},
+			PixelRepresentation: pixel.UnsignedPixels, PlanarConfiguration: pixel.InterleavedPlanar,
+			PhotometricInterpretation: *pixel.MustParsePhotometricInterpretation(photometricRGB),
+		}
+		encoded := encodeFrame(t, NewRLECodec(), info, data)
+		assertDecodedFrame(t, NewRLECodec(), info, encoded, data)
+	})
 }
 
 func patternedBytes(length, factor int) []byte {
