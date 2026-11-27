@@ -30,8 +30,7 @@ type Decoder struct {
 
 // Decode decodes JPEG Lossless First-Order Prediction data
 func Decode(jpegData []byte) (pixelData []byte, width, height, components, bitDepth int, err error) {
-	r := bytes.NewReader(jpegData)
-	reader := standard.NewReader(r)
+	reader := standard.NewReader(jpegData)
 
 	decoder := &Decoder{}
 
@@ -296,7 +295,7 @@ func (d *Decoder) decodeScan(reader *standard.Reader) error {
 		}
 	}
 
-	huffDec := standard.NewHuffmanDecoder(bytes.NewReader(scanData.Bytes()))
+	huffDec := standard.NewHuffmanDecoder(scanData.Bytes())
 
 	// Decode samples (lossless uses line-by-line interleaved)
 	for row := 0; row < d.height; row++ {

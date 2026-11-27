@@ -1,7 +1,5 @@
 package standard
 
-import "io"
-
 // EncodeDC encodes a DC coefficient difference
 func EncodeDC(bw *BitWriter, diff int, dcCodes []HuffmanCode) error {
 	// Compute category and bits
@@ -195,10 +193,10 @@ type BitReader struct {
 	dec *HuffmanDecoder
 }
 
-// NewBitReader creates a new BitReader from an io.Reader
-func NewBitReader(r io.Reader) *BitReader {
+// NewBitReader creates a new BitReader over an entropy-coded segment.
+func NewBitReader(data []byte) *BitReader {
 	return &BitReader{
-		dec: NewHuffmanDecoder(r),
+		dec: NewHuffmanDecoder(data),
 	}
 }
 

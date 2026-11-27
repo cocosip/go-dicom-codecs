@@ -385,7 +385,7 @@ func sequential12WriteMagnitude(encoder *standard.HuffmanEncoder, value, categor
 }
 
 func decodeSequential12(jpegData []byte) ([]byte, int, int, int, int, error) {
-	reader := standard.NewReader(bytes.NewReader(jpegData))
+	reader := standard.NewReader(jpegData)
 	marker, err := reader.ReadMarker()
 	if err != nil {
 		return nil, 0, 0, 0, 0, err
@@ -576,7 +576,7 @@ func (d *sequential12Decoder) decodeScan(reader *standard.Reader) error {
 		break
 	}
 
-	decoder := standard.NewHuffmanDecoder(bytes.NewReader(scan.Bytes()))
+	decoder := standard.NewHuffmanDecoder(scan.Bytes())
 	for blockY := 0; blockY < standard.DivCeil(d.height, 8); blockY++ {
 		for blockX := 0; blockX < standard.DivCeil(d.width, 8); blockX++ {
 			if err := d.decodeBlock(decoder, blockX, blockY); err != nil {

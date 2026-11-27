@@ -1,16 +1,30 @@
 package standard
 
 // IDCTISlow performs libjpeg's integer inverse DCT and dequantization.
-func IDCTISlow(coef []int32, qtable [64]int32, out []byte, stride int) {
+func IDCTISlow(coef []int32, out []byte, stride int) {
+	ac := int32(0)
+	for i := 1; i < 64; i++ {
+		ac |= coef[i]
+	}
+	if ac == 0 {
+		v := byte(Clamp(int(ijgDescale(coef[0], 3))+128, 0, 255))
+		for y := 0; y < 8; y++ {
+			for x := 0; x < 8; x++ {
+				out[y*stride+x] = v
+			}
+		}
+		return
+	}
+
 	var workspace [64]int32
 	for x := 0; x < 8; x++ {
-		z2 := coef[16+x] * qtable[16+x]
-		z3 := coef[48+x] * qtable[48+x]
+		z2 := coef[16+x]
+		z3 := coef[48+x]
 		z1 := (z2 + z3) * ijgFix0541196100
 		tmp2 := z1 - z3*ijgFix1847759065
 		tmp3 := z1 + z2*ijgFix0765366865
-		z2 = coef[x] * qtable[x]
-		z3 = coef[32+x] * qtable[32+x]
+		z2 = coef[x]
+		z3 = coef[32+x]
 		tmp0 := (z2 + z3) << ijgConstBits
 		tmp1 := (z2 - z3) << ijgConstBits
 		tmp10 := tmp0 + tmp3
@@ -18,10 +32,10 @@ func IDCTISlow(coef []int32, qtable [64]int32, out []byte, stride int) {
 		tmp11 := tmp1 + tmp2
 		tmp12 := tmp1 - tmp2
 
-		tmp0 = coef[56+x] * qtable[56+x]
-		tmp1 = coef[40+x] * qtable[40+x]
-		tmp2 = coef[24+x] * qtable[24+x]
-		tmp3 = coef[8+x] * qtable[8+x]
+		tmp0 = coef[56+x]
+		tmp1 = coef[40+x]
+		tmp2 = coef[24+x]
+		tmp3 = coef[8+x]
 		z1 = tmp0 + tmp3
 		z2 = tmp1 + tmp2
 		z3 = tmp0 + tmp2

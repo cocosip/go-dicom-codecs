@@ -21,8 +21,7 @@ type Decoder struct {
 
 // Decode decodes JPEG Lossless data
 func Decode(jpegData []byte) (pixelData []byte, width, height, components, bitDepth int, err error) {
-	r := bytes.NewReader(jpegData)
-	reader := standard.NewReader(r)
+	reader := standard.NewReader(jpegData)
 
 	decoder := &Decoder{}
 
@@ -242,7 +241,7 @@ func (d *Decoder) decodeScan(reader *standard.Reader) ([][]int, error) {
 		}
 	}
 
-	huffDec := standard.NewHuffmanDecoder(bytes.NewReader(scanData.Bytes()))
+	huffDec := standard.NewHuffmanDecoder(scanData.Bytes())
 
 	// Allocate sample arrays
 	samples := make([][]int, d.components)

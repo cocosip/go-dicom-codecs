@@ -5,39 +5,40 @@ import (
 	"io"
 )
 
-// Reader provides utilities for reading JPEG data
+// Reader provides utilities for reading JPEG data from an in-memory buffer.
 type Reader struct {
-	r   io.Reader
-	buf [2]byte
+	data []byte
+	pos  int
 }
 
-// NewReader creates a new JPEG reader
-func NewReader(r io.Reader) *Reader {
-	return &Reader{r: r}
+// NewReader creates a new JPEG reader over data.
+func NewReader(data []byte) *Reader {
+	return &Reader{data: data}
 }
 
-// ReadByte reads a single byte
+// ReadByte reads a single byte.
 func (r *Reader) ReadByte() (byte, error) {
-	_, err := io.ReadFull(r.r, r.buf[:1])
-	if err != nil {
-		return 0, err
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
 	}
-	return r.buf[0], nil
+	b := r.data[r.pos]
+	r.pos++
+	return b, nil
 }
 
-// ReadUint16 reads a 16-bit big-endian value
+// ReadUint16 reads a 16-bit big-endian value.
 func (r *Reader) ReadUint16() (uint16, error) {
-	_, err := io.ReadFull(r.r, r.buf[:2])
-	if err != nil {
-		return 0, err
+	if r.pos+2 > len(r.data) {
+		return 0, io.ErrUnexpectedEOF
 	}
-	return binary.BigEndian.Uint16(r.buf[:2]), nil
+	v := binary.BigEndian.Uint16(r.data[r.pos:])
+	r.pos += 2
+	return v, nil
 }
 
-// ReadMarker reads the next JPEG marker
-// Returns the marker value (without the 0xFF prefix)
+// ReadMarker reads the next JPEG marker.
+// Returns the marker value (without the 0xFF prefix).
 func (r *Reader) ReadMarker() (uint16, error) {
-	// Read first byte, should be 0xFF
 	b, err := r.ReadByte()
 	if err != nil {
 		return 0, err
@@ -46,7 +47,7 @@ func (r *Reader) ReadMarker() (uint16, error) {
 		return 0, ErrInvalidMarker
 	}
 
-	// Skip any padding 0xFF bytes
+	// Skip any padding 0xFF bytes.
 	for {
 		b, err = r.ReadByte()
 		if err != nil {
@@ -57,7 +58,7 @@ func (r *Reader) ReadMarker() (uint16, error) {
 		}
 	}
 
-	// 0x00 is a stuffed byte (escaped 0xFF in data), not a marker
+	// 0x00 is a stuffed byte (escaped 0xFF in data), not a marker.
 	if b == 0x00 {
 		return 0, ErrInvalidMarker
 	}
@@ -65,44 +66,58 @@ func (r *Reader) ReadMarker() (uint16, error) {
 	return uint16(0xFF00) | uint16(b), nil
 }
 
-// ReadSegment reads a segment with its length
-// Returns the segment data (without the length field)
+// ReadSegment reads a segment with its length.
+// Returns the segment data (without the length field).
 func (r *Reader) ReadSegment() ([]byte, error) {
 	length, err := r.ReadUint16()
 	if err != nil {
 		return nil, err
 	}
-
-	// Length includes itself (2 bytes)
 	if length < 2 {
 		return nil, ErrInvalidData
 	}
-
-	data := make([]byte, length-2)
-	_, err = io.ReadFull(r.r, data)
-	if err != nil {
-		return nil, err
+	n := int(length) - 2
+	if r.pos+n > len(r.data) {
+		return nil, io.ErrUnexpectedEOF
 	}
-
-	return data, nil
+	segment := r.data[r.pos : r.pos+n]
+	r.pos += n
+	return segment, nil
 }
 
-// ReadFull reads exactly len(buf) bytes
+// ReadFull reads exactly len(buf) bytes.
 func (r *Reader) ReadFull(buf []byte) error {
-	_, err := io.ReadFull(r.r, buf)
-	return err
+	if r.pos+len(buf) > len(r.data) {
+		return io.ErrUnexpectedEOF
+	}
+	copy(buf, r.data[r.pos:r.pos+len(buf)])
+	r.pos += len(buf)
+	return nil
 }
 
-// Skip skips n bytes
+// Skip skips n bytes.
 func (r *Reader) Skip(n int) error {
 	if n <= 0 {
 		return nil
 	}
-	_, err := io.CopyN(io.Discard, r.r, int64(n))
-	return err
+	if r.pos+n > len(r.data) {
+		return io.ErrUnexpectedEOF
+	}
+	r.pos += n
+	return nil
 }
 
-// Read implements io.Reader interface
-func (r *Reader) Read(p []byte) (n int, err error) {
-	return r.r.Read(p)
+// Read implements io.Reader.
+func (r *Reader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data[r.pos:])
+	r.pos += n
+	return n, nil
+}
+
+// Remaining returns the not-yet-read bytes.
+func (r *Reader) Remaining() []byte {
+	return r.data[r.pos:]
 }

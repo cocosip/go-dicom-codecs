@@ -38,8 +38,7 @@ type Decoder struct {
 
 // Decode decodes JPEG Baseline data
 func Decode(jpegData []byte) (pixelData []byte, width, height, components int, err error) {
-	r := bytes.NewReader(jpegData)
-	reader := standard.NewReader(r)
+	reader := standard.NewReader(jpegData)
 
 	decoder := &Decoder{}
 
@@ -397,7 +396,7 @@ func (d *Decoder) decodeScan(reader *standard.Reader) error {
 		}
 	}
 
-	huffDec := standard.NewHuffmanDecoder(bytes.NewReader(scanData.Bytes()))
+	huffDec := standard.NewHuffmanDecoder(scanData.Bytes())
 
 	// Decode MCUs
 	mcuCols := standard.DivCeil(d.width, d.mcuWidth)
@@ -492,9 +491,28 @@ func (d *Decoder) decodeBlock(huffDec *standard.HuffmanDecoder, comp *Component,
 		return nil
 	}
 
-	standard.IDCTISlow(coef[:], *qtable, comp.data[blockOffset:], 8)
+	for i := 0; i < 64; i++ {
+		coef[i] *= qtable[i]
+	}
+	standard.IDCTFast(coef[:], comp.data[blockOffset:], 8)
 
 	return nil
+}
+
+// componentPlane de-blockifies one component into a row-major plane.
+func componentPlane(comp *Component) []byte {
+	planeWidth := comp.width * 8
+	plane := make([]byte, planeWidth*comp.height*8)
+	for by := 0; by < comp.height; by++ {
+		for bx := 0; bx < comp.width; bx++ {
+			src := comp.data[(by*comp.width+bx)*64:]
+			for r := 0; r < 8; r++ {
+				dst := (by*8+r)*planeWidth + bx*8
+				copy(plane[dst:dst+8], src[r*8:r*8+8])
+			}
+		}
+	}
+	return plane
 }
 
 // convertToPixels converts component data to interleaved pixel data
@@ -502,87 +520,115 @@ func (d *Decoder) convertToPixels() []byte {
 	numComponents := len(d.components)
 	pixelData := make([]byte, d.width*d.height*numComponents)
 
-	switch numComponents {
-	case 1:
-		// Grayscale
+	if numComponents == 1 {
 		comp := d.components[0]
+		plane := componentPlane(comp)
+		planeWidth := comp.width * 8
 		for y := 0; y < d.height; y++ {
-			for x := 0; x < d.width; x++ {
-				blockX := x / 8
-				blockY := y / 8
-				inBlockX := x % 8
-				inBlockY := y % 8
-
-				if blockX < comp.width && blockY < comp.height {
-					blockOffset := (blockY*comp.width + blockX) * 64
-					val := comp.data[blockOffset+inBlockY*8+inBlockX]
-					pixelData[y*d.width+x] = val
-				}
-			}
+			copy(pixelData[y*d.width:(y+1)*d.width], plane[y*planeWidth:y*planeWidth+d.width])
 		}
-	case 3:
-		// YCbCr to RGB conversion
-		for y := 0; y < d.height; y++ {
+		return pixelData
+	}
+
+	planes := make([][]byte, numComponents)
+	widths := make([]int, numComponents)
+	xmap := make([][]int, numComponents)
+	maxH, maxV := 1, 1
+	for i, comp := range d.components {
+		if comp.H > maxH {
+			maxH = comp.H
+		}
+		if comp.V > maxV {
+			maxV = comp.V
+		}
+		planes[i] = componentPlane(comp)
+		widths[i] = comp.width * 8
+		xmap[i] = make([]int, d.width)
+		for x := 0; x < d.width; x++ {
+			xmap[i][x] = (x * comp.H) / maxH
+		}
+	}
+
+	yPlane, cbPlane, crPlane := planes[0], planes[1], planes[2]
+	yWidth, cbWidth, crWidth := widths[0], widths[1], widths[2]
+	yMap, cbMap, crMap := xmap[0], xmap[1], xmap[2]
+	identity := maxH == 1 && maxV == 1
+	for y := 0; y < d.height; y++ {
+		yRow := yPlane[(y*d.components[0].V/maxV)*yWidth:]
+		cbRow := cbPlane[(y*d.components[1].V/maxV)*cbWidth:]
+		crRow := crPlane[(y*d.components[2].V/maxV)*crWidth:]
+		out := pixelData[y*d.width*3:]
+		if identity {
 			for x := 0; x < d.width; x++ {
-				// Sample each component
-				var yy, cb, cr byte
-
-				// Get maximum sampling factors
-				maxH := d.components[0].H
-				maxV := d.components[0].V
-
-				for i, comp := range d.components {
-					// Scale coordinates based on sampling factors
-					// For 4:2:0, Y has H=2,V=2, Cb/Cr have H=1,V=1
-					// So Cb/Cr coordinates are half of Y coordinates
-					sx := (x * comp.H) / maxH
-					sy := (y * comp.V) / maxV
-
-					blockX := sx / 8
-					blockY := sy / 8
-					inBlockX := sx % 8
-					inBlockY := sy % 8
-
-					if blockX < comp.width && blockY < comp.height {
-						blockOffset := (blockY*comp.width + blockX) * 64
-						val := comp.data[blockOffset+inBlockY*8+inBlockX]
-
-						switch i {
-						case 0:
-							yy = val
-						case 1:
-							cb = val
-						case 2:
-							cr = val
-						}
-					}
+				yy := int(yRow[x])
+				cb, cr := cbRow[x], crRow[x]
+				r := yy + int(ycbcrCrR[cr])
+				g := yy + int(ycbcrCbG[cb]) + int(ycbcrCrG[cr])
+				b := yy + int(ycbcrCbB[cb])
+				if r < 0 {
+					r = 0
+				} else if r > 255 {
+					r = 255
 				}
-
-				// YCbCr to RGB conversion
-				r, g, b := ycbcrToRGB(yy, cb, cr)
-
-				offset := (y*d.width + x) * 3
-				pixelData[offset+0] = r
-				pixelData[offset+1] = g
-				pixelData[offset+2] = b
+				if g < 0 {
+					g = 0
+				} else if g > 255 {
+					g = 255
+				}
+				if b < 0 {
+					b = 0
+				} else if b > 255 {
+					b = 255
+				}
+				out[x*3] = byte(r)
+				out[x*3+1] = byte(g)
+				out[x*3+2] = byte(b)
 			}
+			continue
+		}
+		for x := 0; x < d.width; x++ {
+			yy := int(yRow[yMap[x]])
+			cb, cr := cbRow[cbMap[x]], crRow[crMap[x]]
+			r := yy + int(ycbcrCrR[cr])
+			g := yy + int(ycbcrCbG[cb]) + int(ycbcrCrG[cr])
+			b := yy + int(ycbcrCbB[cb])
+			if r < 0 {
+				r = 0
+			} else if r > 255 {
+				r = 255
+			}
+			if g < 0 {
+				g = 0
+			} else if g > 255 {
+				g = 255
+			}
+			if b < 0 {
+				b = 0
+			} else if b > 255 {
+				b = 255
+			}
+			out[x*3] = byte(r)
+			out[x*3+1] = byte(g)
+			out[x*3+2] = byte(b)
 		}
 	}
 
 	return pixelData
 }
 
-// ycbcrToRGB converts YCbCr to RGB
-func ycbcrToRGB(yy, cb, cr byte) (byte, byte, byte) {
-	y := int(yy)
-	cbVal := int(cb) - 128
-	crVal := int(cr) - 128
+var (
+	ycbcrCrR [256]int32
+	ycbcrCbB [256]int32
+	ycbcrCrG [256]int32
+	ycbcrCbG [256]int32
+)
 
-	r := y + (91881*crVal)>>16
-	g := y - ((22554*cbVal + 46802*crVal) >> 16)
-	b := y + (116130*cbVal)>>16
-
-	return byte(standard.Clamp(r, 0, 255)),
-		byte(standard.Clamp(g, 0, 255)),
-		byte(standard.Clamp(b, 0, 255))
+func init() {
+	for i := 0; i < 256; i++ {
+		v := int32(i - 128)
+		ycbcrCrR[i] = (91881 * v) >> 16
+		ycbcrCbB[i] = (116130 * v) >> 16
+		ycbcrCrG[i] = (-46802 * v) >> 16
+		ycbcrCbG[i] = (-22554 * v) >> 16
+	}
 }
