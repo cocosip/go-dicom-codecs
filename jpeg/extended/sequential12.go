@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/bits"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg/standard"
 )
@@ -30,6 +31,8 @@ func encodeSequential12(pixelData []byte, width, height, components, quality int
 		pixels: pixelData,
 		qtable: standard.ScaleQuantTable(standard.DefaultLuminanceQuantTable, quality),
 	}
+	encoder.prepareQuantTable()
+	encoder.computeCoefficients()
 	if err := encoder.buildHuffmanTables(); err != nil {
 		return nil, err
 	}
@@ -71,6 +74,20 @@ type sequential12Encoder struct {
 	acTable       *standard.HuffmanTable
 	dcCodes       []standard.HuffmanCode
 	acCodes       []standard.HuffmanCode
+	// coefs caches the quantized coefficients so the DCT runs once.
+	coefs []int32
+	// qdiv and qmagic turn the quantization step into a reciprocal multiply.
+	qdiv   [64]uint32
+	qmagic [64]uint64
+}
+
+// prepareQuantTable precomputes the quantization divisors and reciprocals.
+func (e *sequential12Encoder) prepareQuantTable() {
+	for i := 0; i < 64; i++ {
+		divisor := uint32(e.qtable[i] << 3)
+		e.qdiv[i] = divisor
+		e.qmagic[i] = (uint64(1)<<32 + uint64(divisor) - 1) / uint64(divisor)
+	}
 }
 
 func (e *sequential12Encoder) writeDQT(writer *standard.Writer) error {
@@ -100,11 +117,9 @@ func (e *sequential12Encoder) writeSOS(writer *standard.Writer) error {
 	var scan bytes.Buffer
 	encoder := standard.NewHuffmanEncoder(&scan)
 	dcPredictor := 0
-	for blockY := 0; blockY < standard.DivCeil(e.height, 8); blockY++ {
-		for blockX := 0; blockX < standard.DivCeil(e.width, 8); blockX++ {
-			if err := e.encodeBlock(encoder, blockX, blockY, &dcPredictor); err != nil {
-				return err
-			}
+	for block := 0; block < len(e.coefs)/64; block++ {
+		if err := e.encodeBlock(encoder, block, &dcPredictor); err != nil {
+			return err
 		}
 	}
 	if err := encoder.Flush(); err != nil {
@@ -116,9 +131,9 @@ func (e *sequential12Encoder) writeSOS(writer *standard.Writer) error {
 func (e *sequential12Encoder) buildHuffmanTables() error {
 	var dcFrequency, acFrequency [256]uint64
 	dcPredictor := 0
-	for blockY := 0; blockY < standard.DivCeil(e.height, 8); blockY++ {
-		for blockX := 0; blockX < standard.DivCeil(e.width, 8); blockX++ {
-			coefficients := e.quantizeBlock(blockX, blockY)
+	for block := 0; block < len(e.coefs)/64; block++ {
+		{
+			coefficients := e.coefs[block*64 : block*64+64]
 			difference := int(coefficients[0]) - dcPredictor
 			dcPredictor = int(coefficients[0])
 			dcFrequency[sequential12Category(difference)]++
@@ -154,8 +169,8 @@ func (e *sequential12Encoder) buildHuffmanTables() error {
 	return nil
 }
 
-func (e *sequential12Encoder) encodeBlock(encoder *standard.HuffmanEncoder, blockX, blockY int, dcPredictor *int) error {
-	coefficients := e.quantizeBlock(blockX, blockY)
+func (e *sequential12Encoder) encodeBlock(encoder *standard.HuffmanEncoder, block int, dcPredictor *int) error {
+	coefficients := e.coefs[block*64 : block*64+64]
 	difference := int(coefficients[0]) - *dcPredictor
 	*dcPredictor = int(coefficients[0])
 	if err := sequential12WriteValue(encoder, e.dcCodes, difference); err != nil {
@@ -196,31 +211,59 @@ func (e *sequential12Encoder) encodeBlock(encoder *standard.HuffmanEncoder, bloc
 	return nil
 }
 
-func (e *sequential12Encoder) quantizeBlock(blockX, blockY int) [64]int32 {
+// computeCoefficients runs the DCT and quantization once per block.
+func (e *sequential12Encoder) computeCoefficients() {
+	blocksWide := standard.DivCeil(e.width, 8)
+	blocksHigh := standard.DivCeil(e.height, 8)
+	e.coefs = make([]int32, blocksWide*blocksHigh*64)
+	index := 0
+	for blockY := 0; blockY < blocksHigh; blockY++ {
+		for blockX := 0; blockX < blocksWide; blockX++ {
+			e.quantizeBlock(e.coefs[index*64:index*64+64], blockX, blockY)
+			index++
+		}
+	}
+}
+
+func (e *sequential12Encoder) quantizeBlock(dst []int32, blockX, blockY int) {
+	// Extract the 8x8 block, clamping only at the right and bottom edges.
 	var transformed [64]int32
-	for y := 0; y < 8; y++ {
-		sourceY := min(blockY*8+y, e.height-1)
-		for x := 0; x < 8; x++ {
-			sourceX := min(blockX*8+x, e.width-1)
-			offset := (sourceY*e.width + sourceX) * 2
-			value := int(e.pixels[offset]) | int(e.pixels[offset+1])<<8
-			transformed[y*8+x] = int32(value - 2048)
+	startX := blockX * 8
+	startY := blockY * 8
+	if startX+8 <= e.width && startY+8 <= e.height {
+		for y := 0; y < 8; y++ {
+			source := e.pixels[(startY+y)*e.width*2+startX*2:]
+			for x := 0; x < 8; x++ {
+				transformed[y*8+x] = int32(int(source[x*2])|int(source[x*2+1])<<8) - 2048
+			}
+		}
+	} else {
+		for y := 0; y < 8; y++ {
+			sourceY := min(startY+y, e.height-1)
+			for x := 0; x < 8; x++ {
+				sourceX := min(startX+x, e.width-1)
+				offset := (sourceY*e.width + sourceX) * 2
+				value := int(e.pixels[offset]) | int(e.pixels[offset+1])<<8
+				transformed[y*8+x] = int32(value - 2048)
+			}
 		}
 	}
 	sequential12DCTISlow(&transformed)
 
-	var result [64]int32
 	for i, coefficient := range transformed {
-		result[i] = sequential12Quantize(coefficient, e.qtable[i]<<3)
+		divisor := e.qdiv[i]
+		var magnitude uint32
+		if coefficient < 0 {
+			magnitude = uint32(-coefficient)
+		} else {
+			magnitude = uint32(coefficient)
+		}
+		q := int32(((2*uint64(magnitude) + uint64(divisor)) * e.qmagic[i]) >> 33)
+		if coefficient < 0 {
+			q = -q
+		}
+		dst[i] = q
 	}
-	return result
-}
-
-func sequential12Quantize(coefficient, divisor int32) int32 {
-	if coefficient < 0 {
-		return -((-coefficient + divisor/2) / divisor)
-	}
-	return (coefficient + divisor/2) / divisor
 }
 
 // sequential12DCTISlow is a direct port of libjpeg-turbo's 12-bit
@@ -342,12 +385,7 @@ func sequential12Category(value int) int {
 	if value < 0 {
 		value = -value
 	}
-	category := 0
-	for value > 0 {
-		category++
-		value >>= 1
-	}
-	return category
+	return bits.Len(uint(value))
 }
 
 func sequential12WriteValue(encoder *standard.HuffmanEncoder, codes []standard.HuffmanCode, value int) error {
@@ -537,7 +575,7 @@ func (d *sequential12Decoder) parseSOS(reader *standard.Reader) error {
 }
 
 func (d *sequential12Decoder) decodeScan(reader *standard.Reader) error {
-	var scan bytes.Buffer
+	scan := make([]byte, 0, 64*1024)
 	for {
 		value, err := reader.ReadByte()
 		if err == io.EOF {
@@ -547,7 +585,7 @@ func (d *sequential12Decoder) decodeScan(reader *standard.Reader) error {
 			return err
 		}
 		if value != 0xff {
-			scan.WriteByte(value)
+			scan = append(scan, value)
 			continue
 		}
 		next, err := reader.ReadByte()
@@ -555,8 +593,7 @@ func (d *sequential12Decoder) decodeScan(reader *standard.Reader) error {
 			return err
 		}
 		if next == 0 {
-			scan.WriteByte(value)
-			scan.WriteByte(next)
+			scan = append(scan, value, next)
 			continue
 		}
 		if standard.IsRST(uint16(0xff00) | uint16(next)) {
@@ -565,7 +602,7 @@ func (d *sequential12Decoder) decodeScan(reader *standard.Reader) error {
 		break
 	}
 
-	decoder := standard.NewHuffmanDecoder(scan.Bytes())
+	decoder := standard.NewHuffmanDecoder(scan)
 	for blockY := 0; blockY < standard.DivCeil(d.height, 8); blockY++ {
 		for blockX := 0; blockX < standard.DivCeil(d.width, 8); blockX++ {
 			if err := d.decodeBlock(decoder, blockX, blockY); err != nil {
@@ -625,8 +662,10 @@ func (d *sequential12Decoder) decodeBlock(decoder *standard.HuffmanDecoder, bloc
 	if maxY > 8 {
 		maxY = 8
 	}
+	rowOffset := (blockY*8*d.width + blockX*8) * 2
+	rowStride := d.width * 2
 	for y := 0; y < maxY; y++ {
-		imageY := blockY*8 + y
+		row := d.pixels[rowOffset+y*rowStride:]
 		for x := 0; x < maxX; x++ {
 			value := int(transformed[y*8+x])
 			if value < 0 {
@@ -634,10 +673,8 @@ func (d *sequential12Decoder) decodeBlock(decoder *standard.HuffmanDecoder, bloc
 			} else if value > 4095 {
 				value = 4095
 			}
-			imageX := blockX*8 + x
-			offset := (imageY*d.width + imageX) * 2
-			d.pixels[offset] = byte(value)
-			d.pixels[offset+1] = byte(value >> 8)
+			row[x*2] = byte(value)
+			row[x*2+1] = byte(value >> 8)
 		}
 	}
 	return nil

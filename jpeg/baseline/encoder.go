@@ -13,13 +13,13 @@ type Encoder struct {
 	components int
 	quality    int
 
-	qtables  [2][64]int32
+	qtables   [2][64]int32
 	qdivisors [2][64]uint32 // qtables scaled by 8, the IJG quantization step
-	qmagic   [2][64]uint64  // reciprocal magic numbers for qdivisors
-	dcTables [2]*standard.HuffmanTable
-	acTables [2]*standard.HuffmanTable
-	dcCodes  [2][]standard.HuffmanCode
-	acCodes  [2][]standard.HuffmanCode
+	qmagic    [2][64]uint64 // reciprocal magic numbers for qdivisors
+	dcTables  [2]*standard.HuffmanTable
+	acTables  [2]*standard.HuffmanTable
+	dcCodes   [2][]standard.HuffmanCode
+	acCodes   [2][]standard.HuffmanCode
 
 	// coefs caches the quantized coefficients of every block in scan order,
 	// so the DCT runs once instead of once per Huffman pass.

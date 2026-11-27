@@ -1,7 +1,6 @@
 package lossless14sv1
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/cocosip/go-dicom-codecs/jpeg/standard"
@@ -15,8 +14,6 @@ type Component struct {
 	width           int
 	height          int
 	dcTableSelector int
-	pred            int   // Prediction value for current row
-	data            []int // Decoded component data (signed integers for lossless)
 }
 
 // Decoder represents a JPEG Lossless decoder
@@ -66,17 +63,15 @@ func Decode(jpegData []byte) (pixelData []byte, width, height, components, bitDe
 				return nil, 0, 0, 0, 0, err
 			}
 			// Decode scan data
-			if err := decoder.decodeScan(reader); err != nil {
+			pixelData, err := decoder.decodeScan(reader)
+			if err != nil {
 				return nil, 0, 0, 0, 0, err
 			}
-			// Convert to output format
-			pixelData = decoder.convertToPixels()
 			return pixelData, decoder.width, decoder.height, len(decoder.components), decoder.precision, nil
 
 		case standard.MarkerEOI:
-			// Should not reach here normally
-			pixelData = decoder.convertToPixels()
-			return pixelData, decoder.width, decoder.height, len(decoder.components), decoder.precision, nil
+			// A stream without a scan carries no samples.
+			return nil, decoder.width, decoder.height, len(decoder.components), decoder.precision, nil
 
 		default:
 			// Skip unknown markers
@@ -133,7 +128,6 @@ func (d *Decoder) parseSOF3(reader *standard.Reader) error {
 			V:      int(data[offset+1] & 0x0F),
 			width:  d.width,
 			height: d.height,
-			data:   make([]int, d.width*d.height),
 		}
 
 		// For lossless, sampling factors should be 1x1
@@ -250,138 +244,103 @@ func (d *Decoder) parseSOS(reader *standard.Reader) error {
 	return nil
 }
 
-// decodeScan decodes the scan data
-func (d *Decoder) decodeScan(reader *standard.Reader) error {
-	// Compute modulus for wrapping reconstructed samples to P-bit range
-	modulus := 1 << uint(d.precision)
-
-	// Collect scan data
-	var scanData bytes.Buffer
+// decodeScan decodes the scan data straight into interleaved pixel bytes.
+func (d *Decoder) decodeScan(reader *standard.Reader) ([]byte, error) {
+	scan := make([]byte, 0, 64*1024)
 	for {
 		b, err := reader.ReadByte()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if b == 0xFF {
 			b2, err := reader.ReadByte()
 			if err == io.EOF {
-				scanData.WriteByte(b)
+				scan = append(scan, b)
 				break
 			}
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			if b2 == 0x00 {
 				// Byte stuffing
-				scanData.WriteByte(b)
-				scanData.WriteByte(b2)
+				scan = append(scan, b, b2)
 			} else if standard.IsRST(uint16(0xFF00) | uint16(b2)) {
-				// Restart marker, reset predictors
-				for _, comp := range d.components {
-					comp.pred = 0
-				}
 				continue
 			} else {
-				// Found a marker, done
 				break
 			}
 		} else {
-			scanData.WriteByte(b)
+			scan = append(scan, b)
 		}
 	}
 
-	huffDec := standard.NewHuffmanDecoder(scanData.Bytes())
+	huffDec := standard.NewHuffmanDecoder(scan)
 
-	// Decode samples (lossless uses line-by-line interleaved)
+	comps := len(d.components)
+	bytesPerSample := (d.precision + 7) / 8
+	modulus := 1 << uint(d.precision)
+	defaultVal := 1 << uint(d.precision-1)
+	pixelData := make([]byte, d.width*d.height*comps*bytesPerSample)
+
+	var tables [4]*standard.HuffmanTable
+	for i, comp := range d.components {
+		tables[i] = d.dcTables[comp.dcTableSelector]
+		if tables[i] == nil {
+			return nil, standard.ErrInvalidDHT
+		}
+	}
+
+	prev := make([][]int32, comps)
+	cur := make([][]int32, comps)
+	for i := range prev {
+		prev[i] = make([]int32, d.width)
+		cur[i] = make([]int32, d.width)
+	}
+
+	rowStride := d.width * comps * bytesPerSample
 	for row := 0; row < d.height; row++ {
+		out := pixelData[row*rowStride : row*rowStride+rowStride]
 		for col := 0; col < d.width; col++ {
-			for _, comp := range d.components {
-				// Decode difference
-				table := d.dcTables[comp.dcTableSelector]
-				if table == nil {
-					return standard.ErrInvalidDHT
-				}
-
-				ssss, err := huffDec.Decode(table)
+			for i := 0; i < comps; i++ {
+				diff, err := huffDec.DecodeLossless(tables[i])
 				if err != nil {
-					return err
+					return nil, err
 				}
 
-				diff, err := huffDec.ReceiveLosslessDifference(int(ssss))
-				if err != nil {
-					return err
-				}
-
-				// First-order prediction: use left pixel (Predictor 1)
-				// Special case: first pixel of each row
 				var predicted int
-				if col == 0 {
-					if row == 0 {
-						// First pixel of first row: use 2^(P-1) per JPEG spec
-						predicted = 1 << uint(d.precision-1)
-					} else {
-						// First pixel of other rows: use pixel from row above
-						predicted = comp.data[(row-1)*d.width+col]
-					}
-				} else {
-					// Other pixels: use left pixel
-					predicted = comp.data[row*d.width+col-1]
+				switch {
+				case col > 0:
+					predicted = int(cur[i][col-1])
+				case row > 0:
+					predicted = int(prev[i][col])
+				default:
+					predicted = defaultVal
 				}
 
-				// Reconstruct sample with wrapping to unsigned P-bit range
 				sample := predicted + diff
-				// Wrap to range [0, 2^P-1]
 				if sample < 0 {
 					sample += modulus
 				} else if sample >= modulus {
 					sample -= modulus
 				}
+				cur[i][col] = int32(sample)
 
-				// Store
-				comp.data[row*d.width+col] = sample
-			}
-		}
-	}
-
-	return nil
-}
-
-// convertToPixels converts component data to byte array
-func (d *Decoder) convertToPixels() []byte {
-	numComponents := len(d.components)
-	bytesPerSample := (d.precision + 7) / 8
-	pixelData := make([]byte, d.width*d.height*numComponents*bytesPerSample)
-
-	if d.precision <= 8 {
-		// 8-bit or less: one byte per sample
-		for y := 0; y < d.height; y++ {
-			for x := 0; x < d.width; x++ {
-				for i, comp := range d.components {
-					val := comp.data[y*d.width+x]
-					pixelData[(y*d.width+x)*numComponents+i] = byte(val)
+				if bytesPerSample == 1 {
+					out[col*comps+i] = byte(sample)
+				} else {
+					off := (col*comps + i) * 2
+					out[off] = byte(sample)
+					out[off+1] = byte(sample >> 8)
 				}
 			}
 		}
-	} else {
-		// 9-16 bit: two bytes per sample (little-endian)
-		offset := 0
-		for y := 0; y < d.height; y++ {
-			for x := 0; x < d.width; x++ {
-				for _, comp := range d.components {
-					val := comp.data[y*d.width+x]
-					// Little-endian
-					pixelData[offset] = byte(val & 0xFF)
-					pixelData[offset+1] = byte((val >> 8) & 0xFF)
-					offset += 2
-				}
-			}
-		}
+		prev, cur = cur, prev
 	}
 
-	return pixelData
+	return pixelData, nil
 }
